@@ -1,0 +1,16 @@
+[Unit]
+Description=Robot Tự Động Bảng O2 — Robocon 2026
+After=multi-user.target
+
+[Service]
+Type=simple
+User=mbw12345
+WorkingDirectory=/home/mbw12345/Robocon-BCIT
+ExecStart=/bin/bash /home/mbw12345/Robocon-BCIT/scripts/start.sh
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/home/mbw12345/Robocon-BCIT/robot_log.txt
+StandardError=append:/home/mbw12345/Robocon-BCIT/robot_log.txt
+
+[Install]
+WantedBy=multi-user.target

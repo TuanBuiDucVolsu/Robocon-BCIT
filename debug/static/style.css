@@ -1,0 +1,386 @@
+/* ============================================
+   Robot Debug UI — Bảng O2
+   ============================================ */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+    --bg: #1a1a2e;
+    --surface: #16213e;
+    --surface2: #0f3460;
+    --accent: #e94560;
+    --accent2: #53a8b6;
+    --text: #eee;
+    --text-dim: #8899aa;
+    --green: #4caf50;
+    --yellow: #ffc107;
+    --red: #f44336;
+    --radius: 8px;
+}
+
+body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+}
+
+/* ---- Header ---- */
+header {
+    background: var(--surface);
+    padding: 12px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid var(--accent);
+}
+
+header h1 {
+    font-size: 1.2rem;
+    font-weight: 600;
+}
+
+.header-status { display: flex; gap: 8px; }
+
+.badge {
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+.badge-on { background: var(--green); color: #fff; }
+.badge-off { background: #555; color: #999; }
+.badge-wait { background: var(--yellow); color: #333; }
+
+/* ---- Main Grid ---- */
+main {
+    display: grid;
+    grid-template-columns: 280px 1fr 300px;
+    gap: 16px;
+    padding: 16px;
+    max-height: calc(100vh - 140px);
+}
+
+.panel {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 16px;
+    overflow-y: auto;
+}
+
+.panel h2 {
+    font-size: 1rem;
+    margin-bottom: 12px;
+    color: var(--accent2);
+    border-bottom: 1px solid #334;
+    padding-bottom: 6px;
+}
+
+.sub-panel {
+    margin-bottom: 20px;
+}
+
+.sub-panel h2 {
+    font-size: 0.95rem;
+}
+
+/* ---- Di chuyển ---- */
+.speed-control {
+    margin-bottom: 16px;
+}
+
+.speed-control label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+}
+
+.speed-control input[type="range"] {
+    width: 100%;
+    accent-color: var(--accent);
+}
+
+.dpad {
+    display: grid;
+    grid-template-areas:
+        ".    fwd  ."
+        "left stop right"
+        ".    back .";
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    max-width: 240px;
+    margin: 0 auto;
+}
+
+#btn-fwd   { grid-area: fwd; }
+#btn-left  { grid-area: left; }
+#btn-stop  { grid-area: stop; }
+#btn-right { grid-area: right; }
+#btn-back  { grid-area: back; }
+
+.btn-move {
+    background: var(--surface2);
+    color: var(--text);
+    border: 2px solid #445;
+    border-radius: var(--radius);
+    padding: 14px 8px;
+    font-size: 1.2rem;
+    cursor: pointer;
+    transition: all 0.1s;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+    line-height: 1.2;
+}
+
+.btn-move:active, .btn-move.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    transform: scale(0.95);
+}
+
+.btn-move.btn-stop {
+    background: var(--red);
+    border-color: var(--red);
+    font-size: 1rem;
+}
+
+.btn-move small {
+    font-size: 0.6rem;
+    display: block;
+    margin-top: 2px;
+}
+
+.hint {
+    margin-top: 14px;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    text-align: center;
+    line-height: 1.6;
+}
+
+kbd {
+    background: var(--surface2);
+    border: 1px solid #556;
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-size: 0.7rem;
+    font-family: monospace;
+}
+
+/* ---- Camera ---- */
+.camera-container {
+    background: #000;
+    border-radius: var(--radius);
+    overflow: hidden;
+    text-align: center;
+    min-height: 240px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#camera-feed {
+    width: 100%;
+    max-height: 400px;
+    object-fit: contain;
+}
+
+.vision-controls {
+    margin-top: 12px;
+    text-align: center;
+}
+
+.btn-action {
+    background: var(--accent2);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius);
+    padding: 10px 24px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-action:hover { background: #4592a0; }
+.btn-action:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.result-box {
+    margin-top: 12px;
+    padding: 12px;
+    background: var(--surface2);
+    border-radius: var(--radius);
+    text-align: center;
+}
+
+.result-box.hidden { display: none; }
+
+.result-label {
+    font-size: 1.3rem;
+    font-weight: 700;
+}
+
+.confidence {
+    font-size: 0.9rem;
+    color: var(--green);
+    margin-left: 8px;
+}
+
+.confidence.low { color: var(--yellow); }
+.confidence.very-low { color: var(--red); }
+
+.result-factory {
+    margin-top: 4px;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+}
+
+/* ---- Nâng/hạ ---- */
+.lift-display {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.lift-indicator {
+    width: 30px;
+    height: 80px;
+    background: #222;
+    border-radius: 4px;
+    position: relative;
+    border: 1px solid #445;
+    overflow: hidden;
+}
+
+.lift-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 0%;
+    background: var(--accent2);
+    transition: height 0.3s ease;
+    border-radius: 0 0 3px 3px;
+}
+
+.lift-level {
+    font-size: 0.9rem;
+}
+
+.lift-buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+}
+
+.btn-lift {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid #445;
+    border-radius: 6px;
+    padding: 8px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.btn-lift:active { background: var(--accent2); }
+.btn-lift.btn-reset {
+    grid-column: 1 / -1;
+    background: #553;
+    border-color: var(--yellow);
+    color: var(--yellow);
+}
+
+/* ---- Cảm biến dò line ---- */
+.line-sensor-display {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+.sensor-dot {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: #333;
+    border: 2px solid #555;
+    transition: all 0.15s;
+}
+
+.sensor-dot.active {
+    background: var(--green);
+    border-color: var(--green);
+    box-shadow: 0 0 8px var(--green);
+}
+
+.sensor-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+}
+
+#sensor-intersection.active {
+    background: var(--yellow);
+    color: #333;
+}
+
+/* ---- Log ---- */
+footer {
+    padding: 0 16px 16px;
+}
+
+.log-container {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+}
+
+.log-container h3 {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.btn-small {
+    background: transparent;
+    border: 1px solid #556;
+    color: var(--text-dim);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 0.7rem;
+    cursor: pointer;
+}
+
+#log-output {
+    font-family: 'Consolas', 'Fira Code', monospace;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    max-height: 120px;
+    overflow-y: auto;
+    line-height: 1.5;
+    white-space: pre-wrap;
+}
+
+.log-entry { padding: 1px 0; }
+.log-entry.info { color: var(--accent2); }
+.log-entry.warn { color: var(--yellow); }
+.log-entry.error { color: var(--red); }
+
+/* ---- Responsive ---- */
+@media (max-width: 960px) {
+    main {
+        grid-template-columns: 1fr;
+        max-height: none;
+    }
+    .dpad { max-width: 200px; }
+}

@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environment
+robot_env/
+env/
+venv/
+.venv/
+
+# Log
+*.log
+robot_log.txt
+
+# Model AI (file lớn, mỗi máy tự export riêng)
+vision/model/*.tflite
+
+# Ảnh test
+test_capture.jpg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
