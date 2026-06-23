@@ -41,14 +41,8 @@ APPROACH_SPEED = 30          # Tốc độ tiến khi tiếp cận kệ (0-100)
 APPROACH_TIMEOUT = 5.0       # Timeout nếu không thấy kệ (giây)
 RETREAT_DISTANCE = 15.0      # Khoảng cách lùi ra sau khi nâng/hạ (cm)
 
-# --- Cảm biến dò line 8 mắt (I2C) ---
-# Nếu dùng module I2C (VD: TCA9548A / PCF8574), chỉ cần 2 chân:
-LINE_SENSOR_SDA = 2   # I2C SDA (GPIO2)
-LINE_SENSOR_SCL = 3   # I2C SCL (GPIO3)
+# --- Cảm biến dò line 8 mắt (I2C, GPIO2 SDA + GPIO3 SCL) ---
 LINE_SENSOR_I2C_ADDR = 0x20  # Địa chỉ I2C của module dò line
-
-# Nếu dùng digital trực tiếp (8 chân), bỏ comment và dùng list này:
-# LINE_SENSOR_PINS = [4, 14, 15, 18, 7, 8, 11, 9]
 
 # ============================================================
 # AUDIT GPIO - TỔNG SỐ CHÂN SỬ DỤNG
@@ -88,8 +82,7 @@ PWM_COMPENSATION = 0.95      # Hệ số bù lệch tốc độ bánh phải (< 
 LIFT_TIME_FLOOR = 0.0        # Thời gian hạ xuống mặt sàn (gốc 0)
 LIFT_TIME_SHELF_1 = 0.8      # Thời gian nâng lên tầng 1 kệ
 LIFT_TIME_SHELF_2 = 1.5      # Thời gian nâng lên tầng 2 kệ
-LIFT_SPEED = 80              # Duty cycle động cơ nâng (0-100)
-DROP_SPEED = 50              # Duty cycle khi hạ (chậm hơn để tránh đổ)
+LIFT_SPEED = 80              # Duty cycle động cơ nâng (0-100) — dùng trong debug UI
 PICKUP_MAX_RETRIES = 2       # Số lần thử nâng lại nếu cảm biến không thấy pallet
 PICKUP_VERIFY_DELAY = 0.3    # Thời gian chờ sau nâng trước khi kiểm tra cảm biến (giây)
 
@@ -108,7 +101,9 @@ INTERSECTION_THRESHOLD = 6   # Số mắt phát hiện line đồng thời để
 # ============================================================
 CAMERA_RESOLUTION = (640, 480)
 CONFIDENCE_THRESHOLD = 0.20  # Tỷ lệ pixel tối thiểu để nhận là đúng (0.0-1.0)
-MAX_SCAN_RETRIES = 3         # Số lần quét lại nếu confidence thấp
+MAX_SCAN_RETRIES = 3         # Số lần quét lại mỗi lượt quét nếu confidence thấp
+MAX_PAIR_SCAN_ATTEMPTS = 2   # Số lần quét lại cả cặp kiện sau khi tiếp cận kệ
+SCAN_RETRY_DELAY = 0.1       # Thời gian chờ giữa các lần quét lại (giây)
 
 LABEL_TO_FACTORY = {
     "samsung": "Samsung",
@@ -147,11 +142,7 @@ COLOR_RANGES = {
 # Kệ 1-3: mỗi kệ 4 pallet (2 tầng × 2) = 12 pallet
 # Kệ 4: chỉ có 1 pallet kho hàng rời (4 khối khác loại) → Nhiệm vụ 2
 # Pallet: 90x90x26mm — 2 pallet cạnh nhau vừa đúng 1 lần nâng
-SHELVES_COUNT = 4            # Tổng số giá kệ (3 kho hải quan + 1 kho hàng rời)
-SHELVES_TASK1 = 3            # Số kệ chứa hàng nhiệm vụ 1
-TIERS_PER_SHELF = 2          # Số tầng mỗi kệ
-PALLETS_PER_TIER = 2         # Số pallet mỗi tầng (nâng cùng lúc)
-TOTAL_PACKAGES_TASK1 = 12    # Tổng kiện hàng nhiệm vụ 1 (3 kệ × 2 tầng × 2 pallet)
+TOTAL_PACKAGES_TASK1 = 12    # Tổng kiện hàng NV1 (3 kệ × 2 tầng × 2 pallet)
 PICKUPS_TASK1 = 6            # Số lần nâng (12 ÷ 2)
 
 # ============================================================
@@ -317,5 +308,5 @@ ROUTE_LOOSE_TO_JOINT = [
 # LOGGING & DEBUG
 # ============================================================
 LOG_FILE = "robot_log.txt"
-DEBUG_MODE = True            # True = bật giao diện web để luyện tập; False = chế độ thi đấu
+DEBUG_MODE = True           # True = bật giao diện web để luyện tập; False = chế độ thi đấu
 WEB_PORT = 5000               # Port cho giao diện web debug

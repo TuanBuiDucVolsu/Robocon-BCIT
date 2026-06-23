@@ -65,7 +65,7 @@ def test_line_follow(m: Motion):
     print("\n[TEST] Bám line 10 giây (hoặc đến khi gặp giao lộ)...")
     start = time.time()
     while time.time() - start < 10:
-        is_intersection = m.follow_line()
+        is_intersection, _ = m.follow_line()
         if is_intersection:
             print("  -> Phát hiện giao lộ! Dừng.")
             break

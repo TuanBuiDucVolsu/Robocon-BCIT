@@ -88,16 +88,15 @@ class Motion:
     # Đo khoảng cách
     # ----------------------------------------------------------
 
-    def get_distance(self) -> float:
-        """Đo khoảng cách phía trước (cm). Lọc nhiễu bằng median 3 lần đo."""
+    def get_distance(self, samples: int = 1) -> float:
+        """Đo khoảng cách phía trước (cm). samples>1 lấy median để lọc nhiễu."""
         if self._distance_sensor is None:
             return -1.0
-        readings = []
-        for _ in range(3):
-            readings.append(self._distance_sensor.distance * 100)
-            time.sleep(0.01)
+        if samples <= 1:
+            return self._distance_sensor.distance * 100
+        readings = [self._distance_sensor.distance * 100 for _ in range(samples)]
         readings.sort()
-        return readings[1]  # median
+        return readings[len(readings) // 2]
 
     # ----------------------------------------------------------
     # Điều khiển cơ bản
@@ -273,9 +272,10 @@ class Motion:
         error = weighted_sum / active
         return error
 
-    def follow_line(self, base_speed: float = config.SPEED_DEFAULT) -> bool:
+    def follow_line(self, base_speed: float = config.SPEED_DEFAULT) -> tuple[bool, list[int]]:
         """
-        Thực hiện 1 bước bám line. Trả về True nếu phát hiện giao lộ.
+        Thực hiện 1 bước bám line.
+        Trả về (phát_hiện_giao_lộ, giá_trị_sensor).
         """
         values = self.read_line_sensor()
         active_count = sum(values)
@@ -283,7 +283,7 @@ class Motion:
         if active_count >= config.INTERSECTION_THRESHOLD:
             self.stop()
             logger.info("Phát hiện giao lộ (active=%d)", active_count)
-            return True
+            return True, values
 
         error = self.compute_line_error(values)
         derivative = error - self._last_error
@@ -301,7 +301,7 @@ class Motion:
         self._left_fwd.value = self._pct(left_speed)
         self._right_fwd.value = self._pct(right_speed * config.PWM_COMPENSATION)
 
-        return False
+        return False, values
 
     def follow_line_until_intersection(self, base_speed: float = config.SPEED_DEFAULT,
                                        timeout: float = 15.0) -> bool:
@@ -313,11 +313,11 @@ class Motion:
         lost_count = 0
 
         while time.time() - start < timeout:
-            if self.follow_line(base_speed):
+            at_intersection, values = self.follow_line(base_speed)
+            if at_intersection:
                 return True
 
             # Phát hiện mất line (tất cả sensor = 0)
-            values = self.read_line_sensor()
             if sum(values) == 0:
                 lost_count += 1
                 if lost_count > 50:  # ~0.5 giây mất line liên tục

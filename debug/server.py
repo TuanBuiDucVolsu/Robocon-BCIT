@@ -7,7 +7,6 @@ import os
 import time
 import logging
 import threading
-import traceback
 
 from flask import Flask, render_template, Response, jsonify, request
 

@@ -140,7 +140,7 @@ class Vision:
             frame = self._capture_frame()
             if frame is None:
                 logger.warning("Lần %d: không chụp được ảnh", attempt)
-                time.sleep(0.3)
+                time.sleep(config.SCAN_RETRY_DELAY)
                 continue
 
             label, confidence = self._classify_by_color(frame)
@@ -156,11 +156,13 @@ class Vision:
 
             logger.warning("Confidence thấp (%.2f < %.2f), thử lại...",
                            confidence, config.CONFIDENCE_THRESHOLD)
-            time.sleep(0.3)
+            time.sleep(config.SCAN_RETRY_DELAY)
 
         logger.info("Kết quả tốt nhất sau %d lần: %s (%.1f%%)",
                      config.MAX_SCAN_RETRIES, best_label, best_conf * 100)
-        return best_label, best_conf
+        if best_conf >= config.CONFIDENCE_THRESHOLD:
+            return best_label, best_conf
+        return None, best_conf
 
     def classify_pair(self) -> tuple[str | None, str | None]:
         """
@@ -178,7 +180,7 @@ class Vision:
         for attempt in range(1, config.MAX_SCAN_RETRIES + 1):
             frame = self._capture_frame()
             if frame is None:
-                time.sleep(0.3)
+                time.sleep(config.SCAN_RETRY_DELAY)
                 continue
 
             h, w = frame.shape[:2]
@@ -200,11 +202,14 @@ class Vision:
                     conf_r >= config.CONFIDENCE_THRESHOLD):
                 return label_l, label_r
 
-            time.sleep(0.3)
+            time.sleep(config.SCAN_RETRY_DELAY)
 
         logger.info("Kết quả tốt nhất: trái=%s (%.1f%%), phải=%s (%.1f%%)",
                      best_left, best_conf_left * 100, best_right, best_conf_right * 100)
-        return best_left, best_right
+        
+        left = best_left if best_conf_left >= config.CONFIDENCE_THRESHOLD else None
+        right = best_right if best_conf_right >= config.CONFIDENCE_THRESHOLD else None
+        return left, right
 
     def get_factory_name(self, label: str) -> str | None:
         """Chuyển label thành tên nhà máy tương ứng."""
