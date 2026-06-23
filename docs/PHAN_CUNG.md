@@ -13,7 +13,7 @@
 | 7 | Bánh xe xanh (bánh sau) | 2 | Chủ động |
 | 8 | Bánh caster (bánh trước) | 2 | Đa hướng |
 | 9 | Trụ nhôm định hình + curoa + con lăn | 2 bộ | Khung cẩu |
-| 10 | Càng forklift (2 thanh nâng) | 2 | Đang làm |
+| 10 | Càng forklift (2 thanh nâng **độc lập**) | 2 | Mỗi càng 1 motor — thả riêng từng pallet |
 | 11 | Pin 18650 + đế | 1 bộ | ≤12V, ≤5000mAh |
 | 12 | Breadboard | 1 | Kết nối tạm |
 
@@ -21,15 +21,16 @@
 
 | STT | Linh kiện | SL | Chức năng | Giá ước tính |
 |-----|-----------|:--:|-----------|-------------|
-| 1 | Cảm biến dò line 8 mắt I2C (PCF8574) | 1 | Bám line sa bàn | ~80-120k |
-| 2 | HC-SR04 (siêu âm) | 1 | Đo khoảng cách đến kệ | ~15-25k |
-| 3 | Cảm biến IR obstacle | 1 | Xác nhận pallet trên càng | ~10-15k |
-| 4 | Nút bấm thường hở | 1 | Khởi động robot | ~3-5k |
-| 5 | Điện trở 1kΩ | 1 | Cầu phân áp ECHO | ~1k |
-| 6 | Điện trở 2kΩ | 1 | Cầu phân áp ECHO | ~1k |
-| 7 | Dây nối dupont (đực-cái, cái-cái) | ~30 | Kết nối module | ~20-30k |
+| 1 | Cảm biến dò line 8 mắt I2C (PCF8574) | 1 | Bám line sa bàn (addr 0x20) | ~80-120k |
+| 2 | Module PCF8574 (riêng) | 1 | Đọc 2 IR pallet qua I2C (addr 0x21) | ~10-15k |
+| 3 | Cảm biến IR obstacle | **2** | Xác nhận pallet trái + phải | ~20-30k |
+| 4 | HC-SR04 (siêu âm) | 1 | Đo khoảng cách đến kệ | ~15-25k |
+| 5 | Nút bấm thường hở | 1 | Khởi động robot | ~3-5k |
+| 6 | Điện trở 1kΩ | 1 | Cầu phân áp ECHO | ~1k |
+| 7 | Điện trở 2kΩ | 1 | Cầu phân áp ECHO | ~1k |
+| 8 | Dây nối dupont (đực-cái, cái-cái) | ~30 | Kết nối module | ~20-30k |
 
-**Tổng ước tính: ~130-200k VND**
+**Tổng ước tính: ~150-230k VND**
 
 ## Sơ đồ đấu nối GPIO
 
@@ -50,17 +51,15 @@ Raspberry Pi 4
  │  GPIO  6 → IN1 → Motor cẩu PHẢI (nâng)                 │
  │  GPIO 13 → IN2 → Motor cẩu PHẢI (hạ)                   │
  │                                                         │
- │  ── Cảm biến dò line (I2C) ──                           │
- │  GPIO  2 (SDA) → Module line 8 mắt PCF8574             │
- │  GPIO  3 (SCL) → Module line 8 mắt PCF8574             │
- │  Địa chỉ I2C: 0x20                                     │
+ │  ── I2C bus (chia sẻ 2 module) ──                        │
+ │  GPIO  2 (SDA) ──┬── PCF8574 #1 (0x20) → Line 8 mắt    │
+ │  GPIO  3 (SCL) ──┤                                      │
+ │                  └── PCF8574 #2 (0x21) → IR trái (P0)   │
+ │                                        → IR phải (P1)   │
  │                                                         │
  │  ── Cảm biến siêu âm HC-SR04 ──                         │
  │  GPIO 19 → TRIG                                         │
  │  GPIO 20 ← ECHO (qua cầu phân áp 1kΩ + 2kΩ!)          │
- │                                                         │
- │  ── Cảm biến IR pallet ──                               │
- │  GPIO 26 ← OUT (LOW = có pallet)                        │
  │                                                         │
  │  ── Nút khởi động ──                                    │
  │  GPIO 16 ← NÚT → GND (pull-up bên trong Pi)            │
@@ -68,7 +67,7 @@ Raspberry Pi 4
  │  ── Camera ──                                           │
  │  CSI port → Camera OV5647 (không dùng GPIO)             │
  │                                                         │
- │  TỔNG: 15/16 GPIO — ĐẠT (dư 1 chân)                    │
+ │  TỔNG: 14/16 GPIO — ĐẠT (dư 2 chân)                    │
  └─────────────────────────────────────────────────────────┘
 ```
 
@@ -117,7 +116,7 @@ Nhìn từ trên xuống:
      ══════════════════  ← Càng trái
         [HC-SR04] →      ← Giữa 2 càng, mặt phát sóng hướng ra trước
      ══════════════════  ← Càng phải
-        [IR pallet]↑     ← Mặt trên càng, hướng lên (phát hiện pallet)
+   [IR trái P0]↑ [IR phải P1]↑  ← Mỗi càng 1 IR, nối PCF8574 #2 (0x21)
 
      ┌──────────────────┐
      │  [Camera]  →     │  ← Giữa thân, hướng ra trước, ngang tầm kệ
@@ -136,7 +135,7 @@ Nhìn từ bên cạnh:
      Kệ hàng          Càng
      ┌──────┐    ══════════════
      │Pallet│    ║  [HC-SR04]   ← cao ~2-3cm so với sàn
-     │      │    ║  [IR] ↑      ← trên mặt càng
+     │      │    ║  [IR trái] [IR phải] ↑  ← mỗi càng 1 IR
      └──────┘    ══════════════
      ◄─4cm──►    ← khoảng cách dừng (APPROACH_DISTANCE)
 ```
@@ -145,8 +144,8 @@ Nhìn từ bên cạnh:
 
 | Chân | Chức năng | Loại | Module |
 |:----:|-----------|------|--------|
-| 2 | I2C SDA | Input | Line sensor |
-| 3 | I2C SCL | Output | Line sensor |
+| 2 | I2C SDA | I2C | Line sensor + IR pallet |
+| 3 | I2C SCL | I2C | Line sensor + IR pallet |
 | 5 | ENA cẩu phải | Output | L298N #2 |
 | 6 | IN1 cẩu phải (nâng) | Output | L298N #2 |
 | 13 | IN2 cẩu phải (hạ) | Output | L298N #2 |
@@ -158,10 +157,24 @@ Nhìn từ bên cạnh:
 | 23 | IN4 bánh phải (lùi) | Output | L298N #1 |
 | 24 | IN3 cẩu trái (nâng) | Output | L298N #2 |
 | 25 | IN4 cẩu trái (hạ) | Output | L298N #2 |
-| 26 | IR pallet sensor | Input (pull-up) | Cảm biến IR |
 | 27 | IN2 bánh trái (lùi) | Output | L298N #1 |
 
-**Tổng: 15 chân / Giới hạn: 16 chân — ĐẠT (dư 1 chân)**
+**Tổng: 14 chân / Giới hạn: 16 chân — ĐẠT (dư 2 chân)**
+
+## Cơ cấu cẩu — 2 càng độc lập + 2 IR riêng
+
+```
+Motor trái (GPIO 24/25)  →  Càng trái  ─┬─ [IR trái] (PCF8574 #2, P0)
+Motor phải (GPIO 5/6/13) →  Càng phải  ─┼─ [IR phải] (PCF8574 #2, P1)
+                                         └→ Thả riêng từng bên + xác nhận riêng từng bên
+PCF8574 #2 (addr 0x21): đọc qua I2C, chia sẻ bus với line sensor — KHÔNG tốn GPIO
+
+**Logic IR (trong code):**
+- `read_status()` → `(trái, phải, đọc_ok)` — I2C lỗi → `đọc_ok=False`
+- NV1 pickup: `require_both=True` — cần cả 2 IR
+- NV2 pickup: `require_both=False` — 1 IR đủ
+- Drop: `_verify_released()` — chỉ coi thành công khi IR bên tương ứng không còn thấy pallet
+```
 
 ## Lưu ý thi công
 
@@ -169,8 +182,10 @@ Nhìn từ bên cạnh:
 2. **Cầu phân áp**: BẮT BUỘC cho HC-SR04 ECHO (5V→3.3V)
 3. **Line sensor**: gắn dưới gầm, sát sàn 3-5mm, ngang tâm robot
 4. **HC-SR04**: gắn giữa 2 càng, cao ~2-3cm, hướng thẳng ra trước
-5. **IR pallet**: gắn trên mặt càng, hướng lên, vị trí pallet sẽ đè lên
-6. **Camera**: hướng thẳng ra trước, ngang tầm nhìn kệ hàng
-7. **Nút bấm**: vị trí dễ bấm, nối GPIO 16 ↔ GND
-8. **Pin**: ≤12V, ≤5000mAh (quy định thể lệ Bảng O2)
-9. **Khung robot**: ≤400x400x400mm khi xuất phát, không dùng kim loại (trừ ốc vít)
+5. **IR trái**: gắn trên mặt càng trái, hướng lên → nối vào PCF8574 #2 P0
+6. **IR phải**: gắn trên mặt càng phải, hướng lên → nối vào PCF8574 #2 P1
+7. **PCF8574 #2**: addr jumper đặt 0x21 (khác 0x20 của line sensor)
+8. **Camera**: hướng thẳng ra trước, ngang tầm nhìn kệ hàng
+9. **Nút bấm**: vị trí dễ bấm, nối GPIO 16 ↔ GND
+10. **Pin**: ≤12V, ≤5000mAh (quy định thể lệ Bảng O2)
+11. **Khung robot**: ≤400x400x400mm khi xuất phát, không dùng kim loại (trừ ốc vít)

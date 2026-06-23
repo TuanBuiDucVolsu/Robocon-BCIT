@@ -79,9 +79,10 @@ class Robot:
         self.state = State.INIT
         self.packages_delivered = 0
         self.pickup_count = 0             # Số lần đã nâng (0-6)
-        self.current_shelf = 0            # Giá kệ hiện tại (0 đến SHELVES_TASK1-1)
+        self.current_shelf = 0            # Giá kệ hiện tại (0 đến SHELVES_TASK1 - 1)
         self.current_tier = 1             # Tầng kệ hiện tại (1 = dưới, 2 = trên)
         self.match_start_time = 0.0
+        self._tier_retries = 0            # Số lần đã thử lại tầng kệ hiện tại
 
         # 2 kiện đang mang trên càng
         self.carried_labels: list[str | None] = [None, None]
@@ -124,14 +125,27 @@ class Robot:
     # ----------------------------------------------------------
 
     @staticmethod
-    def _route_length(route: list) -> int:
-        """Đếm tổng số bước forward trong 1 route."""
-        return sum(step[1] for step in route if step[0] == "forward")
+    def _route_cost(route: list) -> int:
+        """Chi phí route: forward = số giao lộ, turn = ROUTE_TURN_COST."""
+        cost = 0
+        for step in route:
+            if step[0] == "forward":
+                cost += step[1]
+            elif step[0] in ("left", "right"):
+                cost += config.ROUTE_TURN_COST
+        return cost
+
+    @staticmethod
+    def _between_route(from_label: str, to_label: str) -> list:
+        return config.ROUTE_BETWEEN_FACTORIES.get(
+            (from_label, to_label),
+            config.ROUTE_BETWEEN_FACTORIES.get((to_label, from_label), []),
+        )
 
     def _plan_delivery(self, label_left: str, label_right: str):
         """
         Lên kế hoạch giao 2 kiện theo thứ tự tối ưu.
-        Ưu tiên: giao nhà máy gần kho trước → giảm tổng quãng đường.
+        So sánh tổng chi phí: kho → NM1 → NM2 (gồm cả lần xoay).
         Nếu cùng nhà máy → giao 1 lần duy nhất.
         """
         if label_left == label_right:
@@ -141,15 +155,23 @@ class Robot:
 
         route_left = config.ROUTE_SHELF_TO_FACTORY.get(label_left, [])
         route_right = config.ROUTE_SHELF_TO_FACTORY.get(label_right, [])
-        dist_left = self._route_length(route_left)
-        dist_right = self._route_length(route_right)
+        cost_left_first = (
+            self._route_cost(route_left)
+            + self._route_cost(self._between_route(label_left, label_right))
+        )
+        cost_right_first = (
+            self._route_cost(route_right)
+            + self._route_cost(self._between_route(label_right, label_left))
+        )
 
-        if dist_left <= dist_right:
+        if cost_left_first <= cost_right_first:
             self.delivery_queue = [label_left, label_right]
-            logger.info("Giao: %s (gần) → %s (xa)", label_left, label_right)
+            logger.info("Giao: %s → %s (tổng cost=%d vs %d)",
+                        label_left, label_right, cost_left_first, cost_right_first)
         else:
             self.delivery_queue = [label_right, label_left]
-            logger.info("Giao: %s (gần) → %s (xa)", label_right, label_left)
+            logger.info("Giao: %s → %s (tổng cost=%d vs %d)",
+                        label_right, label_left, cost_right_first, cost_left_first)
 
     # ----------------------------------------------------------
     # State handlers
@@ -169,6 +191,10 @@ class Robot:
 
     def _handle_navigate_to_shelf(self) -> State:
         """Di chuyển đến giá kệ hiện tại."""
+        if self._shelves_exhausted():
+            logger.warning("Đã hết kệ NV1 (kệ %d)", self.current_shelf)
+            return self._finish_task1_or_done()
+
         logger.info("Di chuyển đến kệ %d, tầng %d...",
                      self.current_shelf, self.current_tier)
 
@@ -206,11 +232,9 @@ class Robot:
             if attempt < config.MAX_PAIR_SCAN_ATTEMPTS:
                 time.sleep(config.SCAN_RETRY_DELAY)
         else:
-            logger.error("Không nhận diện được sau %d lần — bỏ qua tầng này",
-                         config.MAX_PAIR_SCAN_ATTEMPTS)
+            logger.error("Không nhận diện được sau %d lần quét", config.MAX_PAIR_SCAN_ATTEMPTS)
             self.motion.retreat_from_shelf()
-            self._advance_position()
-            return State.NAVIGATE_TO_SHELF
+            return self._retry_or_skip_tier("scan")
 
         self.carried_labels = [label_left, label_right]
         self._plan_delivery(label_left, label_right)
@@ -221,10 +245,11 @@ class Robot:
         self.motion.retreat_from_shelf()
 
         if not success:
-            logger.error("NÂNG THẤT BẠI — bỏ qua lượt này, sang kệ tiếp")
-            self._advance_position()
-            return State.NAVIGATE_TO_SHELF
+            logger.error("NÂNG THẤT BẠI")
+            self._clear_carry_state()
+            return self._retry_or_skip_tier("pickup")
 
+        self._tier_retries = 0
         self.pickup_count += 1
         logger.info("Đã nâng lượt %d/%d (cảm biến xác nhận OK)",
                      self.pickup_count, config.PICKUPS_TASK1)
@@ -255,6 +280,16 @@ class Robot:
             return "left"
         return "right"
 
+    def _drop_single_side(self, side: str) -> bool:
+        """Thả 1 kiện và nâng lại càng vừa thả. Trả về True nếu IR xác nhận."""
+        if side == "left":
+            dropped = self.lift.dropoff_left()
+        else:
+            dropped = self.lift.dropoff_right()
+        if dropped:
+            self.lift.raise_after_drop(side)
+        return dropped
+
     def _handle_drop_first(self) -> State:
         """Hạ kiện hàng đầu tiên."""
         label = self.delivery_queue.pop(0)
@@ -267,17 +302,16 @@ class Robot:
         self.motion.approach_shelf()
 
         if same_factory:
-            self.lift.dropoff()
-            self.packages_delivered += 2
+            if self.lift.dropoff():
+                self.packages_delivered += 2
+            else:
+                logger.error("DROP_FIRST thất bại — IR vẫn thấy pallet hoặc lỗi cảm biến")
         else:
             side = self._get_drop_side(label)
-            if side == "left":
-                self.lift.dropoff_left()
-                self.lift.raise_after_drop("left")
+            if self._drop_single_side(side):
+                self.packages_delivered += 1
             else:
-                self.lift.dropoff_right()
-                self.lift.raise_after_drop("right")
-            self.packages_delivered += 1
+                logger.error("DROP_FIRST thất bại — càng %s chưa thả được pallet", side)
 
         self.motion.retreat_from_shelf()
 
@@ -330,15 +364,19 @@ class Robot:
 
         self.motion.approach_shelf()
 
+        dropped = False
         if side == "left":
-            self.lift.dropoff_left()
+            dropped = self.lift.dropoff_left()
         else:
-            self.lift.dropoff_right()
-        # Hạ càng còn lại (vẫn ở cao) về sàn → cả 2 càng đều ở level 0
-        self.lift.stow_forks(side)
+            dropped = self.lift.dropoff_right()
+
+        if dropped:
+            self.lift.stow_forks(side)
+            self.packages_delivered += 1
+        else:
+            logger.error("DROP_SECOND thất bại — càng %s chưa thả được pallet", side)
 
         self.motion.retreat_from_shelf()
-        self.packages_delivered += 1
         logger.info("Đã giao %d/%d kiện",
                      self.packages_delivered, config.TOTAL_PACKAGES_TASK1)
 
@@ -380,7 +418,7 @@ class Robot:
     def _handle_task2_pickup(self) -> State:
         logger.info("Nhiệm vụ 2: nhấc hàng từ kho hàng rời...")
         self.motion.approach_shelf()
-        success = self.lift.pickup(shelf_level=1)
+        success = self.lift.pickup(shelf_level=1, require_both=False)
         self.motion.retreat_from_shelf()
         if not success:
             logger.error("Nhiệm vụ 2: nâng thất bại — bỏ qua")
@@ -397,7 +435,8 @@ class Robot:
     def _handle_task2_drop(self) -> State:
         logger.info("Nhiệm vụ 2: đặt hàng tại nhà máy liên hợp...")
         self.motion.approach_shelf()
-        self.lift.dropoff()
+        if not self.lift.dropoff():
+            logger.error("TASK2_DROP thất bại — IR vẫn thấy pallet hoặc lỗi cảm biến")
         self.motion.retreat_from_shelf()
         logger.info("NHIỆM VỤ 2 HOÀN THÀNH!")
         return State.DONE
@@ -415,6 +454,40 @@ class Robot:
             # Xong tầng 2 → sang kệ tiếp, tầng 1
             self.current_tier = 1
             self.current_shelf += 1
+
+    def _shelves_exhausted(self) -> bool:
+        return self.current_shelf >= config.SHELVES_TASK1
+
+    def _clear_carry_state(self):
+        """Xóa trạng thái kiện hàng đang mang (sau nâng thất bại)."""
+        self.carried_labels = [None, None]
+        self.delivery_queue = []
+
+    def _finish_task1_or_done(self) -> State:
+        """Chuyển sang NV2 nếu đủ 12 kiện, không thì dừng."""
+        if self.packages_delivered >= config.TOTAL_PACKAGES_TASK1:
+            logger.info("NHIỆM VỤ 1 HOÀN THÀNH!")
+            return State.TASK2_NAVIGATE_TO_LOOSE
+        logger.warning("Hết kệ nhưng mới giao %d/%d kiện",
+                       self.packages_delivered, config.TOTAL_PACKAGES_TASK1)
+        return State.DONE
+
+    def _retry_or_skip_tier(self, reason: str) -> State:
+        """Thử lại tầng hiện tại hoặc bỏ qua sang tầng/kệ tiếp."""
+        if self._tier_retries < config.MAX_TIER_RETRIES:
+            self._tier_retries += 1
+            logger.warning("%s thất bại — thử lại tầng (lần %d/%d)",
+                           reason.capitalize(), self._tier_retries, config.MAX_TIER_RETRIES)
+            return State.PICKUP_PAIR
+
+        logger.error("%s thất bại — bỏ qua tầng kệ %d tầng %d",
+                     reason.capitalize(), self.current_shelf, self.current_tier)
+        self._clear_carry_state()
+        self._tier_retries = 0
+        self._advance_position()
+        if self._shelves_exhausted():
+            return self._finish_task1_or_done()
+        return State.NAVIGATE_TO_SHELF
 
     def _emergency_stop(self):
         logger.critical("DỪNG KHẨN CẤP!")

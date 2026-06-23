@@ -43,34 +43,41 @@ def test_shelf_levels(lift: Lift):
 
 
 def test_pallet_sensor(lift: Lift):
-    print("\n[TEST] Cảm biến IR xác nhận pallet (10 lần, cách 0.5s)...")
-    print("  Đặt/bỏ pallet trên càng để kiểm tra:")
+    print("\n[TEST] Cảm biến IR pallet trái/phải (10 lần, cách 0.5s)...")
+    if not lift.pallet.available:
+        print("  ⚠ I2C pallet sensor không khả dụng — bỏ qua test đọc thực")
+        return
+    print("  Đặt/bỏ pallet trên từng càng để kiểm tra:")
     for i in range(10):
-        has = lift.has_pallet()
-        status = "CÓ pallet ██" if has else "KHÔNG có pallet ░░"
-        print(f"  Lần {i+1}: {status}")
+        left, right, ok = lift.pallet.read_status()
+        if not ok:
+            print(f"  Lần {i+1}: LỖI đọc I2C")
+        else:
+            print(f"  Lần {i+1}: trái={'CÓ ██' if left else 'KHÔNG ░░'}"
+                  f"  phải={'CÓ ██' if right else 'KHÔNG ░░'}")
         time.sleep(0.5)
 
 
 def test_pickup_dropoff(lift: Lift):
-    print("\n[TEST] Pickup tầng 1 (có xác nhận cảm biến)...")
-    success = lift.pickup(shelf_level=1)
+    print("\n[TEST] Pickup tầng 1 (cần cả 2 IR)...")
+    success = lift.pickup(shelf_level=1, require_both=True)
     print(f"  Kết quả: {'THÀNH CÔNG' if success else 'THẤT BẠI'}")
     time.sleep(2)
 
     print("[TEST] Dropoff...")
     success = lift.dropoff()
-    print(f"  Kết quả: {'ĐÃ HẠ' if success else 'CÓ THỂ KẸT'}")
+    print(f"  Kết quả: {'ĐÃ HẠ' if success else 'CÓ THỂ KẸT / LỖI IR'}")
     time.sleep(1)
 
 
 def test_pickup_shelf2(lift: Lift):
-    print("\n[TEST] Pickup tầng 2 (có xác nhận cảm biến)...")
-    success = lift.pickup(shelf_level=2)
+    print("\n[TEST] Pickup tầng 2 (cần cả 2 IR)...")
+    success = lift.pickup(shelf_level=2, require_both=True)
     time.sleep(2)
 
-    print("[TEST] Mô phỏng dropoff...")
-    lift.dropoff()
+    print("[TEST] Dropoff...")
+    success = lift.dropoff()
+    print(f"  Kết quả: {'ĐÃ HẠ' if success else 'CÓ THỂ KẸT / LỖI IR'}")
     time.sleep(1)
 
 
@@ -84,7 +91,7 @@ def main():
     tests = {
         "1": ("Nâng/Hạ cơ bản", test_raise_lower),
         "2": ("Các tầng kệ (1 và 2)", test_shelf_levels),
-        "3": ("Cảm biến IR pallet", test_pallet_sensor),
+        "3": ("Cảm biến IR pallet trái/phải", test_pallet_sensor),
         "4": ("Pickup/Dropoff tầng 1 (có xác nhận)", test_pickup_dropoff),
         "5": ("Pickup/Dropoff tầng 2 (có xác nhận)", test_pickup_shelf2),
         "0": ("Chạy tất cả", None),

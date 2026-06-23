@@ -29,9 +29,12 @@ IN2_CAU_P = 13  # Hạ phải
 # --- Nút khởi động ---
 START_BUTTON_PIN = 16  # Nút vật lý kích hoạt chế độ tự động
 
-# --- Cảm biến IR xác nhận pallet trên càng ---
-PALLET_SENSOR_PIN = 26  # Cảm biến IR hướng lên trên mặt càng
-                         # LOW = có pallet, HIGH = không có pallet
+# --- Cảm biến IR xác nhận pallet (2 cái, qua PCF8574 #2 I2C) ---
+# PCF8574 #2 addr 0x21, dùng chung bus I2C với line sensor (GPIO2/3)
+# Không tốn thêm chân GPIO
+PALLET_I2C_ADDR = 0x21       # Địa chỉ PCF8574 thứ 2
+PALLET_LEFT_BIT = 0          # Bit P0 = IR càng trái (0 = có pallet)
+PALLET_RIGHT_BIT = 1         # Bit P1 = IR càng phải (0 = có pallet)
 
 # --- Cảm biến siêu âm HC-SR04 (đo khoảng cách phía trước) ---
 ULTRASONIC_TRIG_PIN = 19     # Trigger
@@ -50,12 +53,12 @@ LINE_SENSOR_I2C_ADDR = 0x20  # Địa chỉ I2C của module dò line
 # Động cơ xe:      4 chân (IN1_XE_T, IN2_XE_T, IN1_XE_P, IN2_XE_P)
 # Động cơ cẩu:     5 chân (IN3_CAU_T, IN4_CAU_T, ENA_CAU_P, IN1_CAU_P, IN2_CAU_P)
 # Nút khởi động:   1 chân (START_BUTTON_PIN)
-# Cảm biến pallet: 1 chân (PALLET_SENSOR_PIN)
 # Siêu âm HC-SR04: 2 chân (TRIG, ECHO)
-# Line sensor I2C: 2 chân (SDA, SCL)
+# Line sensor I2C: 2 chân (SDA, SCL) — chia sẻ bus với IR pallet
+# IR pallet x2:    0 chân (qua PCF8574 #2 trên cùng bus I2C)
 # Camera:          CSI-2 (không dùng GPIO)
 # ----------------------------------------------------------
-# TỔNG:           15 chân GPIO  (giới hạn thể lệ: 16 chân)
+# TỔNG:           14 chân GPIO  (giới hạn thể lệ: 16 chân) — dư 2 chân
 
 # ============================================================
 # AUDIT ĐỘNG CƠ
@@ -142,8 +145,11 @@ COLOR_RANGES = {
 # Kệ 1-3: mỗi kệ 4 pallet (2 tầng × 2) = 12 pallet
 # Kệ 4: chỉ có 1 pallet kho hàng rời (4 khối khác loại) → Nhiệm vụ 2
 # Pallet: 90x90x26mm — 2 pallet cạnh nhau vừa đúng 1 lần nâng
+SHELVES_TASK1 = 3            # Số kệ kho hải quan (NV1): kệ 0–2
 TOTAL_PACKAGES_TASK1 = 12    # Tổng kiện hàng NV1 (3 kệ × 2 tầng × 2 pallet)
 PICKUPS_TASK1 = 6            # Số lần nâng (12 ÷ 2)
+MAX_TIER_RETRIES = 1         # Số lần thử lại tầng kệ trước khi bỏ qua
+ROUTE_TURN_COST = 2          # Mỗi lần xoay 90° = N giao lộ forward khi so sánh route
 
 # ============================================================
 # STATE MACHINE - THỜI GIAN & ĐIỀU HƯỚNG

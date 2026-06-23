@@ -70,14 +70,45 @@ Thi đấu dự kiến **ngày 08-09/08/2026** tại phường Bắc Giang, tỉ
 ## Cấu trúc code
 
 ```
-main.py              — State machine: INIT → SCAN → PICKUP → DELIVER → DROP → lặp 6 lượt → TASK2
-config.py            — GPIO, route commands, HSV color ranges, timing, kích thước
+main.py              — State machine: INIT → NAVIGATE → PICKUP → DELIVER → DROP → lặp 6 lượt → TASK2
+config.py            — GPIO, route commands, HSV color ranges, timing, SHELVES_TASK1
 control/motion.py    — Di chuyển, bám line PD, siêu âm HC-SR04, execute_route(), line recovery
-control/lift.py      — Nâng/hạ forklift, cảm biến IR xác nhận pallet, retry
+control/lift.py      — 2 càng độc lập: PalletSensors (I2C), require_both, _verify_released
 vision/vision.py     — Nhận diện màu HSV (không dùng AI model), classify_pair()
 debug/server.py      — Flask web debug UI (MJPEG stream, line sensor, classify_pair)
 scripts/             — install.sh, start.sh, robot.service (systemd auto-start)
+docs/                — CAC_BUOC_ROBOT_HOAT_DONG.md, PHAN_CUNG.md
 ```
+
+## State machine (luồng chính)
+
+```
+NAVIGATE_TO_SHELF → PICKUP_PAIR (approach + classify_pair + pickup + retreat)
+  → DELIVER_FIRST → DROP_FIRST
+  → [DELIVER_SECOND → DROP_SECOND]  (bỏ qua nếu cùng nhà máy)
+  → RETURN_TO_WAREHOUSE
+  → lặp 6 lượt → TASK2 → DONE
+```
+
+- **Không còn state SCAN_PAIR riêng** — quét camera nằm trong PICKUP_PAIR, sau approach_shelf()
+- **`_last_delivered_label`**: route quay về kho và route NV2
+- **`_plan_delivery()`**: so sánh route cost gồm forward + turn (ROUTE_TURN_COST) + đoạn BETWEEN_FACTORIES
+- **`_retry_or_skip_tier()`**: scan/nâng fail → retry MAX_TIER_RETRIES lần trước khi bỏ tầng
+
+## Lift API (càng độc lập + 2 IR qua I2C)
+
+| Method | Mục đích |
+|--------|----------|
+| `pickup(level, require_both=True)` | NV1 — nâng 2 càng, cần **cả 2 IR**; NV2 dùng `require_both=False` |
+| `dropoff()` | Hạ cả 2 càng; `_verify_released()` xác nhận cả 2 đã rời |
+| `dropoff_left()` / `dropoff_right()` | Thả 1 kiện + IR xác nhận bên đó |
+| `raise_after_drop(side)` | Sau DROP_FIRST — nâng lại càng vừa thả |
+| `stow_forks(side)` | Sau DROP_SECOND — hạ càng còn lại về sàn |
+| `go_to_level(n)` | Nâng/hạ cả 2 càng đồng bộ (debug/test) |
+| `pallet.read_status()` | `(trái, phải, đọc_ok)` — I2C lỗi → `đọc_ok=False` |
+| `pallet.has_left/right/any/both()` | Wrapper trên `read_status()`; trả `None` nếu I2C lỗi |
+
+**main.py:** `_drop_single_side()` gọi dropoff + raise_after_drop; `packages_delivered` chỉ tăng khi IR xác nhận drop thành công.
 
 ## Điều hướng (Navigation)
 
@@ -97,15 +128,16 @@ Kệ thẳng hàng nhà máy → Samsung/Foxconn chỉ cần đi ngang (không r
 
 - Raspberry Pi 4 Model B
 - 2 DC motor bánh xe (giảm tốc 1:48) + 2 bánh caster
-- 2 DC motor cẩu forklift (dây curoa + con lăn trượt dọc trụ nhôm)
-- 2 thanh nâng (nâng 2 pallet cùng lúc)
+- 2 DC motor cẩu forklift **độc lập** (dây curoa + con lăn) — thả riêng từng càng
+- 2 thanh nâng (nâng 2 pallet cùng lúc, thả riêng khi giao 2 NM khác nhau)
 - Camera CSI (OV5647) — nhận diện HSV
-- Cảm biến dò line 8 mắt qua I2C (PCF8574, addr 0x20)
+- Cảm biến dò line 8 mắt qua I2C (PCF8574 #1, addr 0x20)
+- 2 cảm biến IR pallet (trái/phải) qua I2C (PCF8574 #2, addr 0x21, P0+P1)
 - HC-SR04 siêu âm (GPIO 19 TRIG, 20 ECHO) — tiếp cận kệ chính xác
-- Cảm biến IR pallet (GPIO 26) — xác nhận nâng thành công
 - Nút khởi động (GPIO 16)
 - L298N x2 + XH-M401 hạ áp
-- Tổng: **15/16 GPIO**, **4/12 động cơ** — ĐẠT
+- Tổng: **14/16 GPIO** (dư 2 chân), **4/12 động cơ** — ĐẠT
+- 2 PCF8574 chia sẻ cùng bus I2C (GPIO 2/3)
 
 ## Nhận diện kiện hàng
 
@@ -122,8 +154,14 @@ Phân tích màu HSV (OpenCV), không cần model AI.
 
 - Số giao lộ trong route là ƯỚC LƯỢNG — đội phải đo thực tế trên sa bàn
 - `TURN_TIME = 0.6s` cần calibrate trên robot thật
+- `LIFT_TIME_SHELF_1/2` cần calibrate riêng cho từng càng
 - `DEBUG_MODE = False` khi thi đấu
 - Không có network call khi thi đấu
+- Vision fail → retry hoặc bỏ tầng, **không** gán label mặc định
+- NV1 pickup cần **cả 2 IR**; NV2 chỉ cần **1 IR**
+- `packages_delivered` chỉ tăng khi IR xác nhận drop thành công (I2C lỗi → không đếm)
+- I2C lỗi khi đọc IR → pickup/drop không coi thành công
+- `MAX_TIER_RETRIES`, `MAX_PAIR_SCAN_ATTEMPTS` tinh chỉnh theo điều kiện sa bàn
 - Chân ECHO HC-SR04 phải qua cầu phân áp 1kΩ+2kΩ (5V→3.3V)
 - Robot phải **≤ 400x400x400mm** khi xuất phát
 - Khung robot **không dùng kim loại** (trừ ốc vít)

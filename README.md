@@ -25,7 +25,7 @@ Robocon-BCIT/
 ├── control/               # Điều khiển phần cứng
 │   ├── __init__.py
 │   ├── motion.py          #   Di chuyển + bám line + cảm biến siêu âm
-│   └── lift.py            #   Nâng/hạ càng forklift + cảm biến IR pallet
+│   └── lift.py            #   Nâng/hạ 2 càng độc lập + cảm biến IR pallet
 │
 ├── vision/                # Nhận diện hình ảnh
 │   ├── __init__.py
@@ -51,9 +51,8 @@ Robocon-BCIT/
 │   └── robot.service      #   Systemd unit file
 │
 └── docs/                  # Tài liệu
-    ├── PLAN.md
-    ├── Sa bàn.jpg
-    └── Hình dán khối bảng O2.pdf
+    ├── CAC_BUOC_ROBOT_HOAT_DONG.md   # Chi tiết luồng state machine
+    └── PHAN_CUNG.md                  # Danh sách phần cứng & đấu nối
 ```
 
 ## Cài đặt
@@ -76,11 +75,13 @@ sudo raspi-config
 sudo reboot
 ```
 
-### Bước 3: Kiểm tra I2C nhận module dò line
+### Bước 3: Kiểm tra I2C (line sensor + IR pallet)
 
 ```bash
 sudo i2cdetect -y 1
-# Phải thấy địa chỉ 0x20 (hoặc địa chỉ module của đội)
+# Phải thấy:
+#   0x20 — PCF8574 #1 (cảm biến dò line 8 mắt)
+#   0x21 — PCF8574 #2 (IR pallet trái P0 + phải P1)
 ```
 
 ### Bước 4: Cài thêm thư viện qua pip
@@ -98,10 +99,10 @@ pip install -r requirements.txt
 ```
          Nhìn từ trên xuống:
 
-         ══════════════════  ← Càng trái
+         ══════════════════  ← Càng trái + [IR trái]↑
             [HC-SR04] →      ← Siêu âm: giữa 2 càng, hướng ra trước
-         ══════════════════  ← Càng phải
-            [IR pallet]↑     ← IR: mặt trên càng, hướng lên (phát hiện pallet)
+         ══════════════════  ← Càng phải + [IR phải]↑
+            2 IR qua PCF8574 #2 I2C (không tốn GPIO)
 
          ┌──────────────────┐
          │  [Camera]  →     │  ← Camera CSI: giữa thân, hướng ra trước
@@ -115,16 +116,16 @@ pip install -r requirements.txt
 ### Sơ đồ đấu nối
 
 ```
-HC-SR04 (siêu âm):             Cảm biến IR (pallet):
-  VCC  → 5V                      VCC → 3.3V
-  TRIG → GPIO 19                 GND → GND
-  ECHO → GPIO 20 (qua cầu       OUT → GPIO 26
-          phân áp 1kΩ + 2kΩ)
-  GND  → GND                   Nút khởi động:
-                                  GPIO 16 ── [NÚT] ── GND
-Cầu phân áp cho ECHO (bảo vệ GPIO):
-  ECHO ──┬── R1 (1kΩ) ──→ GPIO 20
-         └── R2 (2kΩ) ──→ GND
+HC-SR04 (siêu âm):             Nút khởi động:
+  VCC  → 5V                      GPIO 16 ── [NÚT] ── GND
+  TRIG → GPIO 19
+  ECHO → GPIO 20 (qua cầu     PCF8574 #1 (line sensor, addr 0x20):
+          phân áp 1kΩ + 2kΩ)     SDA → GPIO 2, SCL → GPIO 3
+  GND  → GND
+                               PCF8574 #2 (IR pallet, addr 0x21):
+Cầu phân áp cho ECHO:           SDA → GPIO 2, SCL → GPIO 3 (cùng bus)
+  ECHO ──┬── R1 (1kΩ) → GPIO 20  P0 → IR càng trái
+         └── R2 (2kΩ) → GND      P1 → IR càng phải
 ```
 
 ### Cách robot tìm và tiếp cận kệ
@@ -133,7 +134,7 @@ Cầu phân áp cho ECHO (bảo vệ GPIO):
 ① Bám line → đếm giao lộ → dừng tại giao lộ kệ
 ② approach_shelf(): tiến chậm 30% + đo siêu âm liên tục
 ③ Khi khoảng cách ≤ 4cm → dừng chính xác trước kệ
-④ Nâng càng → cảm biến IR xác nhận có pallet
+④ Nâng càng → 2 IR (PCF8574 #2) xác nhận **cả 2 pallet** (NV1)
 ⑤ retreat_from_shelf(): lùi + đo siêu âm
 ⑥ Khi khoảng cách ≥ 15cm → dừng, đủ xa để xoay/bám line tiếp
 ```
@@ -202,7 +203,7 @@ Giao diện debug bao gồm:
 ### Test từng module
 ```bash
 python3 tests/test_motion.py   # Test động cơ, line sensor, siêu âm, tiếp cận kệ
-python3 tests/test_lift.py     # Test nâng/hạ + cảm biến IR pallet
+python3 tests/test_lift.py     # Test nâng/hạ + IR trái/phải (option 3)
 python3 tests/test_vision.py   # Test camera & nhận diện màu HSV
 ```
 
@@ -220,13 +221,16 @@ python3 tests/test_vision.py   # Test camera & nhận diện màu HSV
 | 6         | IN1_CAU_P (cẩu phải nâng)     | control/lift.py     |
 | 13        | IN2_CAU_P (cẩu phải hạ)       | control/lift.py     |
 | 16        | START_BUTTON (nút khởi động)   | main.py             |
-| 26        | PALLET_SENSOR (IR pallet)      | control/lift.py     |
 | 19        | ULTRASONIC_TRIG (siêu âm)     | control/motion.py   |
 | 20        | ULTRASONIC_ECHO (siêu âm)     | control/motion.py   |
-| 2         | I2C SDA (line sensor)          | control/motion.py   |
-| 3         | I2C SCL (line sensor)          | control/motion.py   |
+| 2         | I2C SDA (line + IR pallet)     | motion.py + lift.py |
+| 3         | I2C SCL (line + IR pallet)     | motion.py + lift.py |
 
-**Tổng: 15 chân GPIO** (giới hạn thể lệ: 16 chân) — **ĐẠT** (dư 1 chân)
+I2C bus chia sẻ (không tốn thêm GPIO):
+- PCF8574 #1 (0x20): cảm biến dò line 8 mắt
+- PCF8574 #2 (0x21): 2 cảm biến IR pallet (P0=trái, P1=phải)
+
+**Tổng: 14 chân GPIO** (giới hạn thể lệ: 16 chân) — **ĐẠT** (dư 2 chân)
 
 ## Bảng động cơ sử dụng
 
@@ -276,25 +280,49 @@ Tổng: 4 kệ
   Kệ 4   (kho hàng rời): 1 pallet (4 khối khác loại) → Nhiệm vụ 2
 ```
 
+## Cơ cấu nâng — 2 càng độc lập + 2 IR riêng
+
+Mỗi càng có motor riêng; mỗi càng có **1 cảm biến IR riêng** (PCF8574 #2 @ `0x21`, P0=trái, P1=phải).
+
+| Hành động | Khi nào dùng |
+|-----------|--------------|
+| `pickup(level, require_both=True)` | NV1 — cần **cả 2 IR** thấy pallet mới coi thành công |
+| `pickup(level, require_both=False)` | NV2 kho hàng rời — chỉ cần **1 IR** |
+| `dropoff()` | 2 kiện cùng nhà máy — hạ cả 2 càng, IR xác nhận cả 2 đã rời |
+| `dropoff_left()` / `dropoff_right()` | Giao kiện 1 trong cặp khác nhà máy + IR xác nhận bên đó |
+| `raise_after_drop(side)` | Sau DROP_FIRST thành công — nâng lại càng vừa thả |
+| `stow_forks(side)` | Sau DROP_SECOND thành công — hạ càng còn lại về sàn |
+
+**API đọc IR:** `lift.pallet.read_status()` → `(trái, phải, đọc_ok)`. Nếu `đọc_ok=False` (I2C lỗi), pickup/drop **không** coi là thành công.
+
+Test IR trên Pi:
+```bash
+python3 tests/test_lift.py   # Option 3: đọc IR trái/phải riêng
+```
+
 ## State Machine — Nâng 2 kiện/lượt (6 lượt)
 
 ```
 INIT → START →
   ┌─→ NAVIGATE_TO_SHELF (execute_route + rẽ hướng tại giao lộ)
-  │   SCAN_PAIR (camera chia trái/phải, phân tích HSV)
   │   PICKUP_PAIR:
   │     approach_shelf() — tiến + siêu âm dừng ở 4cm
-  │     lift.pickup() — nâng + IR xác nhận pallet
+  │     classify_pair()  — camera chia trái/phải, phân tích HSV (sau khi tiếp cận)
+  │     lift.pickup(require_both=True) — cả 2 IR phải thấy pallet (NV1)
   │     retreat_from_shelf() — lùi + siêu âm dừng ở 15cm
-  │   DELIVER_FIRST → DROP_FIRST (giao nhà máy gần trước)
-  │   DELIVER_SECOND → DROP_SECOND (giao nhà máy xa)  ← bỏ qua nếu cùng nhà máy
-  │   RETURN_TO_WAREHOUSE
-  └── (lặp 6 lượt)
-  → TASK2 (nhà máy cuối → Kệ 4 → nhà máy liên hợp)
+  │   DELIVER_FIRST → DROP_FIRST (chỉ đếm kiện nếu IR xác nhận đã thả)
+  │   DELIVER_SECOND → DROP_SECOND (giao kiện còn lại + stow_forks)
+  │   RETURN_TO_WAREHOUSE (route theo _last_delivered_label)
+  └── (lặp 6 lượt, tối đa 3 kệ × 2 tầng)
+  → TASK2 (require_both=False khi nâng; dropoff() + IR xác nhận)
   → DONE
 ```
 
-### Thứ tự lấy kệ: Kệ 3 (gần Start) → Kệ 2 → Kệ 1
+**Tối ưu thứ tự giao:** `_plan_delivery()` so sánh tổng chi phí `kho → NM1 → NM2` (gồm cả lần xoay, `ROUTE_TURN_COST`).
+
+**Xử lý lỗi tầng kệ:** scan/nâng fail → thử lại cùng tầng (`MAX_TIER_RETRIES`) trước khi bỏ qua sang tầng/kệ tiếp.
+
+### Thứ tự 6 lượt nâng
 
 | Lượt | Kệ | Tầng | Route đi | Route giao |
 |------|----|------|----------|------------|
@@ -305,8 +333,10 @@ INIT → START →
 | 5 | Kệ 1 (R4) | T1 | Tiến 2 giao lộ lên | Quay phải 2 lần → đi ngang |
 | 6 | Kệ 1 (R4) | T2 | Tại chỗ → xong NV1 | NV2: nhà máy cuối → Kệ 4 → Liên hợp |
 
+### Thứ tự lấy kệ: Kệ 3 (gần Start) → Kệ 2 → Kệ 1
+
 **Tối ưu:** Kệ thẳng hàng nhà máy → Samsung/Foxconn chỉ cần đi ngang (không rẽ lên/xuống).
-Nếu 2 kiện cùng nhà máy → giao 1 điểm duy nhất.
+Nếu 2 kiện cùng nhà máy → giao 1 điểm duy nhất (`dropoff()` cả 2 càng).
 
 **Thời gian dự kiến: ~90-140 giây (NV1) + ~20-30 giây (NV2) = ~120-170 giây**
 **Giới hạn trận đấu: 240 giây**
@@ -317,17 +347,21 @@ Các giá trị cần đo thực nghiệm trên sa bàn và cập nhật trong `
 
 | Tham số | Mô tả | Cách đo |
 |---------|-------|---------|
+| `TURN_TIME` | Thời gian xoay 90° (giây) | Xoay tại giao lộ, chỉnh đến khi vuông góc |
 | `APPROACH_DISTANCE` | Khoảng cách dừng trước kệ (cm) | Đo khi càng vừa luồn vào dưới pallet |
 | `RETREAT_DISTANCE` | Khoảng cách lùi ra sau nâng/hạ (cm) | Đo khi robot đủ xa để xoay |
-| `LIFT_TIME_SHELF_1/2` | Thời gian nâng càng cho từng tầng kệ | Đo bằng stopwatch |
+| `LIFT_TIME_SHELF_1/2` | Thời gian nâng càng cho từng tầng kệ | Đo bằng stopwatch (từng càng riêng) |
 | `PWM_COMPENSATION` | Hệ số bù lệch tốc độ bánh phải | Cho chạy thẳng, chỉnh đến khi không lệch |
 | `LINE_KP`, `LINE_KD` | Hệ số PD bám line | Thử trên sa bàn, tăng/giảm đến khi mượt |
 | `SPEED_DEFAULT/SLOW` | Tốc độ di chuyển | Cân bằng giữa nhanh và ổn định |
-| `NAV_START_TO_SHELF_0` | Giao lộ từ xuất phát đến kệ 1 | Đếm trên sa bàn |
-| `NAV_BETWEEN_SHELVES` | Giao lộ giữa 2 kệ liên tiếp | Đếm trên sa bàn |
-| `NAV_WAREHOUSE_TO_*` | Giao lộ từ kho đến từng nhà máy | Đếm trên sa bàn |
-| `FACTORY_DISTANCE` | Khoảng cách giữa các nhà máy | Đếm trên sa bàn |
+| `ROUTE_*` | Các route trong config.py | Đếm giao lộ trên sa bàn thật |
+| `ROUTE_TURN_COST` | Trọng số xoay khi so sánh route giao hàng | Tăng nếu xoay chậm hơn bám line |
 | `COLOR_RANGES` | Dải màu HSV cho từng kiện | Chạy test_vision.py option 2 |
+| `CONFIDENCE_THRESHOLD` | Ngưỡng tin cậy nhận diện màu | Tinh chỉnh trên sa bàn thi |
+| `MAX_PAIR_SCAN_ATTEMPTS` | Số lần quét lại cặp kiện | Tăng nếu ánh sáng kém |
+| `MAX_TIER_RETRIES` | Số lần thử lại tầng kệ khi scan/nâng fail | Tăng nếu cần ổn định hơn |
+| `PICKUP_VERIFY_DELAY` | Thời gian chờ sau nâng trước khi đọc IR | Tăng nếu cảm biến phản hồi chậm |
+| `PALLET_I2C_ADDR` / `PALLET_*_BIT` | Địa chỉ PCF8574 #2 và bit trái/phải | Kiểm tra bằng `i2cdetect` + test_lift option 3 |
 
 ## Lưu ý quan trọng
 
@@ -337,3 +371,5 @@ Các giá trị cần đo thực nghiệm trên sa bàn và cập nhật trong `
 4. Cảm biến dò line cần dùng module **I2C** (PCF8574) để tiết kiệm chân GPIO
 5. Chân ECHO của HC-SR04 **bắt buộc** dùng cầu phân áp (1kΩ + 2kΩ) để bảo vệ GPIO 3.3V
 6. Chạy `test_motion.py` option 6-7 để kiểm tra siêu âm + tiếp cận kệ trước khi chạy full
+7. **IR pallet:** NV1 cần cả 2 IR; NV2 chỉ cần 1. `packages_delivered` chỉ tăng khi IR xác nhận đã thả — I2C lỗi không được coi là thành công
+8. Kiểm tra IR bằng `python3 tests/test_lift.py` option 3 (đọc trái/phải riêng)
