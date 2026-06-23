@@ -226,6 +226,21 @@ def create_app() -> Flask:
             "factory": factory,
         })
 
+    @app.route("/api/vision/classify_pair", methods=["POST"])
+    def classify_pair():
+        if _vision is None:
+            return jsonify({"ok": False, "left": None, "right": None,
+                            "error": "Vision chưa sẵn sàng"})
+
+        label_l, label_r = _vision.classify_pair()
+        factory_l = _vision.get_factory_name(label_l) if label_l else None
+        factory_r = _vision.get_factory_name(label_r) if label_r else None
+        return jsonify({
+            "ok": label_l is not None and label_r is not None,
+            "left": {"label": label_l, "factory": factory_l},
+            "right": {"label": label_r, "factory": factory_r},
+        })
+
     # ----------------------------------------------------------
     # Trạng thái & cấu hình
     # ----------------------------------------------------------

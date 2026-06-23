@@ -73,6 +73,33 @@ def test_line_follow(m: Motion):
     m.stop()
 
 
+def test_distance_sensor(m: Motion):
+    print("\n[TEST] Cảm biến siêu âm HC-SR04 (10 lần, cách 0.5s)...")
+    print("  Di chuyển vật trước robot để xem khoảng cách thay đổi:")
+    for i in range(10):
+        dist = m.get_distance()
+        if dist < 0:
+            print(f"  Lần {i+1}: KHÔNG CÓ cảm biến siêu âm")
+            break
+        bar = "█" * int(min(dist, 50) / 2)
+        print(f"  Lần {i+1}: {dist:6.1f}cm {bar}")
+        time.sleep(0.5)
+
+
+def test_approach_shelf(m: Motion):
+    print(f"\n[TEST] Tiếp cận kệ (dừng ở {config.APPROACH_DISTANCE}cm)...")
+    print("  Đặt vật/kệ phía trước robot.")
+    input("  Nhấn Enter để bắt đầu...")
+    success = m.approach_shelf()
+    dist = m.get_distance()
+    print(f"  Kết quả: {'ĐÃ ĐẾN' if success else 'TIMEOUT'} — khoảng cách {dist:.1f}cm")
+
+    print(f"\n  Lùi ra ({config.RETREAT_DISTANCE}cm)...")
+    success = m.retreat_from_shelf()
+    dist = m.get_distance()
+    print(f"  Kết quả: {'ĐÃ LÙI' if success else 'TIMEOUT'} — khoảng cách {dist:.1f}cm")
+
+
 def main():
     print("=" * 50)
     print("TEST MODULE ĐỘNG CƠ DI CHUYỂN")
@@ -86,6 +113,8 @@ def main():
         "3": ("Các mức tốc độ", test_speed_levels),
         "4": ("Đọc cảm biến dò line", test_line_sensor),
         "5": ("Bám line (chạy thực tế)", test_line_follow),
+        "6": ("Cảm biến siêu âm (đo khoảng cách)", test_distance_sensor),
+        "7": ("Tiếp cận + lùi khỏi kệ", test_approach_shelf),
         "0": ("Chạy tất cả", None),
     }
 
@@ -93,7 +122,7 @@ def main():
     for key, (name, _) in tests.items():
         print(f"  {key}. {name}")
 
-    choice = input("\nNhập số (0-5): ").strip()
+    choice = input("\nNhập số (0-7): ").strip()
 
     try:
         if choice == "0":
