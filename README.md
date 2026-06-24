@@ -262,14 +262,16 @@ MCP3008 SPI (8 kênh analog, chia sẻ 4 chân SPI):
       │                  │               │
   R1  │                  │──[Amkor]───────┤
       │                  │               │
-  R0 [Kệ3]──■ Start ────┼──[Foxconn]─────┤   ← Kệ 3 thẳng Start / Foxconn
-      │                  │               │
-      │       [Kệ4]     │               │   ← Kệ 4 thụt xuống, bên phải Start
+  R0 [Kệ3]──line──┃GAP┃──line──[Foxconn]  ← Line R0 đứt quãng tại ô start
+      │             ┃   ┃              │
+      │          ←■Start┃              │   Robot quay mặt 9h (về Kệ 3)
+      │             [Kệ4]             │   Kệ 4 thụt xuống, bên phải Start
 ```
 
 - Kệ 1-3: cạnh TRÁI, cách nhau 2 giao lộ (R0, R2, R4)
 - Kệ 4: bên PHẢI Start, thụt xuống dưới R0 (kho hàng rời — NV2)
-- Robot xuất phát tại Start (R0 giữa), quay mặt lên trên
+- Robot xuất phát trong ô start, **quay mặt sang trái (9h)** về Kệ 3
+- `exit_start_zone()` chạm line R0 → `ROUTE_START` forward 1 giao lộ → Kệ 3
 
 ### Giá kệ
 
@@ -332,7 +334,7 @@ INIT → START →
 
 | Lượt | Kệ | Tầng | Route đi | Route giao |
 |------|----|------|----------|------------|
-| 1 | Kệ 3 (R0) | T1 | Start → rẽ trái → Kệ 3 | Quay phải 2 lần → đi ngang sang nhà máy |
+| 1 | Kệ 3 (R0) | T1 | exit start → forward 1 giao lộ → Kệ 3 | Quay phải 2 lần → đi ngang sang nhà máy |
 | 2 | Kệ 3 (R0) | T2 | Tại chỗ | Quay phải 2 lần → đi ngang |
 | 3 | Kệ 2 (R2) | T1 | Tiến 2 giao lộ lên | Quay phải 2 lần → đi ngang |
 | 4 | Kệ 2 (R2) | T2 | Tại chỗ | Quay phải 2 lần → đi ngang |
@@ -360,7 +362,10 @@ Các giá trị cần đo thực nghiệm trên sa bàn và cập nhật trong `
 | `PWM_COMPENSATION` | Hệ số bù lệch tốc độ bánh phải | Cho chạy thẳng, chỉnh đến khi không lệch |
 | `LINE_KP`, `LINE_KD` | Hệ số PD bám line | Thử trên sa bàn, tăng/giảm đến khi mượt |
 | `SPEED_DEFAULT/SLOW` | Tốc độ di chuyển | Cân bằng giữa nhanh và ổn định |
-| `ROUTE_*` | Các route trong config.py | Đếm giao lộ trên sa bàn thật |
+| `EXIT_START_SPEED` / `EXIT_START_TIMEOUT` | Thoát ô start (GAP line) | Option 6 test_motion |
+| `EXIT_START_ALIGN_TIME` | Thời gian căn giữa line sau khi chạm R0 | Tăng nếu lệch line khi bám |
+| `ROUTE_START_TO_SHELF_0` | Số giao lộ từ line R0 → Kệ 3 | Đo trên sa bàn (mặc định forward 1) |
+| `ROUTE_*` | Các route còn lại trong config.py | Đếm giao lộ trên sa bàn thật |
 | `ROUTE_TURN_COST` | Trọng số xoay khi so sánh route giao hàng | Tăng nếu xoay chậm hơn bám line |
 | `COLOR_RANGES` | Dải màu HSV cho từng kiện | Chạy test_vision.py option 2 |
 | `CONFIDENCE_THRESHOLD` | Ngưỡng tin cậy nhận diện màu | Tinh chỉnh trên sa bàn thi |
@@ -376,7 +381,7 @@ Các giá trị cần đo thực nghiệm trên sa bàn và cập nhật trong `
 3. File log được ghi tại `robot_log.txt` để debug sau mỗi lượt chạy
 4. QTR-8A + MCP3008 dùng SPI — bật SPI trong raspi-config trước khi chạy
 5. Chân ECHO của HC-SR04 **bắt buộc** dùng cầu phân áp (1kΩ + 2kΩ) để bảo vệ GPIO 3.3V
-6. Chạy `test_motion.py` option 7-8 để kiểm tra siêu âm + tiếp cận kệ trước khi chạy full
-7. **IR pallet:** NV1 cần cả 2 IR; NV2 chỉ cần 1. `packages_delivered` chỉ tăng khi IR xác nhận đã thả — đọc lỗi không được coi là thành công
-8. Kiểm tra IR bằng `python3 tests/test_lift.py` option 3 (ADC trái/phải)
-9. Calibrate line: `python3 tests/test_motion.py` option 5 (raw ADC QTR-8A)
+6. Chạy `test_motion.py` option **6** (exit start) rồi option **7–9** trước khi chạy full
+7. **Đặt robot hướng 9h** trong ô start — ô start không có line (GAP R0)
+8. **IR pallet:** NV1 cần cả 2 IR; NV2 chỉ cần 1. `packages_delivered` chỉ tăng khi IR xác nhận đã thả
+9. Kiểm tra IR: `test_lift.py` option 3; calibrate line: `test_motion.py` option 5

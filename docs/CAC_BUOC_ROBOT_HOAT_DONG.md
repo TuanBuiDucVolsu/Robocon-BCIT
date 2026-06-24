@@ -19,9 +19,10 @@ Robot hoàn thành 2 nhiệm vụ trong 240 giây:
       │                  │               │
   R1  │                  │──[Amkor]──────┤
       │                  │               │
-  R0 [Kệ3]──■ Start ─────┼──[Foxconn]────┤
-      │                  │               │
-      │       [Kệ4]      │               │
+  R0 [Kệ3]──line──┃GAP┃──line──[Foxconn]
+      │             ┃   ┃              │
+      │          ←■Start┃              │   Robot hướng 9h (về Kệ 3)
+      │             [Kệ4]             │
 ```
 
 ## Biến theo dõi tiến độ
@@ -59,13 +60,14 @@ Dừng (DONE) khi:           NV2 xong HOẶC hết giờ (< 10s an toàn) HOẶC
 
 ```
 Robot đặt trong ô xuất phát 400×400mm
-Quay mặt lên trên (hướng R0 → R4)
+Quay mặt SANG TRÁI — hướng 9h, về phía Kệ 3 (KHÔNG hướng lên)
   │
   │ Trọng tài đếm ngược "3, 2, 1, BẮT ĐẦU"
   │ Đội nhấn nút (GPIO 16)
   ▼
 Timer bắt đầu đếm 240 giây
 Càng forklift reset về mặt sàn (level 0)
+exit_start_zone() — tiến thẳng chạm line R0, căn giữa line
 ```
 
 ---
@@ -77,14 +79,16 @@ Càng forklift reset về mặt sàn (level 0)
 #### Bước 1: Di chuyển đến kệ
 
 ```
-State: NAVIGATE_TO_SHELF
-pickup_count == 0 → lần đầu, dùng ROUTE_START_TO_SHELF_0
+State: START → exit_start_zone()
+  Tiến thẳng (hướng 9h) → chạm line R0 → căn giữa line
 
-Robot (R0 giữa, hướng lên)
-  │ ("left",)         → Xoay 90° sang trái (hướng về cạnh trái)
-  │ ("forward", 1)    → Bám line, đếm 1 giao lộ → dừng trước Kệ 3
+State: NAVIGATE_TO_SHELF
+pickup_count == 0 → ROUTE_START_TO_SHELF_0
+
+Robot (trong ô start, đã chạm line R0, hướng 9h)
+  │ ("forward", 1)    → Bám line sang trái, 1 giao lộ → dừng tại Kệ 3
   ▼
-Robot dừng tại giao lộ Kệ 3, hướng sang trái (vào kệ)
+Robot dừng trước Kệ 3, hướng sang trái (vào kệ)
 ```
 
 #### Bước 2–4: Tiếp cận + Quét + Nâng (PICKUP_PAIR)
@@ -271,13 +275,13 @@ Robot đứng yên chờ trọng tài kết thúc trận
 ## SƠ ĐỒ TỔNG LUỒNG HOẠT ĐỘNG
 
 ```
-INIT (chờ nút) ──→ START (reset càng, bắt đầu timer)
+INIT (chờ nút) ──→ START (reset càng, exit_start_zone → chạm line R0)
   │
   ▼
 ┌─────────────── LẶP 6 LƯỢT (tối đa 3 kệ × 2 tầng) ─────┐
 │                                                         │
 │  NAVIGATE_TO_SHELF                                      │
-│    ├ Lần đầu: ROUTE_START_TO_SHELF_0                    │
+│    ├ Lần đầu: ROUTE_START_TO_SHELF_0 (forward 1)        │
 │    ├ Tầng 2: tại chỗ                                   │
 │    └ Kệ tiếp: ROUTE_BETWEEN_SHELVES                     │
 │    (hết kệ → DONE hoặc NV2 nếu đủ 12 kiện)             │
@@ -332,6 +336,7 @@ INIT (chờ nút) ──→ START (reset càng, bắt đầu timer)
 | Tình huống | Xử lý |
 |-----------|-------|
 | Sắp hết giờ (<10s) | `is_time_safe()` check sau mỗi state → DONE |
+| Không tìm thấy line khi exit start | Kiểm tra hướng 9h, GAP line, `EXIT_START_TIMEOUT` → DONE |
 | Scan fail (confidence thấp) | Retry MAX_PAIR_SCAN_ATTEMPTS → _retry_or_skip_tier |
 | Nâng thất bại (IR không thấy pallet) | Retry PICKUP_MAX_RETRIES → _retry_or_skip_tier |
 | I2C/SPI lỗi khi đọc IR | pickup/drop **không** coi thành công; log lỗi |
@@ -339,7 +344,7 @@ INIT (chờ nút) ──→ START (reset càng, bắt đầu timer)
 | Hết kệ (current_shelf >= 3) | DONE hoặc NV2 nếu đủ 12 kiện |
 | Hạ xong nhưng IR vẫn thấy pallet | Không tăng packages_delivered; log cảnh báo "có thể kẹt" |
 | Drop thất bại (IR/SPI) | Không tăng packages_delivered; robot vẫn chuyển state tiếp |
-| Mất line (8 sensor = 0) | `_recover_line()` quét trái/phải tìm lại |
+| Mất line (6 sensor = 0) | `_recover_line()` quét trái/phải tìm lại |
 | Bám line timeout (>15s) | Dừng, log lỗi |
 | Siêu âm timeout (>5s) | Dừng, log cảnh báo |
 | Ctrl+C / SIGTERM | `_emergency_stop()` → tắt tất cả motor |

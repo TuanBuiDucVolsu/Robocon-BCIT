@@ -189,6 +189,12 @@ class Robot:
     def _handle_start(self) -> State:
         logger.info("Trạng thái: START — bắt đầu trận đấu (240s)")
         self.lift.reset()
+
+        # Thoát ô start → tìm line → bám đến giao lộ đầu tiên
+        if not self.motion.exit_start_zone():
+            logger.error("Không thoát được ô start — dừng!")
+            return State.DONE
+
         return State.NAVIGATE_TO_SHELF
 
     def _handle_navigate_to_shelf(self) -> State:
@@ -201,7 +207,7 @@ class Robot:
                      self.current_shelf, self.current_tier)
 
         if self.pickup_count == 0:
-            # Lần đầu: từ xuất phát đến Kệ 3 (gần start nhất, R0)
+            # Lần đầu: exit_start_zone() đã chạm line R0 → forward 1 giao lộ đến Kệ 3
             self.motion.execute_route(config.ROUTE_START_TO_SHELF_0)
         elif self.current_tier == 2:
             # Tầng 2 cùng kệ → không cần di chuyển, chỉ quay lại tiếp cận

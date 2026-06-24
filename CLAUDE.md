@@ -55,14 +55,16 @@ Thi đấu dự kiến **ngày 08-09/08/2026** tại phường Bắc Giang, tỉ
       │                  │               │
   R1  │                  │──[Amkor]───────┤
       │                  │               │
-  R0 [Kệ3]──■ Start ────┼──[Foxconn]─────┤   Kệ 3 thẳng Start / Foxconn
-      │                  │               │
-      │       [Kệ4]     │               │   Kệ 4 THỤT XUỐNG dưới R0, bên phải Start
+  R0 [Kệ3]──line──┃GAP┃──line──[Foxconn]  ← Line R0 đứt tại ô start
+      │             ┃   ┃              │
+      │          ←■Start┃              │   Robot quay mặt 9h (về Kệ 3)
+      │             [Kệ4]             │   Kệ 4 THỤT XUỐNG dưới R0, bên phải Start
 ```
 
 - Kệ 1-3: cạnh TRÁI, cách nhau 2 giao lộ (R4, R2, R0)
 - Kệ 4: bên PHẢI Start, thụt XUỐNG dưới R0, cạnh Foxconn (kho hàng rời — NV2)
-- Robot xuất phát: R0 giữa (Start), quay mặt lên trên
+- Robot xuất phát: ô start trên R0, **quay mặt sang trái (9h)** về Kệ 3
+- `exit_start_zone()` chạm line → `ROUTE_START_TO_SHELF_0` forward 1 giao lộ
 - Thứ tự lấy kệ: Kệ 3 (R0, gần nhất) → Kệ 2 (R2) → Kệ 1 (R4)
 - 4 nhà máy xếp DỌC cạnh phải: Samsung(R4) → Hana(R3) → Amkor(R1) → Foxconn(R0)
 - Nhà máy liên hợp: giữa sân (R2), chung 2 đội
@@ -115,7 +117,7 @@ NAVIGATE_TO_SHELF → PICKUP_PAIR (approach + classify_pair + pickup + retreat)
 
 Dùng route commands: `("forward", N)`, `("left",)`, `("right",)`.
 Các route định nghĩa trong `config.py`:
-- `ROUTE_START_TO_SHELF_0` — Start → Kệ 3 (rẽ trái + tiến 1)
+- `ROUTE_START_TO_SHELF_0` — exit start (chạm line) → forward 1 giao lộ → Kệ 3
 - `ROUTE_BETWEEN_SHELVES` — Kệ → kệ tiếp (tiến 2 giao lộ)
 - `ROUTE_SHELF_TO_FACTORY[label]` — Kệ → nhà máy (quay phải 2 lần + đi ngang + rẽ nếu cần)
 - `ROUTE_FACTORY_TO_SHELF[label]` — Nhà máy → về kệ

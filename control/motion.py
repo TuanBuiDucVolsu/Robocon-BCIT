@@ -153,6 +153,54 @@ class Motion:
         self._right_rev.off()
 
     # ----------------------------------------------------------
+    # Xuất phát — tìm line đầu tiên
+    # ----------------------------------------------------------
+
+    def exit_start_zone(self, speed: float = config.EXIT_START_SPEED,
+                        timeout: float = config.EXIT_START_TIMEOUT) -> bool:
+        """
+        Thoát ô start (GAP — không có line trên R0).
+
+        Robot đặt quay mặt sang trái (9h, về Kệ 3):
+        1. Tiến thẳng cho đến khi chạm line ngang R0
+        2. Bám line ngắn để căn giữa (không đếm giao lộ — để ROUTE_START làm)
+        Giao lộ được đếm trong ROUTE_START_TO_SHELF_0, tránh đếm kép.
+        """
+        logger.info("Thoát ô start — tiến thẳng tìm line R0 (speed=%d%%)", speed)
+        start = time.time()
+        self.forward(speed)
+
+        found = False
+        while time.time() - start < timeout:
+            values = self.read_line_sensor()
+            if sum(values) > 0:
+                self.stop()
+                logger.info("Chạm line R0! sensor=%s", values)
+                found = True
+                break
+            time.sleep(0.01)
+
+        if not found:
+            self.stop()
+            logger.error("KHÔNG tìm thấy line sau %.1fs! Kiểm tra hướng 9h / vị trí start.", timeout)
+            return False
+
+        logger.info("Căn giữa line (%.1fs)...", config.EXIT_START_ALIGN_TIME)
+        align_start = time.time()
+        while time.time() - align_start < config.EXIT_START_ALIGN_TIME:
+            at_intersection, values = self.follow_line(speed)
+            if at_intersection:
+                logger.info("Chạm giao lộ khi căn line — dừng, route sẽ đếm tiếp")
+                self.stop()
+                return True
+            if sum(values) == 0:
+                break
+            time.sleep(0.01)
+
+        self.stop()
+        return True
+
+    # ----------------------------------------------------------
     # Xoay 90° và điều hướng route
     # ----------------------------------------------------------
 

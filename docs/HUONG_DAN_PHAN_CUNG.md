@@ -334,7 +334,8 @@ Nhìn từ trên xuống:
 - [ ] Calibrate QTR raw ADC: `python3 tests/test_motion.py` option **5** → chỉnh `LINE_THRESHOLD`
 - [ ] Test IR pallet: `python3 tests/test_lift.py` option **3** → chỉnh `PALLET_THRESHOLD`
 - [ ] Debug web (DEBUG_MODE=True): line 6 mắt + ADC, IR trái/phải tại `:5000`
-- [ ] Robot ≤ 400×400×400mm khi xuất phát
+- [ ] Robot ≤ 400×400×400mm khi xuất phát, **quay mặt sang trái (9h)** trong ô start
+- [ ] Test exit start: `python3 tests/test_motion.py` option **6**
 - [ ] Pin ≤ 12V, ≤ 5000mAh
 
 

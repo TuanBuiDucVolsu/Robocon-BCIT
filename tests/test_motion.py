@@ -80,6 +80,15 @@ def test_line_sensor_raw(m: Motion):
         print("\n  Dừng calibrate.")
 
 
+def test_exit_start_zone(m: Motion):
+    print("\n[TEST] Thoát ô start — exit_start_zone()")
+    print("  Đặt robot trong ô start, quay mặt SANG TRÁI (9h, về Kệ 3).")
+    input("  Nhấn Enter để bắt đầu...")
+    success = m.exit_start_zone()
+    values = m.read_line_sensor()
+    print(f"  Kết quả: {'OK' if success else 'THẤT BẠI'} — sensor={values} active={sum(values)}")
+
+
 def test_line_follow(m: Motion):
     print("\n[TEST] Bám line 10 giây (hoặc đến khi gặp giao lộ)...")
     start = time.time()
@@ -132,9 +141,10 @@ def main():
         "3": ("Các mức tốc độ", test_speed_levels),
         "4": ("Đọc cảm biến dò line (digital)", test_line_sensor),
         "5": ("Calibrate QTR-8A (raw ADC)", test_line_sensor_raw),
-        "6": ("Bám line (chạy thực tế)", test_line_follow),
-        "7": ("Cảm biến siêu âm (đo khoảng cách)", test_distance_sensor),
-        "8": ("Tiếp cận + lùi khỏi kệ", test_approach_shelf),
+        "6": ("Thoát ô start (exit_start_zone)", test_exit_start_zone),
+        "7": ("Bám line (chạy thực tế)", test_line_follow),
+        "8": ("Cảm biến siêu âm (đo khoảng cách)", test_distance_sensor),
+        "9": ("Tiếp cận + lùi khỏi kệ", test_approach_shelf),
         "0": ("Chạy tất cả", None),
     }
 
@@ -142,12 +152,12 @@ def main():
     for key, (name, _) in tests.items():
         print(f"  {key}. {name}")
 
-    choice = input("\nNhập số (0-8): ").strip()
+    choice = input("\nNhập số (0-9): ").strip()
 
     try:
         if choice == "0":
             for key, (name, func) in tests.items():
-                if func and key != "5":
+                if func and key not in ("5",):
                     func(m)
         elif choice in tests and tests[choice][1]:
             tests[choice][1](m)
