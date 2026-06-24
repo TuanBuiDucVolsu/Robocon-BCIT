@@ -84,21 +84,36 @@
 
             <!-- Cảm biến dò line -->
             <div class="sub-panel">
-                <h2>Cảm biến dò line</h2>
+                <h2>Cảm biến dò line (QTR-8A × 6)</h2>
                 <div class="line-sensor-display" id="line-sensor-display">
-                    <div class="sensor-dot" data-idx="0"></div>
-                    <div class="sensor-dot" data-idx="1"></div>
-                    <div class="sensor-dot" data-idx="2"></div>
-                    <div class="sensor-dot" data-idx="3"></div>
-                    <div class="sensor-dot" data-idx="4"></div>
-                    <div class="sensor-dot" data-idx="5"></div>
-                    <div class="sensor-dot" data-idx="6"></div>
-                    <div class="sensor-dot" data-idx="7"></div>
+                    <div class="sensor-dot" data-idx="0"><span class="adc-val">---</span></div>
+                    <div class="sensor-dot" data-idx="1"><span class="adc-val">---</span></div>
+                    <div class="sensor-dot" data-idx="2"><span class="adc-val">---</span></div>
+                    <div class="sensor-dot" data-idx="3"><span class="adc-val">---</span></div>
+                    <div class="sensor-dot" data-idx="4"><span class="adc-val">---</span></div>
+                    <div class="sensor-dot" data-idx="5"><span class="adc-val">---</span></div>
                 </div>
                 <div class="sensor-info">
                     <span>Lệch: <strong id="sensor-error">0.00</strong></span>
-                    <span>Active: <strong id="sensor-active">0</strong>/8</span>
+                    <span>Active: <strong id="sensor-active">0</strong>/6</span>
                     <span id="sensor-intersection" class="badge badge-off">Giao lộ</span>
+                </div>
+            </div>
+
+            <!-- IR pallet -->
+            <div class="sub-panel">
+                <h2>IR pallet (MCP3008 CH6–7)</h2>
+                <div class="pallet-sensor-display">
+                    <div class="pallet-side" id="pallet-left">
+                        <span class="pallet-label">Trái</span>
+                        <span class="pallet-dot"></span>
+                        <span class="pallet-adc">ADC ---</span>
+                    </div>
+                    <div class="pallet-side" id="pallet-right">
+                        <span class="pallet-label">Phải</span>
+                        <span class="pallet-dot"></span>
+                        <span class="pallet-adc">ADC ---</span>
+                    </div>
                 </div>
             </div>
         </section>

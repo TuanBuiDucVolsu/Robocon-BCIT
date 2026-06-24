@@ -304,18 +304,65 @@ kbd {
 }
 
 .sensor-dot {
-    width: 28px;
-    height: 28px;
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
     background: #333;
     border: 2px solid #555;
     transition: all 0.15s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.55rem;
+    color: #888;
+}
+
+.sensor-dot .adc-val {
+    font-size: 0.6rem;
+    line-height: 1;
+    margin-top: 2px;
 }
 
 .sensor-dot.active {
     background: var(--green);
     border-color: var(--green);
     box-shadow: 0 0 8px var(--green);
+    color: #111;
+}
+
+.pallet-sensor-display {
+    display: flex;
+    justify-content: space-around;
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.pallet-side {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8rem;
+}
+
+.pallet-dot {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #333;
+    border: 2px solid #555;
+}
+
+.pallet-dot.active {
+    background: var(--green);
+    border-color: var(--green);
+    box-shadow: 0 0 8px var(--green);
+}
+
+.pallet-adc {
+    color: var(--text-dim);
+    font-size: 0.75rem;
 }
 
 .sensor-info {

@@ -12,6 +12,8 @@ from flask import Flask, render_template, Response, jsonify, request
 
 import config
 from control import Motion, Lift
+from control.motion import LineSensor
+from control.mcp3008_bus import get_mcp3008_bus, reset_mcp3008_bus
 from vision import Vision
 
 logger = logging.getLogger(__name__)
@@ -30,8 +32,9 @@ def _init_hardware():
     if _motion is not None or _hw_error is not None:
         return
     try:
-        _motion = Motion()
-        _lift = Lift()
+        bus = get_mcp3008_bus()
+        _motion = Motion(mcp_bus=bus)
+        _lift = Lift(mcp_bus=bus)
         _vision = Vision()
         logger.info("Phần cứng đã khởi tạo thành công")
     except Exception as e:
@@ -137,20 +140,49 @@ def create_app() -> Flask:
         if _motion is None:
             return jsonify({
                 "values": [0] * config.LINE_SENSOR_COUNT,
+                "raw_adc": [1023] * config.LINE_SENSOR_COUNT,
                 "error": 0.0,
                 "active": 0,
                 "is_intersection": False,
                 "hw_error": _hw_error,
             })
 
-        values = _motion.read_line_sensor()
-        error = _motion.compute_line_error(values)
+        with _lock:
+            raw = _motion.read_line_sensor_raw()
+            values = LineSensor.digital_from_raw(raw)
+            error = _motion.compute_line_error_analog(raw)
         active = sum(values)
+        raw_adc = [int(round(v * 1023)) for v in raw]
         return jsonify({
             "values": values,
+            "raw_adc": raw_adc,
             "error": round(error, 2),
             "active": active,
             "is_intersection": active >= config.INTERSECTION_THRESHOLD,
+        })
+
+    @app.route("/api/pallet_sensor")
+    def pallet_sensor():
+        if _lift is None:
+            return jsonify({
+                "left": False,
+                "right": False,
+                "left_adc": 1023,
+                "right_adc": 1023,
+                "ok": False,
+                "hw_error": _hw_error,
+            })
+
+        with _lock:
+            left, right, ok = _lift.pallet.read_status()
+            left_adc, right_adc = _lift.pallet.read_adc()
+        return jsonify({
+            "left": left,
+            "right": right,
+            "left_adc": left_adc,
+            "right_adc": right_adc,
+            "ok": ok,
+            "threshold": config.PALLET_THRESHOLD,
         })
 
     # ----------------------------------------------------------
@@ -247,11 +279,19 @@ def create_app() -> Flask:
     @app.route("/api/status")
     def status():
         hw_ok = _motion is not None
+        line_values = [0] * config.LINE_SENSOR_COUNT
+        pallet = {"left": False, "right": False, "ok": False}
+        if _motion and _lift:
+            with _lock:
+                line_values = _motion.read_line_sensor()
+                left, right, ok = _lift.pallet.read_status()
+                pallet = {"left": left, "right": right, "ok": ok}
         return jsonify({
             "hw_ok": hw_ok,
             "hw_error": _hw_error,
             "lift_level": _lift._current_level if _lift else 0,
-            "line_sensor": _motion.read_line_sensor() if _motion else [0] * config.LINE_SENSOR_COUNT,
+            "line_sensor": line_values,
+            "pallet": pallet,
             "camera_ready": _vision._camera is not None if _vision else False,
             "vision_method": "HSV color",
         })
@@ -281,6 +321,7 @@ def create_app() -> Flask:
                 _lift.cleanup()
             if _vision:
                 _vision.cleanup()
+            reset_mcp3008_bus()
             _motion = _lift = _vision = None
         logger.info("Đã cleanup phần cứng")
         return jsonify({"ok": True})

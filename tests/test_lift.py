@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import config
 from control import Lift
+from control.mcp3008_bus import reset_mcp3008_bus
 
 
 def test_raise_lower(lift: Lift):
@@ -43,18 +44,19 @@ def test_shelf_levels(lift: Lift):
 
 
 def test_pallet_sensor(lift: Lift):
-    print("\n[TEST] Cảm biến IR pallet trái/phải (10 lần, cách 0.5s)...")
+    print(f"\n[TEST] Cảm biến IR pallet (ngưỡng PALLET_THRESHOLD={config.PALLET_THRESHOLD})")
     if not lift.pallet.available:
-        print("  ⚠ I2C pallet sensor không khả dụng — bỏ qua test đọc thực")
+        print("  ⚠ MCP3008 không khả dụng — bỏ qua test đọc thực")
         return
     print("  Đặt/bỏ pallet trên từng càng để kiểm tra:")
     for i in range(10):
         left, right, ok = lift.pallet.read_status()
+        left_adc, right_adc = lift.pallet.read_adc()
         if not ok:
-            print(f"  Lần {i+1}: LỖI đọc I2C")
+            print(f"  Lần {i+1}: LỖI đọc SPI/ADC")
         else:
-            print(f"  Lần {i+1}: trái={'CÓ ██' if left else 'KHÔNG ░░'}"
-                  f"  phải={'CÓ ██' if right else 'KHÔNG ░░'}")
+            print(f"  Lần {i+1}: trái={'CÓ ██' if left else 'KHÔNG ░░'} (ADC {left_adc:4d})"
+                  f"  phải={'CÓ ██' if right else 'KHÔNG ░░'} (ADC {right_adc:4d})")
         time.sleep(0.5)
 
 
@@ -116,6 +118,7 @@ def main():
         print("\n\nDừng bởi người dùng.")
     finally:
         lift.cleanup()
+        reset_mcp3008_bus()
         print("\nĐã cleanup GPIO.")
 
 

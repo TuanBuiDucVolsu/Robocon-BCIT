@@ -1,5 +1,7 @@
 # Danh sách phần cứng — Robot Bảng O2
 
+> Chi tiết lắp QTR-8A + MCP3008: xem `docs/HUONG_DAN_LAP_QTR8A_MCP3008.md` và `docs/HUONG_DAN_PHAN_CUNG.md`
+
 ## Phần cứng đã có
 
 | STT | Linh kiện | SL | Ghi chú |
@@ -21,131 +23,49 @@
 
 | STT | Linh kiện | SL | Chức năng | Giá ước tính |
 |-----|-----------|:--:|-----------|-------------|
-| 1 | Cảm biến dò line 8 mắt I2C (PCF8574) | 1 | Bám line sa bàn (addr 0x20) | ~80-120k |
-| 2 | Module PCF8574 (riêng) | 1 | Đọc 2 IR pallet qua I2C (addr 0x21) | ~10-15k |
-| 3 | Cảm biến IR obstacle | **2** | Xác nhận pallet trái + phải | ~20-30k |
+| 1 | QTR-8A (line sensor analog) | 1 | Dò line 6 mắt (CH0–5) | ~150-250k |
+| 2 | MCP3008 (ADC SPI 8 kênh) | 1 | Đọc QTR + 2 IR pallet | ~15-25k |
+| 3 | Cảm biến IR obstacle | **2** | Xác nhận pallet trái + phải (CH6–7) | ~20-30k |
 | 4 | HC-SR04 (siêu âm) | 1 | Đo khoảng cách đến kệ | ~15-25k |
 | 5 | Nút bấm thường hở | 1 | Khởi động robot | ~3-5k |
-| 6 | Điện trở 1kΩ | 1 | Cầu phân áp ECHO | ~1k |
-| 7 | Điện trở 2kΩ | 1 | Cầu phân áp ECHO | ~1k |
-| 8 | Dây nối dupont (đực-cái, cái-cái) | ~30 | Kết nối module | ~20-30k |
+| 6 | Điện trở 1kΩ + 2kΩ | 1+1 | Cầu phân áp ECHO | ~2k |
+| 7 | Dây nối dupont | ~30 | Kết nối module | ~20-30k |
 
-**Tổng ước tính: ~150-230k VND**
+**Tổng ước tính: ~220-360k VND**
 
 ## Sơ đồ đấu nối GPIO
 
 ```
 Raspberry Pi 4
  ┌─────────────────────────────────────────────────────────┐
- │                                                         │
  │  ── L298N #1 (bánh xe) ──                               │
- │  GPIO 17 → IN1 → Motor bánh TRÁI (tiến, PWM)           │
- │  GPIO 27 → IN2 → Motor bánh TRÁI (lùi)                 │
- │  GPIO 22 → IN3 → Motor bánh PHẢI (tiến, PWM)           │
- │  GPIO 23 → IN4 → Motor bánh PHẢI (lùi)                 │
+ │  GPIO 17/27/22/23 → Motor bánh trái/phải               │
  │                                                         │
  │  ── L298N #2 (cẩu forklift) ──                          │
- │  GPIO 24 → IN3 → Motor cẩu TRÁI (nâng)                 │
- │  GPIO 25 → IN4 → Motor cẩu TRÁI (hạ)                   │
- │  GPIO  5 → ENA → Motor cẩu PHẢI (enable)               │
- │  GPIO  6 → IN1 → Motor cẩu PHẢI (nâng)                 │
- │  GPIO 13 → IN2 → Motor cẩu PHẢI (hạ)                   │
+ │  GPIO 24/25/5/6/13 → Motor cẩu trái/phải              │
  │                                                         │
- │  ── I2C bus (chia sẻ 2 module) ──                        │
- │  GPIO  2 (SDA) ──┬── PCF8574 #1 (0x20) → Line 8 mắt    │
- │  GPIO  3 (SCL) ──┤                                      │
- │                  └── PCF8574 #2 (0x21) → IR trái (P0)   │
- │                                        → IR phải (P1)   │
+ │  ── SPI → MCP3008 (ADC) ──                              │
+ │  GPIO  8 (CE0), 9 (MISO), 10 (MOSI), 11 (SCLK)         │
+ │    CH0-5 → QTR-8A 6 mắt                                │
+ │    CH6   → IR pallet trái                               │
+ │    CH7   → IR pallet phải                               │
  │                                                         │
- │  ── Cảm biến siêu âm HC-SR04 ──                         │
- │  GPIO 19 → TRIG                                         │
- │  GPIO 20 ← ECHO (qua cầu phân áp 1kΩ + 2kΩ!)          │
+ │  ── HC-SR04 ── GPIO 19 TRIG, 20 ECHO (cầu phân áp)     │
+ │  ── Nút ── GPIO 16 ↔ GND                               │
+ │  ── Camera CSI (không dùng GPIO)                        │
  │                                                         │
- │  ── Nút khởi động ──                                    │
- │  GPIO 16 ← NÚT → GND (pull-up bên trong Pi)            │
- │                                                         │
- │  ── Camera ──                                           │
- │  CSI port → Camera OV5647 (không dùng GPIO)             │
- │                                                         │
- │  TỔNG: 14/16 GPIO — ĐẠT (dư 2 chân)                    │
+ │  TỔNG: 16/16 GPIO — vừa đúng giới hạn thể lệ           │
  └─────────────────────────────────────────────────────────┘
-```
-
-## Sơ đồ nguồn điện
-
-```
-Pin 18650 (≤12V, ≤5000mAh)
-  │
-  ├──→ XH-M401 (hạ áp) ──→ 5V
-  │      ├──→ Raspberry Pi 4 (5V micro-USB hoặc GPIO 5V)
-  │      ├──→ L298N #1 logic VCC (5V)
-  │      ├──→ L298N #2 logic VCC (5V)
-  │      ├──→ HC-SR04 VCC (5V)
-  │      └──→ Line sensor VCC (có thể 3.3V hoặc 5V tuỳ module)
-  │
-  └──→ L298N VCC motor (điện áp pin trực tiếp)
-       ├──→ Motor bánh trái
-       ├──→ Motor bánh phải
-       ├──→ Motor cẩu trái
-       └──→ Motor cẩu phải
-
-3.3V (từ Pi):
-  ├──→ Cảm biến IR pallet VCC
-  └──→ Line sensor VCC (nếu module dùng 3.3V)
-
-GND chung: tất cả module, Pi, L298N, cảm biến
-```
-
-## Cầu phân áp HC-SR04 ECHO (BẮT BUỘC)
-
-```
-HC-SR04 ECHO (5V) ──┬── R1 (1kΩ) ──→ GPIO 20 (3.3V safe)
-                     │
-                     └── R2 (2kΩ) ──→ GND
-
-Công thức: Vout = 5V × 2kΩ / (1kΩ + 2kΩ) = 3.33V → an toàn cho Pi
-
-⚠️ KHÔNG NỐI TRỰC TIẾP ECHO → GPIO! Sẽ hỏng chân GPIO của Pi.
-```
-
-## Vị trí lắp đặt cảm biến trên robot
-
-```
-Nhìn từ trên xuống:
-
-     ══════════════════  ← Càng trái
-        [HC-SR04] →      ← Giữa 2 càng, mặt phát sóng hướng ra trước
-     ══════════════════  ← Càng phải
-   [IR trái P0]↑ [IR phải P1]↑  ← Mỗi càng 1 IR, nối PCF8574 #2 (0x21)
-
-     ┌──────────────────┐
-     │  [Camera]  →     │  ← Giữa thân, hướng ra trước, ngang tầm kệ
-     │   RPi 4          │
-     │  [NÚT BẤM]  ●   │  ← Mặt trên, dễ bấm bằng tay
-     │                  │
-     │  [Line 8 mắt] ↓ │  ← Dưới gầm, sát mặt sàn (~3-5mm)
-     ├──────────────────┤
-     │ (bánh trái)(bánh phải) │  ← Bánh sau chủ động
-     │    (caster)(caster)    │  ← Bánh trước đa hướng
-     └──────────────────┘
-
-
-Nhìn từ bên cạnh:
-
-     Kệ hàng          Càng
-     ┌──────┐    ══════════════
-     │Pallet│    ║  [HC-SR04]   ← cao ~2-3cm so với sàn
-     │      │    ║  [IR trái] [IR phải] ↑  ← mỗi càng 1 IR
-     └──────┘    ══════════════
-     ◄─4cm──►    ← khoảng cách dừng (APPROACH_DISTANCE)
 ```
 
 ## Bảng tổng hợp GPIO
 
 | Chân | Chức năng | Loại | Module |
 |:----:|-----------|------|--------|
-| 2 | I2C SDA | I2C | Line sensor + IR pallet |
-| 3 | I2C SCL | I2C | Line sensor + IR pallet |
+| 8 | SPI CE0 | SPI | MCP3008 |
+| 9 | SPI MISO | SPI | MCP3008 |
+| 10 | SPI MOSI | SPI | MCP3008 |
+| 11 | SPI SCLK | SPI | MCP3008 |
 | 5 | ENA cẩu phải | Output | L298N #2 |
 | 6 | IN1 cẩu phải (nâng) | Output | L298N #2 |
 | 13 | IN2 cẩu phải (hạ) | Output | L298N #2 |
@@ -159,33 +79,24 @@ Nhìn từ bên cạnh:
 | 25 | IN4 cẩu trái (hạ) | Output | L298N #2 |
 | 27 | IN2 bánh trái (lùi) | Output | L298N #1 |
 
-**Tổng: 14 chân / Giới hạn: 16 chân — ĐẠT (dư 2 chân)**
-
-## Cơ cấu cẩu — 2 càng độc lập + 2 IR riêng
+## Cơ cấu cẩu + cảm biến
 
 ```
-Motor trái (GPIO 24/25)  →  Càng trái  ─┬─ [IR trái] (PCF8574 #2, P0)
-Motor phải (GPIO 5/6/13) →  Càng phải  ─┼─ [IR phải] (PCF8574 #2, P1)
-                                         └→ Thả riêng từng bên + xác nhận riêng từng bên
-PCF8574 #2 (addr 0x21): đọc qua I2C, chia sẻ bus với line sensor — KHÔNG tốn GPIO
+Motor trái/phải → 2 càng độc lập
+  IR trái  → MCP3008 CH6
+  IR phải  → MCP3008 CH7
+QTR-8A (6 mắt) → MCP3008 CH0–CH5
 
-**Logic IR (trong code):**
-- `read_status()` → `(trái, phải, đọc_ok)` — I2C lỗi → `đọc_ok=False`
-- NV1 pickup: `require_both=True` — cần cả 2 IR
-- NV2 pickup: `require_both=False` — 1 IR đủ
-- Drop: `_verify_released()` — chỉ coi thành công khi IR bên tương ứng không còn thấy pallet
+Code: control/mcp3008_bus.py (bus SPI dùng chung + lock)
+      control/motion.py (line), control/lift.py (IR pallet)
 ```
 
 ## Lưu ý thi công
 
-1. **GND chung**: tất cả module phải nối chung GND với Pi
-2. **Cầu phân áp**: BẮT BUỘC cho HC-SR04 ECHO (5V→3.3V)
-3. **Line sensor**: gắn dưới gầm, sát sàn 3-5mm, ngang tâm robot
-4. **HC-SR04**: gắn giữa 2 càng, cao ~2-3cm, hướng thẳng ra trước
-5. **IR trái**: gắn trên mặt càng trái, hướng lên → nối vào PCF8574 #2 P0
-6. **IR phải**: gắn trên mặt càng phải, hướng lên → nối vào PCF8574 #2 P1
-7. **PCF8574 #2**: addr jumper đặt 0x21 (khác 0x20 của line sensor)
-8. **Camera**: hướng thẳng ra trước, ngang tầm nhìn kệ hàng
-9. **Nút bấm**: vị trí dễ bấm, nối GPIO 16 ↔ GND
-10. **Pin**: ≤12V, ≤5000mAh (quy định thể lệ Bảng O2)
-11. **Khung robot**: ≤400x400x400mm khi xuất phát, không dùng kim loại (trừ ốc vít)
+1. **GND chung** cho tất cả module
+2. **MCP3008 VDD/VREF = 3.3V** (không 5V)
+3. **QTR-8A VCC = 5V**, gắn sát sàn 3–5mm
+4. **Bật SPI**: `sudo raspi-config` → SPI → Enable
+5. **Calibrate**: `python3 tests/test_motion.py` option 5 (LINE_THRESHOLD), `test_lift.py` option 3 (PALLET_THRESHOLD)
+6. **Cầu phân áp** bắt buộc cho HC-SR04 ECHO
+7. Pin ≤12V, ≤5000mAh; khung ≤400×400×400mm khi xuất phát

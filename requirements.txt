@@ -6,31 +6,20 @@
 # QUAN TRỌNG: Cài gói hệ thống trước khi chạy pip!
 #
 #   sudo apt update
-#   sudo apt install -y python3-lgpio python3-gpiozero \
+#   sudo apt install -y python3-lgpio python3-gpiozero python3-spidev \
 #       python3-picamera2 python3-libcamera \
-#       python3-opencv python3-numpy i2c-tools
+#       python3-opencv python3-numpy
 #
-# Nếu dùng RPi OS Bookworm, tạo venv kế thừa gói hệ thống:
-#
-#   python3 -m venv --system-site-packages ~/robot_env
-#   source ~/robot_env/bin/activate
-#   pip install -r requirements.txt
-#
-# Bật I2C + Camera:
-#   sudo raspi-config -> Interface Options -> I2C    -> Enable
+# Bật SPI + Camera:
+#   sudo raspi-config -> Interface Options -> SPI    -> Enable
 #   sudo raspi-config -> Interface Options -> Camera -> Enable
 #   sudo reboot
-#
-# Kiểm tra I2C:
-#   sudo i2cdetect -y 1
 # =====================================================
 
-# --- GPIO ---
+# --- GPIO + SPI ---
 gpiozero>=2.0
+spidev>=3.6
 # lgpio — KHÔNG cài qua pip, dùng apt: sudo apt install python3-lgpio
-
-# --- I2C (cảm biến dò line) ---
-smbus2>=0.4.3
 
 # --- Camera & nhận diện màu ---
 # picamera2 — KHÔNG cài qua pip, dùng apt: sudo apt install python3-picamera2

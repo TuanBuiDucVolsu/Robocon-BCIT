@@ -1,5 +1,6 @@
 """
 Module điều khiển động cơ di chuyển, cảm biến dò line, và cảm biến siêu âm.
+Line sensor: QTR-8A (analog) qua MCP3008 (SPI ADC).
 Dùng gpiozero (tương thích RPi 4 trên cả Bullseye lẫn Bookworm).
 """
 
@@ -22,36 +23,52 @@ except Exception:
         DistanceSensor = MagicMock
 
 import config
+from control.mcp3008_bus import Mcp3008Bus, get_mcp3008_bus
 
 logger = logging.getLogger(__name__)
 
 
 class LineSensor:
-    """Đọc cảm biến dò line 8 mắt qua I2C (PCF8574 hoặc tương đương)."""
+    """Đọc QTR-8A 6 mắt qua MCP3008 SPI (analog 0.0-1.0)."""
 
-    def __init__(self):
-        try:
-            import smbus2
-            self._bus = smbus2.SMBus(1)
-        except Exception as e:
-            self._bus = None
-            logger.warning("Line sensor không khả dụng (%s) — bị vô hiệu hoá", e)
+    def __init__(self, bus: Mcp3008Bus | None = None):
+        self._bus = bus or get_mcp3008_bus()
+        self._channels = list(range(config.LINE_SENSOR_COUNT))
+        self.available = self._bus.available
+
+    @staticmethod
+    def _threshold_norm() -> float:
+        return config.LINE_THRESHOLD / 1023.0
+
+    def read_raw(self) -> list[float]:
+        """Đọc giá trị analog 0.0-1.0 (0.0 = đen/line, 1.0 = trắng/nền)."""
+        if not self.available:
+            return [1.0] * config.LINE_SENSOR_COUNT
+        return self._bus.read_many(self._channels)
+
+    @staticmethod
+    def digital_from_raw(raw: list[float]) -> list[int]:
+        threshold = LineSensor._threshold_norm()
+        return [1 if v < threshold else 0 for v in raw]
 
     def read(self) -> list[int]:
-        if self._bus is None:
-            return [0] * config.LINE_SENSOR_COUNT
-        raw = self._bus.read_byte(config.LINE_SENSOR_I2C_ADDR)
-        return [(raw >> i) & 1 for i in range(config.LINE_SENSOR_COUNT)]
+        """Đọc digital (0/1) sau ngưỡng — tương thích API cũ."""
+        return self.digital_from_raw(self.read_raw())
+
+    def read_adc(self) -> list[int]:
+        """Đọc giá trị ADC 0-1023 cho từng mắt."""
+        return [int(round(v * 1023)) for v in self.read_raw()]
 
     def cleanup(self):
-        if self._bus:
-            self._bus.close()
+        pass
 
 
 class Motion:
     """Điều khiển 2 động cơ bánh xe (trái/phải) với PWM qua L298N."""
 
-    def __init__(self):
+    def __init__(self, mcp_bus: Mcp3008Bus | None = None):
+        self._mcp_bus = mcp_bus or get_mcp3008_bus()
+
         # Bánh trái: IN1 = PWM (tiến), IN2 = digital (lùi)
         self._left_fwd = PWMOutputDevice(config.IN1_XE_T, frequency=config.PWM_FREQUENCY)
         self._left_rev = DigitalOutputDevice(config.IN2_XE_T)
@@ -60,7 +77,7 @@ class Motion:
         self._right_fwd = PWMOutputDevice(config.IN1_XE_P, frequency=config.PWM_FREQUENCY)
         self._right_rev = DigitalOutputDevice(config.IN2_XE_P)
 
-        self._line_sensor = LineSensor()
+        self._line_sensor = LineSensor(self._mcp_bus)
         self._last_error = 0.0
 
         # Cảm biến siêu âm HC-SR04
@@ -68,7 +85,7 @@ class Motion:
             self._distance_sensor = DistanceSensor(
                 echo=config.ULTRASONIC_ECHO_PIN,
                 trigger=config.ULTRASONIC_TRIG_PIN,
-                max_distance=1.0,  # tối đa 1m
+                max_distance=1.0,
             )
             logger.info("Cảm biến siêu âm HC-SR04 đã sẵn sàng")
         except Exception as e:
@@ -81,7 +98,6 @@ class Motion:
 
     @staticmethod
     def _pct(speed: float) -> float:
-        """Chuyển tốc độ 0-100 sang 0.0-1.0 cho gpiozero."""
         return max(0.0, min(1.0, speed / 100.0))
 
     # ----------------------------------------------------------
@@ -89,7 +105,6 @@ class Motion:
     # ----------------------------------------------------------
 
     def get_distance(self, samples: int = 1) -> float:
-        """Đo khoảng cách phía trước (cm). samples>1 lấy median để lọc nhiễu."""
         if self._distance_sensor is None:
             return -1.0
         if samples <= 1:
@@ -103,7 +118,6 @@ class Motion:
     # ----------------------------------------------------------
 
     def forward(self, speed: float = config.SPEED_DEFAULT):
-        """Tiến thẳng với tốc độ 0-100."""
         logger.debug("Tiến - speed=%s", speed)
         self._left_rev.off()
         self._right_rev.off()
@@ -111,20 +125,13 @@ class Motion:
         self._right_fwd.value = self._pct(speed * config.PWM_COMPENSATION)
 
     def backward(self, speed: float = config.SPEED_DEFAULT):
-        """Lùi thẳng với tốc độ 0-100. Dùng PWM trên IN2."""
         logger.debug("Lùi - speed=%s", speed)
         self._left_fwd.value = 0
         self._right_fwd.value = 0
         self._left_rev.on()
         self._right_rev.on()
-        # TODO: khi đội nâng cấp IN2 sang PWMOutputDevice thì dùng:
-        # self._left_rev.value = self._pct(speed)
-        # self._right_rev.value = self._pct(speed * config.PWM_COMPENSATION)
-        # Hiện tại IN2 là DigitalOutput → luôn chạy full speed khi lùi.
-        # Workaround: dùng forward rồi đảo hướng bằng time ngắn.
 
     def turn_left(self, speed: float = config.SPEED_TURN):
-        """Xoay tại chỗ sang trái (trái lùi, phải tiến)."""
         logger.debug("Xoay trái - speed=%s", speed)
         self._left_fwd.value = 0
         self._left_rev.on()
@@ -132,7 +139,6 @@ class Motion:
         self._right_fwd.value = self._pct(speed * config.PWM_COMPENSATION)
 
     def turn_right(self, speed: float = config.SPEED_TURN):
-        """Xoay tại chỗ sang phải (trái tiến, phải lùi)."""
         logger.debug("Xoay phải - speed=%s", speed)
         self._left_rev.off()
         self._left_fwd.value = self._pct(speed)
@@ -140,7 +146,6 @@ class Motion:
         self._right_rev.on()
 
     def stop(self):
-        """Dừng cả 2 bánh."""
         logger.debug("Dừng")
         self._left_fwd.value = 0
         self._right_fwd.value = 0
@@ -152,28 +157,20 @@ class Motion:
     # ----------------------------------------------------------
 
     def turn_left_90(self):
-        """Xoay 90° sang trái tại giao lộ."""
         logger.info("Xoay 90° trái")
         self.turn_left(config.SPEED_TURN)
         time.sleep(config.TURN_TIME)
         self.stop()
 
     def turn_right_90(self):
-        """Xoay 90° sang phải tại giao lộ."""
         logger.info("Xoay 90° phải")
         self.turn_right(config.SPEED_TURN)
         time.sleep(config.TURN_TIME)
         self.stop()
 
     def execute_route(self, route: list) -> bool:
-        """
-        Thực hiện một chuỗi lệnh điều hướng.
-        route = [("forward", N), ("left",), ("right",), ...]
-        Trả về True nếu hoàn thành, False nếu gặp lỗi.
-        """
         for step in route:
             action = step[0]
-
             if action == "forward":
                 count = step[1]
                 if count > 0:
@@ -184,21 +181,15 @@ class Motion:
                 self.turn_right_90()
             else:
                 logger.warning("Lệnh route không hợp lệ: %s", step)
-
         return True
 
     # ----------------------------------------------------------
-    # Tiếp cận kệ / lùi ra (dùng cảm biến siêu âm)
+    # Tiếp cận kệ / lùi ra
     # ----------------------------------------------------------
 
     def approach_shelf(self, target_cm: float = config.APPROACH_DISTANCE,
                        speed: float = config.APPROACH_SPEED) -> bool:
-        """
-        Tiến chậm về phía kệ cho đến khi cảm biến siêu âm đo ≤ target_cm.
-        Trả về True nếu đã đến đúng vị trí, False nếu timeout.
-        """
         if self._distance_sensor is None:
-            # Fallback: tiến theo thời gian nếu không có cảm biến
             logger.warning("Không có cảm biến siêu âm — tiến 0.5s (fallback)")
             self.forward(speed)
             time.sleep(0.5)
@@ -211,13 +202,10 @@ class Motion:
 
         while time.time() - start < config.APPROACH_TIMEOUT:
             dist = self.get_distance()
-            logger.debug("Khoảng cách: %.1fcm", dist)
-
             if dist <= target_cm:
                 self.stop()
                 logger.info("Đã đến vị trí kệ — khoảng cách %.1fcm", dist)
                 return True
-
             time.sleep(0.02)
 
         self.stop()
@@ -226,10 +214,6 @@ class Motion:
 
     def retreat_from_shelf(self, target_cm: float = config.RETREAT_DISTANCE,
                            speed: float = config.APPROACH_SPEED) -> bool:
-        """
-        Lùi ra khỏi kệ cho đến khi cảm biến siêu âm đo ≥ target_cm.
-        Trả về True khi đã lùi đủ xa.
-        """
         if self._distance_sensor is None:
             logger.warning("Không có cảm biến siêu âm — lùi 0.5s (fallback)")
             self.backward(speed)
@@ -260,24 +244,35 @@ class Motion:
     def read_line_sensor(self) -> list[int]:
         return self._line_sensor.read()
 
+    def read_line_sensor_raw(self) -> list[float]:
+        return self._line_sensor.read_raw()
+
+    def read_line_sensor_adc(self) -> list[int]:
+        return self._line_sensor.read_adc()
+
     def compute_line_error(self, sensor_values: list[int]) -> float:
-        """Tính độ lệch của line so với tâm robot (PD control)."""
+        """PD digital — tương thích test/API cũ."""
         active = sum(sensor_values)
         if active == 0:
             return self._last_error
-
         weighted_sum = sum(
             w * v for w, v in zip(config.LINE_WEIGHTS, sensor_values)
         )
-        error = weighted_sum / active
-        return error
+        return weighted_sum / active
+
+    def compute_line_error_analog(self, raw: list[float]) -> float:
+        """Weighted average từ analog — mượt hơn trên QTR-8A."""
+        threshold = LineSensor._threshold_norm()
+        strengths = [max(threshold - v, 0.0) for v in raw]
+        total = sum(strengths)
+        if total == 0:
+            return self._last_error
+        weighted = sum(w * s for w, s in zip(config.LINE_WEIGHTS, strengths))
+        return weighted / total
 
     def follow_line(self, base_speed: float = config.SPEED_DEFAULT) -> tuple[bool, list[int]]:
-        """
-        Thực hiện 1 bước bám line.
-        Trả về (phát_hiện_giao_lộ, giá_trị_sensor).
-        """
-        values = self.read_line_sensor()
+        raw = self.read_line_sensor_raw()
+        values = LineSensor.digital_from_raw(raw)
         active_count = sum(values)
 
         if active_count >= config.INTERSECTION_THRESHOLD:
@@ -285,16 +280,13 @@ class Motion:
             logger.info("Phát hiện giao lộ (active=%d)", active_count)
             return True, values
 
-        error = self.compute_line_error(values)
+        error = self.compute_line_error_analog(raw)
         derivative = error - self._last_error
         correction = config.LINE_KP * error + config.LINE_KD * derivative
         self._last_error = error
 
-        left_speed = base_speed + correction
-        right_speed = base_speed - correction
-
-        left_speed = max(0, min(100, left_speed))
-        right_speed = max(0, min(100, right_speed))
+        left_speed = max(0, min(100, base_speed + correction))
+        right_speed = max(0, min(100, base_speed - correction))
 
         self._left_rev.off()
         self._right_rev.off()
@@ -305,10 +297,6 @@ class Motion:
 
     def follow_line_until_intersection(self, base_speed: float = config.SPEED_DEFAULT,
                                        timeout: float = 15.0) -> bool:
-        """
-        Bám line cho đến khi gặp giao lộ.
-        Trả về True nếu tìm thấy giao lộ, False nếu timeout.
-        """
         start = time.time()
         lost_count = 0
 
@@ -317,10 +305,9 @@ class Motion:
             if at_intersection:
                 return True
 
-            # Phát hiện mất line (tất cả sensor = 0)
             if sum(values) == 0:
                 lost_count += 1
-                if lost_count > 50:  # ~0.5 giây mất line liên tục
+                if lost_count > 50:
                     logger.warning("Mất line! Quét tìm lại...")
                     if self._recover_line():
                         lost_count = 0
@@ -338,7 +325,6 @@ class Motion:
         return False
 
     def _recover_line(self) -> bool:
-        """Quét trái/phải để tìm lại line khi bị mất."""
         for direction in ["left", "right", "left"]:
             if direction == "left":
                 self.turn_left(config.SPEED_SLOW)
@@ -358,19 +344,16 @@ class Motion:
         return False
 
     def _escape_intersection(self, speed: float = config.SPEED_DEFAULT):
-        """Tiến qua giao lộ hiện tại trước khi bám line tiếp."""
         self.forward(speed)
         time.sleep(0.3)
         self.stop()
 
     def navigate_intersections(self, count: int, base_speed: float = config.SPEED_DEFAULT):
-        """Đi qua <count> giao lộ rồi dừng."""
         if count <= 0:
             return
 
         for i in range(count):
             logger.info("Đi đến giao lộ %d/%d", i + 1, count)
-            # Thoát giao lộ hiện tại trước khi bám line
             self._escape_intersection(base_speed)
             if not self.follow_line_until_intersection(base_speed):
                 logger.error("Không tìm thấy giao lộ %d/%d!", i + 1, count)

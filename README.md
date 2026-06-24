@@ -10,7 +10,7 @@ Nhận diện kiện hàng bằng **phân tích màu HSV** (không cần AI mode
 |----------|----------|---------|
 | `gpiozero` + `lgpio` | Điều khiển GPIO (động cơ, nút bấm, cảm biến) | Tương thích RPi OS Bullseye & Bookworm |
 | `picamera2` | Camera CSI trên RPi 4 | Thay thế picamera (deprecated) |
-| `smbus2` | Đọc cảm biến dò line qua I2C | Cần bật I2C trong raspi-config |
+| `spidev` | Giao tiếp SPI cho MCP3008 (line sensor + IR pallet) | Cần bật SPI trong raspi-config |
 | `numpy` + `opencv` | Phân tích màu HSV nhận diện kiện hàng | Không cần model AI |
 | `flask` | Giao diện web debug khi luyện tập | Chỉ dùng khi DEBUG_MODE = True |
 
@@ -24,7 +24,8 @@ Robocon-BCIT/
 │
 ├── control/               # Điều khiển phần cứng
 │   ├── __init__.py
-│   ├── motion.py          #   Di chuyển + bám line + cảm biến siêu âm
+│   ├── mcp3008_bus.py     #   Bus SPI dùng chung MCP3008 (lock)
+│   ├── motion.py          #   Di chuyển + bám line analog + siêu âm
 │   └── lift.py            #   Nâng/hạ 2 càng độc lập + cảm biến IR pallet
 │
 ├── vision/                # Nhận diện hình ảnh
@@ -61,27 +62,25 @@ Robocon-BCIT/
 
 ```bash
 sudo apt update
-sudo apt install -y python3-lgpio python3-gpiozero \
+sudo apt install -y python3-lgpio python3-gpiozero python3-spidev \
     python3-picamera2 python3-libcamera \
-    python3-opencv python3-numpy i2c-tools
+    python3-opencv python3-numpy
 ```
 
-### Bước 2: Bật I2C và Camera
+### Bước 2: Bật SPI và Camera
 
 ```bash
 sudo raspi-config
-# -> Interface Options -> I2C    -> Enable
+# -> Interface Options -> SPI    -> Enable
 # -> Interface Options -> Camera -> Enable
 sudo reboot
 ```
 
-### Bước 3: Kiểm tra I2C (line sensor + IR pallet)
+### Bước 3: Kiểm tra SPI (MCP3008)
 
 ```bash
-sudo i2cdetect -y 1
-# Phải thấy:
-#   0x20 — PCF8574 #1 (cảm biến dò line 8 mắt)
-#   0x21 — PCF8574 #2 (IR pallet trái P0 + phải P1)
+ls /dev/spidev*
+# Phải thấy /dev/spidev0.0 và /dev/spidev0.1
 ```
 
 ### Bước 4: Cài thêm thư viện qua pip
@@ -99,10 +98,10 @@ pip install -r requirements.txt
 ```
          Nhìn từ trên xuống:
 
-         ══════════════════  ← Càng trái + [IR trái]↑
+         ══════════════════  ← Càng trái + [IR trái]↑ (MCP3008 CH6)
             [HC-SR04] →      ← Siêu âm: giữa 2 càng, hướng ra trước
-         ══════════════════  ← Càng phải + [IR phải]↑
-            2 IR qua PCF8574 #2 I2C (không tốn GPIO)
+         ══════════════════  ← Càng phải + [IR phải]↑ (MCP3008 CH7)
+         [QTR-8A 6 mắt] ↓   ← Dưới gầm, dò line analog qua MCP3008 CH0-5
 
          ┌──────────────────┐
          │  [Camera]  →     │  ← Camera CSI: giữa thân, hướng ra trước
@@ -116,16 +115,19 @@ pip install -r requirements.txt
 ### Sơ đồ đấu nối
 
 ```
-HC-SR04 (siêu âm):             Nút khởi động:
-  VCC  → 5V                      GPIO 16 ── [NÚT] ── GND
-  TRIG → GPIO 19
-  ECHO → GPIO 20 (qua cầu     PCF8574 #1 (line sensor, addr 0x20):
-          phân áp 1kΩ + 2kΩ)     SDA → GPIO 2, SCL → GPIO 3
-  GND  → GND
-                               PCF8574 #2 (IR pallet, addr 0x21):
-Cầu phân áp cho ECHO:           SDA → GPIO 2, SCL → GPIO 3 (cùng bus)
-  ECHO ──┬── R1 (1kΩ) → GPIO 20  P0 → IR càng trái
-         └── R2 (2kΩ) → GND      P1 → IR càng phải
+MCP3008 (ADC SPI):             HC-SR04 (siêu âm):
+  VDD  → 3.3V                   VCC  → 5V
+  VREF → 3.3V                   TRIG → GPIO 19
+  CLK  → GPIO 11 (SCLK)         ECHO → GPIO 20 (qua cầu
+  DOUT → GPIO  9 (MISO)                 phân áp 1kΩ + 2kΩ)
+  DIN  → GPIO 10 (MOSI)         GND  → GND
+  CS   → GPIO  8 (CE0)
+  CH0-5 → QTR-8A 6 mắt        Nút khởi động:
+  CH6   → IR càng trái          GPIO 16 ── [NÚT] ── GND
+  CH7   → IR càng phải
+                               Cầu phân áp cho ECHO:
+                                 ECHO ──┬── R1 (1kΩ) → GPIO 20
+                                        └── R2 (2kΩ) → GND
 ```
 
 ### Cách robot tìm và tiếp cận kệ
@@ -134,7 +136,7 @@ Cầu phân áp cho ECHO:           SDA → GPIO 2, SCL → GPIO 3 (cùng bus)
 ① Bám line → đếm giao lộ → dừng tại giao lộ kệ
 ② approach_shelf(): tiến chậm 30% + đo siêu âm liên tục
 ③ Khi khoảng cách ≤ 4cm → dừng chính xác trước kệ
-④ Nâng càng → 2 IR (PCF8574 #2) xác nhận **cả 2 pallet** (NV1)
+④ Nâng càng → 2 IR (MCP3008 CH6+7) xác nhận **cả 2 pallet** (NV1)
 ⑤ retreat_from_shelf(): lùi + đo siêu âm
 ⑥ Khi khoảng cách ≥ 15cm → dừng, đủ xa để xoay/bám line tiếp
 ```
@@ -198,11 +200,12 @@ Giao diện debug bao gồm:
 - **Di chuyển**: nhấn giữ nút hoặc phím W/A/S/D, thanh trượt tốc độ
 - **Camera**: xem trực tiếp (MJPEG stream), nhấn nút nhận diện kiện hàng
 - **Nâng/hạ**: nâng/hạ từng tầng, pickup/dropoff, reset
-- **Cảm biến dò line**: hiển thị 8 mắt real-time, độ lệch, phát hiện giao lộ
+- **Cảm biến dò line**: hiển thị 6 mắt + ADC raw, độ lệch, phát hiện giao lộ
+- **IR pallet**: trái/phải realtime qua MCP3008 CH6–7
 
 ### Test từng module
 ```bash
-python3 tests/test_motion.py   # Test động cơ, line sensor, siêu âm, tiếp cận kệ
+python3 tests/test_motion.py   # Option 5: calibrate raw ADC QTR-8A
 python3 tests/test_lift.py     # Test nâng/hạ + IR trái/phải (option 3)
 python3 tests/test_vision.py   # Test camera & nhận diện màu HSV
 ```
@@ -211,6 +214,10 @@ python3 tests/test_vision.py   # Test camera & nhận diện màu HSV
 
 | Chân GPIO | Chức năng                      | Module              |
 |-----------|--------------------------------|---------------------|
+| 8         | SPI CE0 (MCP3008 chip select)  | motion.py + lift.py |
+| 9         | SPI MISO (data từ MCP3008)     | motion.py + lift.py |
+| 10        | SPI MOSI (data đến MCP3008)    | motion.py + lift.py |
+| 11        | SPI SCLK (clock)               | motion.py + lift.py |
 | 17        | IN1_XE_T (trái tiến, PWM)     | control/motion.py   |
 | 27        | IN2_XE_T (trái lùi)           | control/motion.py   |
 | 22        | IN1_XE_P (phải tiến, PWM)     | control/motion.py   |
@@ -223,14 +230,13 @@ python3 tests/test_vision.py   # Test camera & nhận diện màu HSV
 | 16        | START_BUTTON (nút khởi động)   | main.py             |
 | 19        | ULTRASONIC_TRIG (siêu âm)     | control/motion.py   |
 | 20        | ULTRASONIC_ECHO (siêu âm)     | control/motion.py   |
-| 2         | I2C SDA (line + IR pallet)     | motion.py + lift.py |
-| 3         | I2C SCL (line + IR pallet)     | motion.py + lift.py |
 
-I2C bus chia sẻ (không tốn thêm GPIO):
-- PCF8574 #1 (0x20): cảm biến dò line 8 mắt
-- PCF8574 #2 (0x21): 2 cảm biến IR pallet (P0=trái, P1=phải)
+MCP3008 SPI (8 kênh analog, chia sẻ 4 chân SPI):
+- CH0-CH5: QTR-8A dò line 6 mắt (analog)
+- CH6: IR pallet trái
+- CH7: IR pallet phải
 
-**Tổng: 14 chân GPIO** (giới hạn thể lệ: 16 chân) — **ĐẠT** (dư 2 chân)
+**Tổng: 16 chân GPIO** (giới hạn thể lệ: 16 chân) — **ĐẠT** (vừa đúng)
 
 ## Bảng động cơ sử dụng
 
@@ -282,7 +288,7 @@ Tổng: 4 kệ
 
 ## Cơ cấu nâng — 2 càng độc lập + 2 IR riêng
 
-Mỗi càng có motor riêng; mỗi càng có **1 cảm biến IR riêng** (PCF8574 #2 @ `0x21`, P0=trái, P1=phải).
+Mỗi càng có motor riêng; mỗi càng có **1 cảm biến IR riêng** (MCP3008 CH6=trái, CH7=phải).
 
 | Hành động | Khi nào dùng |
 |-----------|--------------|
@@ -293,7 +299,7 @@ Mỗi càng có motor riêng; mỗi càng có **1 cảm biến IR riêng** (PCF8
 | `raise_after_drop(side)` | Sau DROP_FIRST thành công — nâng lại càng vừa thả |
 | `stow_forks(side)` | Sau DROP_SECOND thành công — hạ càng còn lại về sàn |
 
-**API đọc IR:** `lift.pallet.read_status()` → `(trái, phải, đọc_ok)`. Nếu `đọc_ok=False` (I2C lỗi), pickup/drop **không** coi là thành công.
+**API đọc IR:** `lift.pallet.read_status()` → `(trái, phải, đọc_ok)`. Nếu `đọc_ok=False` (đọc lỗi), pickup/drop **không** coi là thành công.
 
 Test IR trên Pi:
 ```bash
@@ -361,15 +367,16 @@ Các giá trị cần đo thực nghiệm trên sa bàn và cập nhật trong `
 | `MAX_PAIR_SCAN_ATTEMPTS` | Số lần quét lại cặp kiện | Tăng nếu ánh sáng kém |
 | `MAX_TIER_RETRIES` | Số lần thử lại tầng kệ khi scan/nâng fail | Tăng nếu cần ổn định hơn |
 | `PICKUP_VERIFY_DELAY` | Thời gian chờ sau nâng trước khi đọc IR | Tăng nếu cảm biến phản hồi chậm |
-| `PALLET_I2C_ADDR` / `PALLET_*_BIT` | Địa chỉ PCF8574 #2 và bit trái/phải | Kiểm tra bằng `i2cdetect` + test_lift option 3 |
+| `PALLET_THRESHOLD` / `PALLET_*_CHANNEL` | Ngưỡng analog IR + kênh MCP3008 | Chạy test_lift option 3 |
 
 ## Lưu ý quan trọng
 
 1. **Trước khi thi đấu**: đảm bảo `DEBUG_MODE = False` trong `config.py`
 2. **Không có network call** nào trong vòng lặp chính — tất cả chạy offline
 3. File log được ghi tại `robot_log.txt` để debug sau mỗi lượt chạy
-4. Cảm biến dò line cần dùng module **I2C** (PCF8574) để tiết kiệm chân GPIO
+4. QTR-8A + MCP3008 dùng SPI — bật SPI trong raspi-config trước khi chạy
 5. Chân ECHO của HC-SR04 **bắt buộc** dùng cầu phân áp (1kΩ + 2kΩ) để bảo vệ GPIO 3.3V
-6. Chạy `test_motion.py` option 6-7 để kiểm tra siêu âm + tiếp cận kệ trước khi chạy full
-7. **IR pallet:** NV1 cần cả 2 IR; NV2 chỉ cần 1. `packages_delivered` chỉ tăng khi IR xác nhận đã thả — I2C lỗi không được coi là thành công
-8. Kiểm tra IR bằng `python3 tests/test_lift.py` option 3 (đọc trái/phải riêng)
+6. Chạy `test_motion.py` option 7-8 để kiểm tra siêu âm + tiếp cận kệ trước khi chạy full
+7. **IR pallet:** NV1 cần cả 2 IR; NV2 chỉ cần 1. `packages_delivered` chỉ tăng khi IR xác nhận đã thả — đọc lỗi không được coi là thành công
+8. Kiểm tra IR bằng `python3 tests/test_lift.py` option 3 (ADC trái/phải)
+9. Calibrate line: `python3 tests/test_motion.py` option 5 (raw ADC QTR-8A)

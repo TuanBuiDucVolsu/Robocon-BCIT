@@ -72,8 +72,9 @@ Thi đấu dự kiến **ngày 08-09/08/2026** tại phường Bắc Giang, tỉ
 ```
 main.py              — State machine: INIT → NAVIGATE → PICKUP → DELIVER → DROP → lặp 6 lượt → TASK2
 config.py            — GPIO, route commands, HSV color ranges, timing, SHELVES_TASK1
-control/motion.py    — Di chuyển, bám line PD, siêu âm HC-SR04, execute_route(), line recovery
-control/lift.py      — 2 càng độc lập: PalletSensors (I2C), require_both, _verify_released
+control/mcp3008_bus.py — Bus SPI dùng chung MCP3008 (lock)
+control/motion.py    — Di chuyển, bám line PD analog, siêu âm HC-SR04
+control/lift.py      — 2 càng độc lập: PalletSensors (SPI), require_both, _verify_released
 vision/vision.py     — Nhận diện màu HSV (không dùng AI model), classify_pair()
 debug/server.py      — Flask web debug UI (MJPEG stream, line sensor, classify_pair)
 scripts/             — install.sh, start.sh, robot.service (systemd auto-start)
@@ -95,7 +96,7 @@ NAVIGATE_TO_SHELF → PICKUP_PAIR (approach + classify_pair + pickup + retreat)
 - **`_plan_delivery()`**: so sánh route cost gồm forward + turn (ROUTE_TURN_COST) + đoạn BETWEEN_FACTORIES
 - **`_retry_or_skip_tier()`**: scan/nâng fail → retry MAX_TIER_RETRIES lần trước khi bỏ tầng
 
-## Lift API (càng độc lập + 2 IR qua I2C)
+## Lift API (càng độc lập + 2 IR qua SPI)
 
 | Method | Mục đích |
 |--------|----------|
@@ -105,8 +106,8 @@ NAVIGATE_TO_SHELF → PICKUP_PAIR (approach + classify_pair + pickup + retreat)
 | `raise_after_drop(side)` | Sau DROP_FIRST — nâng lại càng vừa thả |
 | `stow_forks(side)` | Sau DROP_SECOND — hạ càng còn lại về sàn |
 | `go_to_level(n)` | Nâng/hạ cả 2 càng đồng bộ (debug/test) |
-| `pallet.read_status()` | `(trái, phải, đọc_ok)` — I2C lỗi → `đọc_ok=False` |
-| `pallet.has_left/right/any/both()` | Wrapper trên `read_status()`; trả `None` nếu I2C lỗi |
+| `pallet.read_status()` | `(trái, phải, đọc_ok)` — đọc lỗi → `đọc_ok=False` |
+| `pallet.has_left/right/any/both()` | Wrapper trên `read_status()`; trả `None` nếu đọc lỗi |
 
 **main.py:** `_drop_single_side()` gọi dropoff + raise_after_drop; `packages_delivered` chỉ tăng khi IR xác nhận drop thành công.
 
@@ -131,13 +132,13 @@ Kệ thẳng hàng nhà máy → Samsung/Foxconn chỉ cần đi ngang (không r
 - 2 DC motor cẩu forklift **độc lập** (dây curoa + con lăn) — thả riêng từng càng
 - 2 thanh nâng (nâng 2 pallet cùng lúc, thả riêng khi giao 2 NM khác nhau)
 - Camera CSI (OV5647) — nhận diện HSV
-- Cảm biến dò line 8 mắt qua I2C (PCF8574 #1, addr 0x20)
-- 2 cảm biến IR pallet (trái/phải) qua I2C (PCF8574 #2, addr 0x21, P0+P1)
+- QTR-8A dò line 6 mắt (analog) qua MCP3008 SPI (CH0-CH5)
+- 2 cảm biến IR pallet (trái/phải) qua MCP3008 SPI (CH6+CH7)
+- MCP3008 ADC 10-bit SPI: GPIO 8(CE0), 9(MISO), 10(MOSI), 11(SCLK)
 - HC-SR04 siêu âm (GPIO 19 TRIG, 20 ECHO) — tiếp cận kệ chính xác
 - Nút khởi động (GPIO 16)
 - L298N x2 + XH-M401 hạ áp
-- Tổng: **14/16 GPIO** (dư 2 chân), **4/12 động cơ** — ĐẠT
-- 2 PCF8574 chia sẻ cùng bus I2C (GPIO 2/3)
+- Tổng: **16/16 GPIO** (vừa đúng giới hạn), **4/12 động cơ** — ĐẠT
 
 ## Nhận diện kiện hàng
 
@@ -159,8 +160,10 @@ Phân tích màu HSV (OpenCV), không cần model AI.
 - Không có network call khi thi đấu
 - Vision fail → retry hoặc bỏ tầng, **không** gán label mặc định
 - NV1 pickup cần **cả 2 IR**; NV2 chỉ cần **1 IR**
-- `packages_delivered` chỉ tăng khi IR xác nhận drop thành công (I2C lỗi → không đếm)
-- I2C lỗi khi đọc IR → pickup/drop không coi thành công
+- `packages_delivered` chỉ tăng khi IR xác nhận drop thành công (SPI/ADC lỗi → không đếm)
+- `Mcp3008Bus` singleton — Motion + Lift dùng chung lock SPI
+- Bám line dùng weighted average analog (`compute_line_error_analog`)
+- đọc lỗi khi đọc IR → pickup/drop không coi thành công
 - `MAX_TIER_RETRIES`, `MAX_PAIR_SCAN_ATTEMPTS` tinh chỉnh theo điều kiện sa bàn
 - Chân ECHO HC-SR04 phải qua cầu phân áp 1kΩ+2kΩ (5V→3.3V)
 - Robot phải **≤ 400x400x400mm** khi xuất phát

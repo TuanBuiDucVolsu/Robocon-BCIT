@@ -1,7 +1,7 @@
 """
 Module điều khiển cơ cấu nâng/hạ 2 càng (trái/phải) ĐỘC LẬP.
 Mỗi càng 1 motor riêng → có thể thả riêng từng pallet.
-2 cảm biến IR pallet (trái/phải) qua PCF8574 #2 I2C — không tốn GPIO.
+2 cảm biến IR pallet (trái/phải) qua MCP3008 SPI (CH6, CH7).
 """
 
 import time
@@ -21,42 +21,49 @@ except Exception:
         DigitalOutputDevice = MagicMock
 
 import config
+from control.mcp3008_bus import Mcp3008Bus, get_mcp3008_bus
 
 logger = logging.getLogger(__name__)
 
 
 class PalletSensors:
-    """Đọc 2 cảm biến IR pallet (trái/phải) qua PCF8574 #2 I2C."""
+    """Đọc 2 cảm biến IR pallet (trái/phải) qua MCP3008 SPI CH6+CH7."""
 
-    def __init__(self):
-        self.available = False
-        self._bus = None
-        try:
-            import smbus2
-            self._bus = smbus2.SMBus(1)
-            self._bus.read_byte(config.PALLET_I2C_ADDR)
-            self.available = True
-            logger.info("PCF8574 pallet sensor đã sẵn sàng (addr=0x%02X)", config.PALLET_I2C_ADDR)
-        except Exception as e:
-            logger.warning("Pallet sensor I2C không khả dụng (%s)", e)
+    def __init__(self, bus: Mcp3008Bus | None = None):
+        self._bus = bus or get_mcp3008_bus()
+        self.available = self._bus.available
+        if self.available:
+            logger.info("Pallet IR sensor sẵn sàng (MCP3008 CH%d+CH%d)",
+                        config.PALLET_LEFT_CHANNEL, config.PALLET_RIGHT_CHANNEL)
 
-    def _read_raw(self) -> int | None:
-        if not self.available or self._bus is None:
-            return None
-        try:
-            return self._bus.read_byte(config.PALLET_I2C_ADDR)
-        except Exception as e:
-            logger.warning("Lỗi đọc pallet I2C: %s", e)
-            return None
+    def _is_pallet(self, value: float) -> bool:
+        """Giá trị analog thấp = có pallet (IR phản xạ mạnh)."""
+        return value < (config.PALLET_THRESHOLD / 1023.0)
+
+    def read_raw(self) -> tuple[float, float]:
+        """Giá trị analog 0.0-1.0 (trái, phải)."""
+        left, right = self._bus.read_many([
+            config.PALLET_LEFT_CHANNEL,
+            config.PALLET_RIGHT_CHANNEL,
+        ])
+        return left, right
+
+    def read_adc(self) -> tuple[int, int]:
+        left, right = self.read_raw()
+        return int(round(left * 1023)), int(round(right * 1023))
 
     def read_status(self) -> tuple[bool, bool, bool]:
-        """Trả về (có_trái, có_phải, đọc_ok). Nếu đọc_ok=False thì bỏ qua trái/phải."""
-        raw = self._read_raw()
-        if raw is None:
+        """Trả về (có_trái, có_phải, đọc_ok)."""
+        if not self.available:
             return False, False, False
-        left = not bool(raw & (1 << config.PALLET_LEFT_BIT))
-        right = not bool(raw & (1 << config.PALLET_RIGHT_BIT))
-        return left, right, True
+        try:
+            left_raw, right_raw = self.read_raw()
+            left = self._is_pallet(left_raw)
+            right = self._is_pallet(right_raw)
+            return left, right, True
+        except Exception as e:
+            logger.warning("Lỗi đọc pallet sensor: %s", e)
+            return False, False, False
 
     def has_left(self) -> bool | None:
         left, _, ok = self.read_status()
@@ -75,23 +82,20 @@ class PalletSensors:
         return (left and right) if ok else None
 
     def status(self) -> tuple[bool, bool]:
-        """Trả về (có_trái, có_phải). Giả định đọc OK (dùng read_status nếu cần kiểm tra)."""
         left, right, ok = self.read_status()
         if not ok:
             return False, False
         return left, right
 
     def cleanup(self):
-        if self._bus:
-            self._bus.close()
-            self._bus = None
-            self.available = False
+        pass
 
 
 class Lift:
     """Điều khiển 2 càng nâng độc lập (trái và phải)."""
 
-    def __init__(self):
+    def __init__(self, mcp_bus: Mcp3008Bus | None = None):
+        self._mcp_bus = mcp_bus or get_mcp3008_bus()
         # Cẩu trái: IN3 = nâng, IN4 = hạ
         self._left_up = DigitalOutputDevice(config.IN3_CAU_T)
         self._left_down = DigitalOutputDevice(config.IN4_CAU_T)
@@ -101,8 +105,8 @@ class Lift:
         self._right_up = DigitalOutputDevice(config.IN1_CAU_P)
         self._right_down = DigitalOutputDevice(config.IN2_CAU_P)
 
-        # 2 cảm biến IR pallet qua I2C
-        self.pallet = PalletSensors()
+        # 2 cảm biến IR pallet qua MCP3008 SPI
+        self.pallet = PalletSensors(self._mcp_bus)
 
         self._current_level = 0
         self._left_dropped = False

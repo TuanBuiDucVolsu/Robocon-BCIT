@@ -26,6 +26,7 @@ except Exception:
 
 import config
 from control import Motion, Lift
+from control.mcp3008_bus import get_mcp3008_bus, reset_mcp3008_bus
 from vision import Vision
 
 # ============================================================
@@ -72,8 +73,9 @@ class State(enum.Enum):
 class Robot:
     def __init__(self):
         logger.info("========== KHỞI TẠO ROBOT ==========")
-        self.motion = Motion()
-        self.lift = Lift()
+        self._mcp_bus = get_mcp3008_bus()
+        self.motion = Motion(mcp_bus=self._mcp_bus)
+        self.lift = Lift(mcp_bus=self._mcp_bus)
         self.vision = Vision()
 
         self.state = State.INIT
@@ -553,6 +555,7 @@ class Robot:
         self.motion.cleanup()
         self.lift.cleanup()
         self.vision.cleanup()
+        reset_mcp3008_bus()
         self._start_button.close()
 
 

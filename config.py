@@ -29,12 +29,15 @@ IN2_CAU_P = 13  # Hạ phải
 # --- Nút khởi động ---
 START_BUTTON_PIN = 16  # Nút vật lý kích hoạt chế độ tự động
 
-# --- Cảm biến IR xác nhận pallet (2 cái, qua PCF8574 #2 I2C) ---
-# PCF8574 #2 addr 0x21, dùng chung bus I2C với line sensor (GPIO2/3)
-# Không tốn thêm chân GPIO
-PALLET_I2C_ADDR = 0x21       # Địa chỉ PCF8574 thứ 2
-PALLET_LEFT_BIT = 0          # Bit P0 = IR càng trái (0 = có pallet)
-PALLET_RIGHT_BIT = 1         # Bit P1 = IR càng phải (0 = có pallet)
+# --- MCP3008 ADC (SPI) — đọc QTR-8A + 2 IR pallet ---
+# MCP3008 dùng SPI: GPIO 8(CE0), 9(MISO), 10(MOSI), 11(SCLK)
+# CH0-5: QTR-8A 6 mắt dò line (analog 0-1023)
+# CH6: IR pallet trái, CH7: IR pallet phải
+MCP3008_SPI_PORT = 0         # SPI0
+MCP3008_CS = 0               # CE0 (GPIO 8)
+PALLET_LEFT_CHANNEL = 6      # Kênh MCP3008 cho IR càng trái
+PALLET_RIGHT_CHANNEL = 7     # Kênh MCP3008 cho IR càng phải
+PALLET_THRESHOLD = 500       # Ngưỡng analog: < 500 = có pallet, >= 500 = không có
 
 # --- Cảm biến siêu âm HC-SR04 (đo khoảng cách phía trước) ---
 ULTRASONIC_TRIG_PIN = 19     # Trigger
@@ -44,8 +47,8 @@ APPROACH_SPEED = 30          # Tốc độ tiến khi tiếp cận kệ (0-100)
 APPROACH_TIMEOUT = 5.0       # Timeout nếu không thấy kệ (giây)
 RETREAT_DISTANCE = 15.0      # Khoảng cách lùi ra sau khi nâng/hạ (cm)
 
-# --- Cảm biến dò line 8 mắt (I2C, GPIO2 SDA + GPIO3 SCL) ---
-LINE_SENSOR_I2C_ADDR = 0x20  # Địa chỉ I2C của module dò line
+# --- Cảm biến dò line QTR-8A (analog, qua MCP3008 SPI) ---
+# Dùng 6 mắt (CH0-CH5), bỏ 2 mắt ngoài cùng để dành CH6-7 cho IR pallet
 
 # ============================================================
 # AUDIT GPIO - TỔNG SỐ CHÂN SỬ DỤNG
@@ -54,11 +57,10 @@ LINE_SENSOR_I2C_ADDR = 0x20  # Địa chỉ I2C của module dò line
 # Động cơ cẩu:     5 chân (IN3_CAU_T, IN4_CAU_T, ENA_CAU_P, IN1_CAU_P, IN2_CAU_P)
 # Nút khởi động:   1 chân (START_BUTTON_PIN)
 # Siêu âm HC-SR04: 2 chân (TRIG, ECHO)
-# Line sensor I2C: 2 chân (SDA, SCL) — chia sẻ bus với IR pallet
-# IR pallet x2:    0 chân (qua PCF8574 #2 trên cùng bus I2C)
+# MCP3008 SPI:     4 chân (CE0, MISO, MOSI, SCLK) — line sensor + IR pallet
 # Camera:          CSI-2 (không dùng GPIO)
 # ----------------------------------------------------------
-# TỔNG:           14 chân GPIO  (giới hạn thể lệ: 16 chân) — dư 2 chân
+# TỔNG:           16 chân GPIO  (giới hạn thể lệ: 16 chân) — vừa đúng
 
 # ============================================================
 # AUDIT ĐỘNG CƠ
@@ -90,14 +92,15 @@ PICKUP_MAX_RETRIES = 2       # Số lần thử nâng lại nếu cảm biến k
 PICKUP_VERIFY_DELAY = 0.3    # Thời gian chờ sau nâng trước khi kiểm tra cảm biến (giây)
 
 # ============================================================
-# LINE FOLLOWING
+# LINE FOLLOWING (QTR-8A analog qua MCP3008)
 # ============================================================
-LINE_SENSOR_COUNT = 8
-# Trọng số vị trí từng mắt cảm biến (mắt giữa = 0, lệch trái âm, lệch phải dương)
-LINE_WEIGHTS = [-3.5, -2.5, -1.5, -0.5, 0.5, 1.5, 2.5, 3.5]
-LINE_KP = 15.0               # Hệ số P (PID đơn giản)
+LINE_SENSOR_COUNT = 6        # Dùng 6 mắt (CH0-CH5), bỏ 2 mắt ngoài cùng
+LINE_THRESHOLD = 500         # Ngưỡng analog: < 500 = trên line (đen), >= 500 = ngoài line (trắng)
+# Trọng số vị trí 6 mắt (lệch trái âm, lệch phải dương)
+LINE_WEIGHTS = [-2.5, -1.5, -0.5, 0.5, 1.5, 2.5]
+LINE_KP = 15.0               # Hệ số P (PD control)
 LINE_KD = 5.0                # Hệ số D
-INTERSECTION_THRESHOLD = 6   # Số mắt phát hiện line đồng thời để nhận là giao lộ
+INTERSECTION_THRESHOLD = 5   # Số mắt phát hiện line đồng thời để nhận là giao lộ (5/6)
 
 # ============================================================
 # CAMERA & NHẬN DIỆN MÀU HSV

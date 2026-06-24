@@ -7,6 +7,7 @@ const API = {
     lift:       (action, shelf) => apiPost("/api/lift", { action, shelf }),
     classify:   ()              => apiPost("/api/vision/classify"),
     lineSensor: ()              => apiGet("/api/line_sensor"),
+    palletSensor: ()            => apiGet("/api/pallet_sensor"),
     status:     ()              => apiGet("/api/status"),
     shutdown:   ()              => apiPost("/api/shutdown"),
 };
@@ -230,6 +231,10 @@ function updateLineSensor() {
         data.values.forEach((val, i) => {
             if (sensorDots[i]) {
                 sensorDots[i].classList.toggle("active", val === 1);
+                const adcEl = sensorDots[i].querySelector(".adc-val");
+                if (adcEl && data.raw_adc) {
+                    adcEl.textContent = data.raw_adc[i];
+                }
             }
         });
         sensorError.textContent = data.error.toFixed(2);
@@ -240,6 +245,26 @@ function updateLineSensor() {
             sensorIntersection.className = "badge badge-off";
         }
     }).catch(() => {});
+}
+
+function updatePalletSensor() {
+    API.palletSensor().then(data => {
+        updatePalletSide("pallet-left", data.left, data.left_adc);
+        updatePalletSide("pallet-right", data.right, data.right_adc);
+    }).catch(() => {});
+}
+
+function updatePalletSide(id, hasPallet, adc) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const dot = el.querySelector(".pallet-dot");
+    const adcEl = el.querySelector(".pallet-adc");
+    if (dot) {
+        dot.classList.toggle("active", !!hasPallet);
+    }
+    if (adcEl) {
+        adcEl.textContent = `ADC ${adc ?? "---"}`;
+    }
 }
 
 // ============================================
@@ -290,6 +315,7 @@ updateStatus();
 
 // Polling cảm biến mỗi 300ms
 setInterval(updateLineSensor, 300);
+setInterval(updatePalletSensor, 300);
 
 // Polling trạng thái mỗi 3s
 setInterval(updateStatus, 3000);

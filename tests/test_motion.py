@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import config
 from control import Motion
+from control.mcp3008_bus import reset_mcp3008_bus
 
 
 def test_forward_backward(m: Motion):
@@ -52,13 +53,31 @@ def test_speed_levels(m: Motion):
 
 
 def test_line_sensor(m: Motion):
-    print("\n[TEST] Đọc cảm biến dò line (10 lần, cách 0.5s)...")
+    print("\n[TEST] Đọc cảm biến dò line digital (10 lần, cách 0.5s)...")
     for i in range(10):
         values = m.read_line_sensor()
         error = m.compute_line_error(values)
         active = sum(values)
         print(f"  Lần {i+1}: {values}  active={active}  error={error:.2f}")
         time.sleep(0.5)
+
+
+def test_line_sensor_raw(m: Motion):
+    print(f"\n[TEST] Calibrate QTR-8A — raw ADC (ngưỡng LINE_THRESHOLD={config.LINE_THRESHOLD})")
+    print("  Đặt từng mắt lên line đen / nền trắng để xem giá trị.")
+    print("  Nhấn Ctrl+C để dừng.\n")
+    try:
+        while True:
+            adc = m.read_line_sensor_adc()
+            raw = m.read_line_sensor_raw()
+            digital = m.read_line_sensor()
+            adc_str = " ".join(f"{v:4d}" for v in adc)
+            dig_str = "".join("█" if d else "░" for d in digital)
+            err = m.compute_line_error_analog(raw)
+            print(f"  ADC: [{adc_str}]  {dig_str}  err={err:+.2f}")
+            time.sleep(0.3)
+    except KeyboardInterrupt:
+        print("\n  Dừng calibrate.")
 
 
 def test_line_follow(m: Motion):
@@ -111,10 +130,11 @@ def main():
         "1": ("Tiến/Lùi", test_forward_backward),
         "2": ("Xoay trái/phải", test_turning),
         "3": ("Các mức tốc độ", test_speed_levels),
-        "4": ("Đọc cảm biến dò line", test_line_sensor),
-        "5": ("Bám line (chạy thực tế)", test_line_follow),
-        "6": ("Cảm biến siêu âm (đo khoảng cách)", test_distance_sensor),
-        "7": ("Tiếp cận + lùi khỏi kệ", test_approach_shelf),
+        "4": ("Đọc cảm biến dò line (digital)", test_line_sensor),
+        "5": ("Calibrate QTR-8A (raw ADC)", test_line_sensor_raw),
+        "6": ("Bám line (chạy thực tế)", test_line_follow),
+        "7": ("Cảm biến siêu âm (đo khoảng cách)", test_distance_sensor),
+        "8": ("Tiếp cận + lùi khỏi kệ", test_approach_shelf),
         "0": ("Chạy tất cả", None),
     }
 
@@ -122,12 +142,12 @@ def main():
     for key, (name, _) in tests.items():
         print(f"  {key}. {name}")
 
-    choice = input("\nNhập số (0-7): ").strip()
+    choice = input("\nNhập số (0-8): ").strip()
 
     try:
         if choice == "0":
             for key, (name, func) in tests.items():
-                if func:
+                if func and key != "5":
                     func(m)
         elif choice in tests and tests[choice][1]:
             tests[choice][1](m)
@@ -137,6 +157,7 @@ def main():
         print("\n\nDừng bởi người dùng.")
     finally:
         m.cleanup()
+        reset_mcp3008_bus()
         print("\nĐã cleanup GPIO.")
 
 
