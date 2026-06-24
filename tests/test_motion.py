@@ -128,6 +128,67 @@ def test_approach_shelf(m: Motion):
     print(f"  Kết quả: {'ĐÃ LÙI' if success else 'TIMEOUT'} — khoảng cách {dist:.1f}cm")
 
 
+def test_turn_90(m: Motion):
+    print(f"\n[TEST] Xoay 90° (TURN_TIME={config.TURN_TIME}s) — calibrate trên sa bàn")
+    print("  Đặt robot song song line, quan sát có vuông góc không.")
+    input("  Nhấn Enter để xoay TRÁI 90°...")
+    m.turn_left_90()
+    time.sleep(1)
+    ans = input("  Góc ~90°? (y=OK / n=cần chỉnh TURN_TIME trong config.py): ").strip().lower()
+    print(f"  Ghi nhận: {'OK' if ans == 'y' else 'Cần chỉnh TURN_TIME'}")
+
+    input("  Nhấn Enter để xoay PHẢI 90° (về hướng cũ)...")
+    m.turn_right_90()
+
+
+def test_execute_route(m: Motion):
+    print("\n[TEST] execute_route — điều hướng theo route config")
+    print("  Route có sẵn:")
+    routes = {
+        "1": ("START → Kệ 3", config.ROUTE_START_TO_SHELF_0),
+        "2": ("Giữa các kệ", config.ROUTE_BETWEEN_SHELVES),
+        "3": ("Kệ → Samsung", config.ROUTE_SHELF_TO_FACTORY.get("samsung", [])),
+        "4": ("Kệ 4 → Liên hợp (NV2)", config.ROUTE_LOOSE_TO_JOINT),
+    }
+    for k, (name, _) in routes.items():
+        print(f"    {k}. {name}")
+    sub = input("  Chọn route (1-4): ").strip()
+    if sub not in routes:
+        print("  Lựa chọn không hợp lệ.")
+        return
+    name, route = routes[sub]
+    if not route:
+        print("  Route rỗng!")
+        return
+    print(f"  Route {name}: {route}")
+    input("  Đặt robot đúng vị trí xuất phát route. Nhấn Enter...")
+    ok = m.execute_route(route)
+    print(f"  Kết quả: {'THÀNH CÔNG' if ok else 'THẤT BẠI — mất line / timeout giao lộ'}")
+
+
+def test_spi_line_and_ir(m: Motion):
+    """Đọc line + IR liên tục — kiểm tra shared MCP3008 bus."""
+    from control import Lift
+    lift = Lift()
+    print("\n[TEST] Shared SPI — line (CH0-5) + IR pallet (CH6-7) đồng thời")
+    print("  Nhấn Ctrl+C để dừng.\n")
+    try:
+        while True:
+            line = m.read_line_sensor_adc()
+            left, right, ok = lift.pallet.read_status()
+            line_str = " ".join(f"{v:3d}" for v in line)
+            ir_str = (
+                f"IR trái={'CÓ' if left else 'KHÔNG'} phải={'CÓ' if right else 'KHÔNG'}"
+                if ok else "IR LỖI đọc"
+            )
+            print(f"  LINE [{line_str}]  {ir_str}")
+            time.sleep(0.3)
+    except KeyboardInterrupt:
+        print("\n  Dừng.")
+    finally:
+        lift.cleanup()
+
+
 def main():
     print("=" * 50)
     print("TEST MODULE ĐỘNG CƠ DI CHUYỂN")
@@ -145,6 +206,9 @@ def main():
         "7": ("Bám line (chạy thực tế)", test_line_follow),
         "8": ("Cảm biến siêu âm (đo khoảng cách)", test_distance_sensor),
         "9": ("Tiếp cận + lùi khỏi kệ", test_approach_shelf),
+        "10": ("Xoay 90° (calibrate TURN_TIME)", test_turn_90),
+        "11": ("execute_route (route config)", test_execute_route),
+        "12": ("Shared SPI: line + IR cùng lúc", test_spi_line_and_ir),
         "0": ("Chạy tất cả", None),
     }
 
@@ -152,12 +216,12 @@ def main():
     for key, (name, _) in tests.items():
         print(f"  {key}. {name}")
 
-    choice = input("\nNhập số (0-9): ").strip()
+    choice = input("\nNhập số (0-12): ").strip()
 
     try:
         if choice == "0":
             for key, (name, func) in tests.items():
-                if func and key not in ("5",):
+                if func and key not in ("5", "10", "11", "12"):
                     func(m)
         elif choice in tests and tests[choice][1]:
             tests[choice][1](m)

@@ -117,6 +117,33 @@ def test_stability(vision: Vision):
         print("  → CẢNH BÁO: nhận nhiều loại khác nhau — cần chỉnh ngưỡng HSV!")
 
 
+def test_classify_pair(vision: Vision):
+    print("\n[TEST] Nhận diện CẶP kiện (classify_pair — dùng trong NV1)...")
+    print("  Hướng camera vào tầng kệ có 2 kiện cạnh nhau.")
+    input("  Nhấn Enter để quét...")
+    label_l, label_r = vision.classify_pair()
+    if label_l and label_r:
+        factory_l = vision.get_factory_name(label_l)
+        factory_r = vision.get_factory_name(label_r)
+        print(f"  Trái:  {label_l} → {factory_l}")
+        print(f"  Phải: {label_r} → {factory_r}")
+        print("  ✅ Nhận diện đủ 2 kiện")
+    elif label_l or label_r:
+        print(f"  ⚠ Chỉ nhận 1 bên: trái={label_l}, phải={label_r}")
+    else:
+        print("  ❌ Không nhận diện được cặp kiện")
+
+
+def test_classify_pair_repeat(vision: Vision):
+    print("\n[TEST] classify_pair liên tục 5 lần (độ ổn định cặp)...")
+    for i in range(5):
+        label_l, label_r = vision.classify_pair()
+        ok = label_l is not None and label_r is not None
+        print(f"  Lần {i+1}: trái={label_l or '?'}  phải={label_r or '?'}  "
+              f"{'OK' if ok else 'THIẾU'}")
+        time.sleep(1)
+
+
 def main():
     print("=" * 50)
     print("TEST NHẬN DIỆN MÀU HSV")
@@ -132,6 +159,8 @@ def main():
         "3": ("Nhận diện 1 lần", test_classify_single),
         "4": ("Nhận diện liên tục (5 lần)", test_classify_multiple),
         "5": ("Đánh giá độ ổn định (10 lần)", test_stability),
+        "6": ("Nhận diện cặp 2 kiện (classify_pair)", test_classify_pair),
+        "7": ("classify_pair liên tục 5 lần", test_classify_pair_repeat),
         "0": ("Chạy tất cả", None),
     }
 
@@ -139,7 +168,7 @@ def main():
     for key, (name, _) in tests.items():
         print(f"  {key}. {name}")
 
-    choice = input("\nNhập số (0-5): ").strip()
+    choice = input("\nNhập số (0-7): ").strip()
 
     try:
         if choice == "0":

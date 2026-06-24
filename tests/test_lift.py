@@ -83,6 +83,58 @@ def test_pickup_shelf2(lift: Lift):
     time.sleep(1)
 
 
+def test_drop_single_side(lift: Lift):
+    """Luồng NV1: thả 1 càng → nâng lại → thả càng còn lại → stow."""
+    print("\n[TEST] Drop từng càng (dropoff_left/right + raise_after_drop + stow_forks)")
+    print("  Cần robot đang mang 2 kiện (sau pickup).")
+    side = input("  Thả càng nào trước? (left/right) [left]: ").strip().lower() or "left"
+
+    if side == "left":
+        dropped = lift.dropoff_left()
+    else:
+        dropped = lift.dropoff_right()
+    print(f"  dropoff_{side}: {'THÀNH CÔNG' if dropped else 'THẤT BẠI / IR lỗi'}")
+
+    if dropped:
+        lift.raise_after_drop(side)
+        print(f"  raise_after_drop({side}) — OK")
+
+    other = "right" if side == "left" else "left"
+    ans = input(f"  Tiếp tục thả càng {other}? (y/N): ").strip().lower()
+    if ans != "y":
+        return
+
+    if other == "left":
+        dropped2 = lift.dropoff_left()
+    else:
+        dropped2 = lift.dropoff_right()
+    print(f"  dropoff_{other}: {'THÀNH CÔNG' if dropped2 else 'THẤT BẠI'}")
+
+    if dropped2:
+        lift.stow_forks(other)
+        print(f"  stow_forks({other}) — cả 2 càng về sàn")
+
+
+def test_pickup_nv2(lift: Lift):
+    print("\n[TEST] Pickup NV2 — require_both=False (chỉ cần 1 IR)")
+    print("  Đặt 1 kiện trên càng (kho hàng rời).")
+    input("  Nhấn Enter để nâng...")
+    success = lift.pickup(shelf_level=1, require_both=False)
+    print(f"  Kết quả: {'THÀNH CÔNG' if success else 'THẤT BẠI'}")
+    if success:
+        ans = input("  Hạ thử (dropoff)? (y/N): ").strip().lower()
+        if ans == "y":
+            ok = lift.dropoff()
+            print(f"  dropoff: {'OK' if ok else 'THẤT BẠI'}")
+
+
+def test_dropoff_same_factory(lift: Lift):
+    print("\n[TEST] dropoff() đồng bộ — 2 kiện cùng nhà máy")
+    input("  Nhấn Enter sau khi robot mang 2 kiện...")
+    ok = lift.dropoff()
+    print(f"  Kết quả: {'ĐÃ HẠ (IR OK)' if ok else 'THẤT BẠI / IR vẫn thấy pallet'}")
+
+
 def main():
     print("=" * 50)
     print("TEST MODULE CƠ CẤU NÂNG/HẠ")
@@ -96,6 +148,9 @@ def main():
         "3": ("Cảm biến IR pallet trái/phải", test_pallet_sensor),
         "4": ("Pickup/Dropoff tầng 1 (có xác nhận)", test_pickup_dropoff),
         "5": ("Pickup/Dropoff tầng 2 (có xác nhận)", test_pickup_shelf2),
+        "6": ("Drop từng càng NV1 (left/right + stow)", test_drop_single_side),
+        "7": ("Pickup NV2 (require_both=False)", test_pickup_nv2),
+        "8": ("dropoff() 2 kiện cùng NM", test_dropoff_same_factory),
         "0": ("Chạy tất cả", None),
     }
 
@@ -103,12 +158,12 @@ def main():
     for key, (name, _) in tests.items():
         print(f"  {key}. {name}")
 
-    choice = input("\nNhập số (0-5): ").strip()
+    choice = input("\nNhập số (0-8): ").strip()
 
     try:
         if choice == "0":
             for key, (name, func) in tests.items():
-                if func:
+                if func and key not in ("6", "7", "8"):
                     func(lift)
         elif choice in tests and tests[choice][1]:
             tests[choice][1](lift)

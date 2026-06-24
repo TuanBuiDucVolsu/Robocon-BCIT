@@ -64,7 +64,8 @@ Thi đấu dự kiến **ngày 08-09/08/2026** tại phường Bắc Giang, tỉ
 - Kệ 1-3: cạnh TRÁI, cách nhau 2 giao lộ (R4, R2, R0)
 - Kệ 4: bên PHẢI Start, thụt XUỐNG dưới R0, cạnh Foxconn (kho hàng rời — NV2)
 - Robot xuất phát: ô start trên R0, **quay mặt sang trái (9h)** về Kệ 3
-- `exit_start_zone()` chạm line → `ROUTE_START_TO_SHELF_0` forward 1 giao lộ
+- `exit_start_zone()`: tiến thẳng chạm line R0 → căn giữa ngắn (nếu chạm giao lộ khi căn → dừng căn, **không** đếm giao lộ)
+- Sau đó `ROUTE_START_TO_SHELF_0` forward 1 giao lộ → Kệ 3
 - Thứ tự lấy kệ: Kệ 3 (R0, gần nhất) → Kệ 2 (R2) → Kệ 1 (R4)
 - 4 nhà máy xếp DỌC cạnh phải: Samsung(R4) → Hana(R3) → Amkor(R1) → Foxconn(R0)
 - Nhà máy liên hợp: giữa sân (R2), chung 2 đội
@@ -93,10 +94,23 @@ NAVIGATE_TO_SHELF → PICKUP_PAIR (approach + classify_pair + pickup + retreat)
   → lặp 6 lượt → TASK2 → DONE
 ```
 
-- **Không còn state SCAN_PAIR riêng** — quét camera nằm trong PICKUP_PAIR, sau approach_shelf()
-- **`_last_delivered_label`**: route quay về kho và route NV2
+- **Không còn state SCAN_PAIR riêng** — quét camera nằm trong PICKUP_PAIR, sau `_approach_shelf()`
+- **`_last_delivered_label`**: route quay về kho, route NV2, và route DELIVER_SECOND (từ NM1 → NM2)
 - **`_plan_delivery()`**: so sánh route cost gồm forward + turn (ROUTE_TURN_COST) + đoạn BETWEEN_FACTORIES
-- **`_retry_or_skip_tier()`**: scan/nâng fail → retry MAX_TIER_RETRIES lần trước khi bỏ tầng
+- **`_retry_or_skip_tier()`**: scan/nâng/**navigate/approach** fail → retry MAX_TIER_RETRIES lần trước khi bỏ tầng
+- **`_run_route()` / `_approach_shelf()` / `_retreat_from_shelf()`**: wrapper kiểm tra kết quả navigation & siêu âm
+
+### Xử lý lỗi navigation / tiếp cận
+
+| Tình huống | Hành vi |
+|-----------|---------|
+| `execute_route()` / `navigate_intersections()` fail (mất line, timeout) | Trả `False`; log lỗi |
+| Navigate đến kệ fail | `_retry_or_skip_tier("navigate")` |
+| `approach_shelf()` timeout ở PICKUP | `_retry_or_skip_tier("approach")` |
+| Navigate DELIVER fail | Log cảnh báo, **vẫn thử hạ** (tiết kiệm thời gian) |
+| Navigate RETURN fail | Log cảnh báo, vẫn `_advance_position()` |
+| Navigate NV2 fail | Chuyển `DONE` (bỏ NV2) |
+| Route rỗng | Log warning, coi là fail |
 
 ## Lift API (càng độc lập + 2 IR qua SPI)
 
@@ -116,8 +130,9 @@ NAVIGATE_TO_SHELF → PICKUP_PAIR (approach + classify_pair + pickup + retreat)
 ## Điều hướng (Navigation)
 
 Dùng route commands: `("forward", N)`, `("left",)`, `("right",)`.
+`execute_route(route) → bool` — `False` nếu route rỗng hoặc `navigate_intersections()` không tìm đủ giao lộ.
 Các route định nghĩa trong `config.py`:
-- `ROUTE_START_TO_SHELF_0` — exit start (chạm line) → forward 1 giao lộ → Kệ 3
+- `ROUTE_START_TO_SHELF_0` — sau exit start (đã chạm line) → forward 1 giao lộ → Kệ 3
 - `ROUTE_BETWEEN_SHELVES` — Kệ → kệ tiếp (tiến 2 giao lộ)
 - `ROUTE_SHELF_TO_FACTORY[label]` — Kệ → nhà máy (quay phải 2 lần + đi ngang + rẽ nếu cần)
 - `ROUTE_FACTORY_TO_SHELF[label]` — Nhà máy → về kệ
@@ -158,12 +173,13 @@ Phân tích màu HSV (OpenCV), không cần model AI.
 - Số giao lộ trong route là ƯỚC LƯỢNG — đội phải đo thực tế trên sa bàn
 - `TURN_TIME = 0.6s` cần calibrate trên robot thật
 - `LIFT_TIME_SHELF_1/2` cần calibrate riêng cho từng càng
-- `DEBUG_MODE = False` khi thi đấu
+- `DEBUG_MODE = True` khi luyện tập (web debug); `False` khi thi đấu thủ công
+- **systemd** (`scripts/start.sh`): đặt `ROBOT_COMPETE=1` → luôn chạy state machine dù `DEBUG_MODE=True` trong config
 - Không có network call khi thi đấu
 - Vision fail → retry hoặc bỏ tầng, **không** gán label mặc định
 - NV1 pickup cần **cả 2 IR**; NV2 chỉ cần **1 IR**
 - `packages_delivered` chỉ tăng khi IR xác nhận drop thành công (SPI/ADC lỗi → không đếm)
-- `Mcp3008Bus` singleton — Motion + Lift dùng chung lock SPI
+- `Mcp3008Bus` singleton — Motion + Lift dùng chung lock SPI; `last_read_ok=False` khi SPI/ADC lỗi
 - Bám line dùng weighted average analog (`compute_line_error_analog`)
 - đọc lỗi khi đọc IR → pickup/drop không coi thành công
 - `MAX_TIER_RETRIES`, `MAX_PAIR_SCAN_ATTEMPTS` tinh chỉnh theo điều kiện sa bàn

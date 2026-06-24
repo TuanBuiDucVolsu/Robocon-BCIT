@@ -18,4 +18,6 @@ fi
 echo "$(date): Khởi động robot — Python=$PYTHON" >> "$LOG_FILE"
 echo "$(date): DEBUG_MODE=$(grep 'DEBUG_MODE' config.py)" >> "$LOG_FILE"
 
+export ROBOT_COMPETE=1
+
 exec $PYTHON main.py

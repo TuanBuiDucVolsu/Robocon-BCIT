@@ -106,7 +106,7 @@ pip install -r requirements.txt
          ┌──────────────────┐
          │  [Camera]  →     │  ← Camera CSI: giữa thân, hướng ra trước
          │   Raspberry Pi   │
-         │  [Line sensor]↓  │  ← Dò line 8 mắt: dưới gầm robot
+         │  [Line sensor]↓  │  ← Dò line QTR-8A (6 mắt): dưới gầm robot
          ├──────────────────┤
          │ (bánh trái)(bánh phải) │
          └──────────────────┘
@@ -168,9 +168,10 @@ sudo bash scripts/install.sh
 ```
 
 Sau khi cài:
-1. **Bật Pi** → service tự chạy `main.py` → robot ở trạng thái **INIT** (chờ nút)
-2. **Nhấn nút** → robot bắt đầu chương trình tự động (240 giây)
-3. Kết thúc → robot dừng, chờ reset
+1. **Bật Pi** → `start.sh` đặt `ROBOT_COMPETE=1` → chạy state machine thi đấu (không mở web debug)
+2. Robot ở trạng thái **INIT** (chờ nút)
+3. **Nhấn nút** → robot bắt đầu chương trình tự động (240 giây)
+4. Kết thúc → robot dừng, chờ reset
 
 Lệnh quản lý service:
 ```bash
@@ -185,13 +186,18 @@ journalctl -u robot -f           # Xem log realtime
 
 ### Chế độ thi đấu (tự động)
 ```bash
-# Đảm bảo DEBUG_MODE = False trong config.py
+# Cách 1: tắt debug trong config
+# DEBUG_MODE = False trong config.py
 python3 main.py
+
+# Cách 2: systemd (scripts/start.sh) tự đặt ROBOT_COMPETE=1
+# → luôn chạy state machine dù DEBUG_MODE=True trong config
+sudo systemctl start robot
 ```
 
 ### Chế độ debug (luyện tập)
 ```bash
-# Đặt DEBUG_MODE = True trong config.py
+# DEBUG_MODE = True trong config.py — KHÔNG đặt ROBOT_COMPETE
 python3 main.py
 # Mở trình duyệt: http://<IP-của-Pi>:5000
 ```
@@ -205,9 +211,11 @@ Giao diện debug bao gồm:
 
 ### Test từng module
 ```bash
-python3 tests/test_motion.py   # Option 5: calibrate raw ADC QTR-8A
-python3 tests/test_lift.py     # Test nâng/hạ + IR trái/phải (option 3)
-python3 tests/test_vision.py   # Test camera & nhận diện màu HSV
+python3 tests/test_motion.py   # 1-12: motor, line, route, SPI shared
+python3 tests/test_lift.py     # 1-8: nâng/hạ, IR, drop từng càng, NV2
+python3 tests/test_vision.py   # 1-7: camera, HSV, classify_pair
+python3 tests/test_smoke.py    # Smoke tích hợp trên sa bàn (Pi)
+python3 -m unittest tests.test_logic -v   # Unit test logic — chạy trên PC
 ```
 
 ## Bảng GPIO sử dụng
@@ -271,7 +279,7 @@ MCP3008 SPI (8 kênh analog, chia sẻ 4 chân SPI):
 - Kệ 1-3: cạnh TRÁI, cách nhau 2 giao lộ (R0, R2, R4)
 - Kệ 4: bên PHẢI Start, thụt xuống dưới R0 (kho hàng rời — NV2)
 - Robot xuất phát trong ô start, **quay mặt sang trái (9h)** về Kệ 3
-- `exit_start_zone()` chạm line R0 → `ROUTE_START` forward 1 giao lộ → Kệ 3
+- `exit_start_zone()`: chạm line R0 → căn giữa (giao lộ do route đếm) → `ROUTE_START` forward 1 giao lộ → Kệ 3
 
 ### Giá kệ
 
@@ -312,23 +320,23 @@ python3 tests/test_lift.py   # Option 3: đọc IR trái/phải riêng
 
 ```
 INIT → START →
-  ┌─→ NAVIGATE_TO_SHELF (execute_route + rẽ hướng tại giao lộ)
+  ┌─→ NAVIGATE_TO_SHELF (_run_route — fail → retry/skip tầng)
   │   PICKUP_PAIR:
-  │     approach_shelf() — tiến + siêu âm dừng ở 4cm
+  │     _approach_shelf() — tiến + siêu âm dừng ở 4cm (fail → retry/skip)
   │     classify_pair()  — camera chia trái/phải, phân tích HSV (sau khi tiếp cận)
   │     lift.pickup(require_both=True) — cả 2 IR phải thấy pallet (NV1)
-  │     retreat_from_shelf() — lùi + siêu âm dừng ở 15cm
-  │   DELIVER_FIRST → DROP_FIRST (chỉ đếm kiện nếu IR xác nhận đã thả)
-  │   DELIVER_SECOND → DROP_SECOND (giao kiện còn lại + stow_forks)
-  │   RETURN_TO_WAREHOUSE (route theo _last_delivered_label)
+  │     _retreat_from_shelf() — lùi + siêu âm dừng ở 15cm
+  │   DELIVER_FIRST → DROP_FIRST (nav fail vẫn thử hạ; chỉ đếm kiện nếu IR OK)
+  │   DELIVER_SECOND → DROP_SECOND (route từ _last_delivered_label)
+  │   RETURN_TO_WAREHOUSE (_run_route theo _last_delivered_label)
   └── (lặp 6 lượt, tối đa 3 kệ × 2 tầng)
-  → TASK2 (require_both=False khi nâng; dropoff() + IR xác nhận)
+  → TASK2 (nav/approach fail → DONE)
   → DONE
 ```
 
 **Tối ưu thứ tự giao:** `_plan_delivery()` so sánh tổng chi phí `kho → NM1 → NM2` (gồm cả lần xoay, `ROUTE_TURN_COST`).
 
-**Xử lý lỗi tầng kệ:** scan/nâng fail → thử lại cùng tầng (`MAX_TIER_RETRIES`) trước khi bỏ qua sang tầng/kệ tiếp.
+**Xử lý lỗi:** `execute_route()` trả `bool`. Navigate đến kệ / approach pickup fail → `_retry_or_skip_tier()`. Navigate giao hàng fail → log, vẫn thử hạ. SPI lỗi (`Mcp3008Bus.last_read_ok=False`) → IR không coi thành công.
 
 ### Thứ tự 6 lượt nâng
 
@@ -376,12 +384,13 @@ Các giá trị cần đo thực nghiệm trên sa bàn và cập nhật trong `
 
 ## Lưu ý quan trọng
 
-1. **Trước khi thi đấu**: đảm bảo `DEBUG_MODE = False` trong `config.py`
-2. **Không có network call** nào trong vòng lặp chính — tất cả chạy offline
-3. File log được ghi tại `robot_log.txt` để debug sau mỗi lượt chạy
-4. QTR-8A + MCP3008 dùng SPI — bật SPI trong raspi-config trước khi chạy
-5. Chân ECHO của HC-SR04 **bắt buộc** dùng cầu phân áp (1kΩ + 2kΩ) để bảo vệ GPIO 3.3V
-6. Chạy `test_motion.py` option **6** (exit start) rồi option **7–9** trước khi chạy full
-7. **Đặt robot hướng 9h** trong ô start — ô start không có line (GAP R0)
-8. **IR pallet:** NV1 cần cả 2 IR; NV2 chỉ cần 1. `packages_delivered` chỉ tăng khi IR xác nhận đã thả
-9. Kiểm tra IR: `test_lift.py` option 3; calibrate line: `test_motion.py` option 5
+1. **Trước khi thi đấu**: `DEBUG_MODE = False` **hoặc** chạy qua systemd (`ROBOT_COMPETE=1` tự bật chế độ thi)
+2. **Luyện tập web debug**: `DEBUG_MODE = True` + `python3 main.py` trực tiếp (không qua systemd)
+3. **Không có network call** nào trong vòng lặp chính — tất cả chạy offline
+4. File log được ghi tại `robot_log.txt` để debug sau mỗi lượt chạy
+5. QTR-8A + MCP3008 dùng SPI — bật SPI trong raspi-config trước khi chạy
+6. Chân ECHO của HC-SR04 **bắt buộc** dùng cầu phân áp (1kΩ + 2kΩ) để bảo vệ GPIO 3.3V
+7. Chạy `test_motion.py` option **6** (exit start) rồi option **7–9** trước khi chạy full
+8. **Đặt robot hướng 9h** trong ô start — ô start không có line (GAP R0)
+9. **IR pallet:** NV1 cần cả 2 IR; NV2 chỉ cần 1. `packages_delivered` chỉ tăng khi IR xác nhận đã thả
+10. Kiểm tra IR: `test_lift.py` option 3; calibrate line: `test_motion.py` option 5

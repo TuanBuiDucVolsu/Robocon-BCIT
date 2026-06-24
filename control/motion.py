@@ -190,9 +190,9 @@ class Motion:
         while time.time() - align_start < config.EXIT_START_ALIGN_TIME:
             at_intersection, values = self.follow_line(speed)
             if at_intersection:
-                logger.info("Chạm giao lộ khi căn line — dừng, route sẽ đếm tiếp")
+                logger.info("Chạm giao lộ khi căn line — dừng căn, ROUTE_START sẽ đếm")
                 self.stop()
-                return True
+                break
             if sum(values) == 0:
                 break
             time.sleep(0.01)
@@ -217,12 +217,16 @@ class Motion:
         self.stop()
 
     def execute_route(self, route: list) -> bool:
+        if not route:
+            logger.warning("Route rỗng — không có bước điều hướng")
+            return False
+
         for step in route:
             action = step[0]
             if action == "forward":
                 count = step[1]
-                if count > 0:
-                    self.navigate_intersections(count)
+                if count > 0 and not self.navigate_intersections(count):
+                    return False
             elif action == "left":
                 self.turn_left_90()
             elif action == "right":
@@ -396,17 +400,20 @@ class Motion:
         time.sleep(0.3)
         self.stop()
 
-    def navigate_intersections(self, count: int, base_speed: float = config.SPEED_DEFAULT):
+    def navigate_intersections(self, count: int,
+                               base_speed: float = config.SPEED_DEFAULT) -> bool:
         if count <= 0:
-            return
+            return True
 
         for i in range(count):
             logger.info("Đi đến giao lộ %d/%d", i + 1, count)
             self._escape_intersection(base_speed)
             if not self.follow_line_until_intersection(base_speed):
                 logger.error("Không tìm thấy giao lộ %d/%d!", i + 1, count)
-                break
+                self.stop()
+                return False
         self.stop()
+        return True
 
     # ----------------------------------------------------------
     # Cleanup

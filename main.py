@@ -122,6 +122,25 @@ class Robot:
     def is_time_safe(self) -> bool:
         return self.time_remaining() > config.SAFETY_MARGIN
 
+    def _run_route(self, route: list, context: str) -> bool:
+        if not route:
+            logger.warning("Route rỗng — %s", context)
+            return False
+        if not self.motion.execute_route(route):
+            logger.error("Navigation thất bại — %s", context)
+            return False
+        return True
+
+    def _approach_shelf(self, context: str) -> bool:
+        if not self.motion.approach_shelf():
+            logger.warning("Tiếp cận kệ thất bại (timeout) — %s", context)
+            return False
+        return True
+
+    def _retreat_from_shelf(self, context: str):
+        if not self.motion.retreat_from_shelf():
+            logger.warning("Lùi khỏi kệ thất bại (timeout) — %s", context)
+
     # ----------------------------------------------------------
     # Tính toán route tối ưu
     # ----------------------------------------------------------
@@ -190,7 +209,7 @@ class Robot:
         logger.info("Trạng thái: START — bắt đầu trận đấu (240s)")
         self.lift.reset()
 
-        # Thoát ô start → tìm line → bám đến giao lộ đầu tiên
+        # Thoát ô start → tìm line R0 → căn giữa (giao lộ do ROUTE_START đếm)
         if not self.motion.exit_start_zone():
             logger.error("Không thoát được ô start — dừng!")
             return State.DONE
@@ -208,13 +227,15 @@ class Robot:
 
         if self.pickup_count == 0:
             # Lần đầu: exit_start_zone() đã chạm line R0 → forward 1 giao lộ đến Kệ 3
-            self.motion.execute_route(config.ROUTE_START_TO_SHELF_0)
+            if not self._run_route(config.ROUTE_START_TO_SHELF_0, "START → Kệ 3"):
+                return self._retry_or_skip_tier("navigate")
         elif self.current_tier == 2:
             # Tầng 2 cùng kệ → không cần di chuyển, chỉ quay lại tiếp cận
             pass
         else:
             # Sang kệ tiếp → di chuyển giữa các kệ
-            self.motion.execute_route(config.ROUTE_BETWEEN_SHELVES)
+            if not self._run_route(config.ROUTE_BETWEEN_SHELVES, "giữa các kệ"):
+                return self._retry_or_skip_tier("navigate")
 
         return State.PICKUP_PAIR
 
@@ -227,7 +248,8 @@ class Robot:
             logger.warning("Sắp hết giờ! Dừng lại.")
             return State.DONE
 
-        self.motion.approach_shelf()
+        if not self._approach_shelf("PICKUP_PAIR"):
+            return self._retry_or_skip_tier("approach")
 
         label_left, label_right = None, None
         for attempt in range(1, config.MAX_PAIR_SCAN_ATTEMPTS + 1):
@@ -241,7 +263,7 @@ class Robot:
                 time.sleep(config.SCAN_RETRY_DELAY)
         else:
             logger.error("Không nhận diện được sau %d lần quét", config.MAX_PAIR_SCAN_ATTEMPTS)
-            self.motion.retreat_from_shelf()
+            self._retreat_from_shelf("PICKUP_PAIR scan fail")
             return self._retry_or_skip_tier("scan")
 
         self.carried_labels = [label_left, label_right]
@@ -250,7 +272,7 @@ class Robot:
         success = self.lift.pickup(self.current_tier)
 
         # Lùi ra khỏi kệ — dừng khi đã lùi đủ xa
-        self.motion.retreat_from_shelf()
+        self._retreat_from_shelf("PICKUP_PAIR")
 
         if not success:
             logger.error("NÂNG THẤT BẠI")
@@ -279,7 +301,8 @@ class Robot:
             logger.warning("Sắp hết giờ!")
             return State.DROP_FIRST
 
-        self.motion.execute_route(route)
+        if not self._run_route(route, f"DELIVER → {label}"):
+            logger.warning("Navigation lệch — vẫn thử hạ hàng tại %s", factory)
         return State.DROP_FIRST
 
     def _get_drop_side(self, label: str) -> str:
@@ -307,7 +330,7 @@ class Robot:
         logger.info("Trạng thái: DROP_FIRST — %s (%s)",
                      label, "cả 2 càng" if same_factory else self._get_drop_side(label))
 
-        self.motion.approach_shelf()
+        self._approach_shelf(f"DROP_FIRST {label}")
 
         if same_factory:
             if self.lift.dropoff():
@@ -321,7 +344,7 @@ class Robot:
             else:
                 logger.error("DROP_FIRST thất bại — càng %s chưa thả được pallet", side)
 
-        self.motion.retreat_from_shelf()
+        self._retreat_from_shelf(f"DROP_FIRST {label}")
 
         logger.info("Đã giao %d/%d kiện",
                      self.packages_delivered, config.TOTAL_PACKAGES_TASK1)
@@ -344,7 +367,14 @@ class Robot:
             return State.RETURN_TO_WAREHOUSE
 
         label = self.delivery_queue[0]
-        prev_label = self.carried_labels[0] if self.carried_labels[0] != label else self.carried_labels[1]
+        prev_label = self._last_delivered_label
+        if prev_label is None:
+            logger.error("Không có nhà máy trước đó — dùng carried_labels fallback")
+            prev_label = (
+                self.carried_labels[0]
+                if self.carried_labels[0] != label
+                else self.carried_labels[1]
+            )
         factory = self.vision.get_factory_name(label)
 
         route_key = (prev_label, label)
@@ -353,13 +383,14 @@ class Robot:
             route_key, config.ROUTE_BETWEEN_FACTORIES.get(rev_key, [])
         )
 
-        logger.info("Giao kiện 2: %s → %s", label, factory)
+        logger.info("Giao kiện 2: %s → %s (từ %s)", label, factory, prev_label)
 
         if not self.is_time_safe():
             logger.warning("Sắp hết giờ!")
             return State.DROP_SECOND
 
-        self.motion.execute_route(route)
+        if not self._run_route(route, f"DELIVER → {label} (từ {prev_label})"):
+            logger.warning("Navigation lệch — vẫn thử hạ hàng tại %s", factory)
         return State.DROP_SECOND
 
     def _handle_drop_second(self) -> State:
@@ -370,7 +401,7 @@ class Robot:
 
         logger.info("Trạng thái: DROP_SECOND — %s (càng %s)", label, side)
 
-        self.motion.approach_shelf()
+        self._approach_shelf(f"DROP_SECOND {label}")
 
         dropped = False
         if side == "left":
@@ -384,7 +415,7 @@ class Robot:
         else:
             logger.error("DROP_SECOND thất bại — càng %s chưa thả được pallet", side)
 
-        self.motion.retreat_from_shelf()
+        self._retreat_from_shelf(f"DROP_SECOND {label}")
         logger.info("Đã giao %d/%d kiện",
                      self.packages_delivered, config.TOTAL_PACKAGES_TASK1)
 
@@ -401,7 +432,8 @@ class Robot:
         """Quay về kho, chuyển sang tầng/kệ tiếp theo."""
         route = config.ROUTE_FACTORY_TO_SHELF.get(self._last_delivered_label, [])
         logger.info("Quay về kho từ %s...", self._last_delivered_label)
-        self.motion.execute_route(route)
+        if not self._run_route(route, f"RETURN từ {self._last_delivered_label}"):
+            logger.warning("Quay về kho có thể lệch vị trí")
 
         self._advance_position()
         logger.info("Tiếp theo: kệ %d, tầng %d",
@@ -420,14 +452,18 @@ class Robot:
 
         route = config.ROUTE_FACTORY_TO_LOOSE.get(self._last_delivered_label, [])
         logger.info("Đi từ %s đến kệ 4...", self._last_delivered_label)
-        self.motion.execute_route(route)
+        if not self._run_route(route, f"NV2 → kho rời từ {self._last_delivered_label}"):
+            logger.error("Navigation NV2 thất bại — dừng")
+            return State.DONE
         return State.TASK2_PICKUP
 
     def _handle_task2_pickup(self) -> State:
         logger.info("Nhiệm vụ 2: nhấc hàng từ kho hàng rời...")
-        self.motion.approach_shelf()
+        if not self._approach_shelf("TASK2_PICKUP"):
+            logger.error("Nhiệm vụ 2: không tiếp cận được kho rời — dừng")
+            return State.DONE
         success = self.lift.pickup(shelf_level=1, require_both=False)
-        self.motion.retreat_from_shelf()
+        self._retreat_from_shelf("TASK2_PICKUP")
         if not success:
             logger.error("Nhiệm vụ 2: nâng thất bại — bỏ qua")
             return State.DONE
@@ -437,15 +473,17 @@ class Robot:
         logger.info("Nhiệm vụ 2: đi đến nhà máy liên hợp...")
         if not self.is_time_safe():
             return State.DONE
-        self.motion.execute_route(config.ROUTE_LOOSE_TO_JOINT)
+        if not self._run_route(config.ROUTE_LOOSE_TO_JOINT, "NV2 → nhà máy liên hợp"):
+            logger.error("Navigation NV2 thất bại — dừng")
+            return State.DONE
         return State.TASK2_DROP
 
     def _handle_task2_drop(self) -> State:
         logger.info("Nhiệm vụ 2: đặt hàng tại nhà máy liên hợp...")
-        self.motion.approach_shelf()
+        self._approach_shelf("TASK2_DROP")
         if not self.lift.dropoff():
             logger.error("TASK2_DROP thất bại — IR vẫn thấy pallet hoặc lỗi cảm biến")
-        self.motion.retreat_from_shelf()
+        self._retreat_from_shelf("TASK2_DROP")
         logger.info("NHIỆM VỤ 2 HOÀN THÀNH!")
         return State.DONE
 

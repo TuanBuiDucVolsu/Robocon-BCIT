@@ -58,6 +58,9 @@ class PalletSensors:
             return False, False, False
         try:
             left_raw, right_raw = self.read_raw()
+            if not self._bus.last_read_ok:
+                logger.warning("Lỗi đọc MCP3008 — bỏ qua kết quả IR pallet")
+                return False, False, False
             left = self._is_pallet(left_raw)
             right = self._is_pallet(right_raw)
             return left, right, True

@@ -27,6 +27,7 @@ class Mcp3008Bus:
     def __init__(self):
         self._lock = threading.Lock()
         self._channels: dict[int, object] = {}
+        self._last_read_ok = True
         self.available = False
         if _MCP3008 is None:
             logger.warning("gpiozero.MCP3008 không khả dụng")
@@ -50,29 +51,41 @@ class Mcp3008Bus:
             )
         return self._channels[channel]
 
+    @property
+    def last_read_ok(self) -> bool:
+        """False nếu lần đọc gần nhất có lỗi SPI/ADC."""
+        return self._last_read_ok
+
     def read(self, channel: int) -> float:
         """Đọc 1 kênh (0.0-1.0). Trả 1.0 nếu bus không khả dụng."""
         if not self.available:
+            self._last_read_ok = False
             return 1.0
         with self._lock:
             try:
+                self._last_read_ok = True
                 return self._get_channel(channel).value
             except Exception as e:
                 logger.warning("Lỗi đọc MCP3008 CH%d: %s", channel, e)
+                self._last_read_ok = False
                 return 1.0
 
     def read_many(self, channels: list[int]) -> list[float]:
         """Đọc nhiều kênh trong một lần khóa."""
         if not self.available:
+            self._last_read_ok = False
             return [1.0] * len(channels)
         with self._lock:
             values = []
+            read_ok = True
             for ch in channels:
                 try:
                     values.append(self._get_channel(ch).value)
                 except Exception as e:
                     logger.warning("Lỗi đọc MCP3008 CH%d: %s", ch, e)
+                    read_ok = False
                     values.append(1.0)
+            self._last_read_ok = read_ok
             return values
 
     def read_adc(self, channel: int) -> int:

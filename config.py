@@ -3,6 +3,8 @@ Cấu hình toàn bộ hằng số có thể tinh chỉnh cho robot tự động
 Đội cần đo thực nghiệm và cập nhật các giá trị này.
 """
 
+import os
+
 # ============================================================
 # GPIO PIN MAP
 # ============================================================
@@ -331,4 +333,7 @@ ROUTE_LOOSE_TO_JOINT = [
 # ============================================================
 LOG_FILE = "robot_log.txt"
 DEBUG_MODE = True           # True = bật giao diện web để luyện tập; False = chế độ thi đấu
+# systemd/scripts/start.sh đặt ROBOT_COMPETE=1 → luôn chạy state machine dù DEBUG_MODE=True
+if os.environ.get("ROBOT_COMPETE") == "1":
+    DEBUG_MODE = False
 WEB_PORT = 5000               # Port cho giao diện web debug

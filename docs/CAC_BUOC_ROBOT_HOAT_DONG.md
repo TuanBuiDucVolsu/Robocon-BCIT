@@ -67,7 +67,8 @@ Quay mặt SANG TRÁI — hướng 9h, về phía Kệ 3 (KHÔNG hướng lên)
   ▼
 Timer bắt đầu đếm 240 giây
 Càng forklift reset về mặt sàn (level 0)
-exit_start_zone() — tiến thẳng chạm line R0, căn giữa line
+exit_start_zone() — tiến thẳng chạm line R0, căn giữa line (không đếm giao lộ)
+  Nếu chạm giao lộ khi căn → dừng căn; giao lộ do ROUTE_START đếm
 ```
 
 ---
@@ -80,10 +81,13 @@ exit_start_zone() — tiến thẳng chạm line R0, căn giữa line
 
 ```
 State: START → exit_start_zone()
-  Tiến thẳng (hướng 9h) → chạm line R0 → căn giữa line
+  Tiến thẳng (hướng 9h) → chạm line R0 → căn giữa line (tối đa EXIT_START_ALIGN_TIME)
 
 State: NAVIGATE_TO_SHELF
-pickup_count == 0 → ROUTE_START_TO_SHELF_0
+pickup_count == 0 → _run_route(ROUTE_START_TO_SHELF_0)
+  Fail (mất line / timeout) → _retry_or_skip_tier("navigate")
+pickup_count > 0, tier 2 → tại chỗ
+pickup_count > 0, tier 1 → _run_route(ROUTE_BETWEEN_SHELVES); fail → retry/skip tầng
 
 Robot (trong ô start, đã chạm line R0, hướng 9h)
   │ ("forward", 1)    → Bám line sang trái, 1 giao lộ → dừng tại Kệ 3
@@ -96,10 +100,11 @@ Robot dừng trước Kệ 3, hướng sang trái (vào kệ)
 ```
 State: PICKUP_PAIR
 
-── approach_shelf() ──
+── _approach_shelf("PICKUP_PAIR") ──
 Robot tiến chậm (30%) + siêu âm đo liên tục
   Robot ════►  [Kệ]
   HC-SR04 đo: 20cm... 15cm... 10cm... 5cm... 4cm → DỪNG!
+  Timeout (>APPROACH_TIMEOUT) → _retry_or_skip_tier("approach")
 
 ── classify_pair() ── (quét SAU khi tiếp cận — góc nhìn chính xác hơn)
 Camera chụp 1 frame (640×480)
@@ -111,7 +116,7 @@ Camera chụp 1 frame (640×480)
 
   Nếu không nhận diện đủ 2 kiện:
     → thử lại MAX_PAIR_SCAN_ATTEMPTS lần
-    → vẫn fail → _retry_or_skip_tier("scan")
+    → vẫn fail → _retreat_from_shelf() → _retry_or_skip_tier("scan")
 
 ── _plan_delivery() ──
 So sánh tổng route cost (forward + turn × ROUTE_TURN_COST):
@@ -128,8 +133,8 @@ Nâng CẢ 2 càng đồng bộ, retry tối đa PICKUP_MAX_RETRIES lần
 
 pickup_count: 0 → 1
 
-── retreat_from_shelf() ──
-Lùi đến khi siêu âm ≥ 15cm
+── _retreat_from_shelf("PICKUP_PAIR") ──
+Lùi đến khi siêu âm ≥ 15cm (timeout → log cảnh báo, vẫn tiếp tục)
 ```
 
 #### Bước 5: Di chuyển đến nhà máy 1 (Samsung)
@@ -137,7 +142,8 @@ Lùi đến khi siêu âm ≥ 15cm
 ```
 State: DELIVER_FIRST
 label = delivery_queue[0] = "samsung"
-execute_route(ROUTE_SHELF_TO_FACTORY["samsung"])
+_run_route(ROUTE_SHELF_TO_FACTORY["samsung"])
+  Fail → log cảnh báo "Navigation lệch — vẫn thử hạ hàng"
 ```
 
 #### Bước 6: Đặt hàng tại Samsung (2 kiện khác nhà máy)
@@ -147,10 +153,10 @@ State: DROP_FIRST
 label = "samsung" → _last_delivered_label = "samsung"
 same_factory = False (samsung ≠ foxconn)
 
-approach_shelf()
+_approach_shelf("DROP_FIRST ...")  ← timeout vẫn thử hạ
 _drop_single_side("left")  ← dropoff_left() + raise_after_drop("left")
   Chỉ packages_delivered += 1 nếu IR xác nhận càng trái đã rời pallet
-retreat_from_shelf()
+_retreat_from_shelf("DROP_FIRST ...")
 
 delivery_queue: pop → ["foxconn"]
 packages_delivered: 0 → 1 (nếu IR OK)
@@ -163,8 +169,11 @@ packages_delivered: 0 → 1 (nếu IR OK)
 
 ```
 State: DELIVER_SECOND
-route = ROUTE_BETWEEN_FACTORIES[("samsung", "foxconn")]
-execute_route → ("forward", 4) xuống R4→R0
+prev_label = _last_delivered_label   ← nhà máy vừa giao ở DROP_FIRST
+label = delivery_queue[0] = "foxconn"
+route = ROUTE_BETWEEN_FACTORIES[(prev_label, label)]
+_run_route(route) — fail → log cảnh báo, vẫn thử DROP_SECOND
+  Ví dụ: ("forward", 4) xuống R4→R0
 (Không cần go_to_level — càng phải vẫn giữ kiện ở cao)
 ```
 
@@ -174,10 +183,10 @@ execute_route → ("forward", 4) xuống R4→R0
 State: DROP_SECOND
 label = "foxconn" → _last_delivered_label = "foxconn"
 
-approach_shelf()
+_approach_shelf("DROP_SECOND ...")
 dropoff_right()    ← thả kiện foxconn; IR xác nhận càng phải đã rời
 stow_forks("right") ← hạ càng trái (còn ở cao) về sàn → cả 2 càng level 0
-retreat_from_shelf()
+_retreat_from_shelf("DROP_SECOND ...")
 
 packages_delivered: 1 → 2 (nếu IR OK)
 → RETURN_TO_WAREHOUSE
@@ -189,6 +198,7 @@ packages_delivered: 1 → 2 (nếu IR OK)
 State: RETURN_TO_WAREHOUSE
 route = ROUTE_FACTORY_TO_SHELF[_last_delivered_label]
   = ROUTE_FACTORY_TO_SHELF["foxconn"]
+_run_route(route) — fail → log "Quay về kho có thể lệch vị trí", vẫn advance
 
 _advance_position() → current_tier: 1 → 2 (cùng kệ)
 → NAVIGATE_TO_SHELF
@@ -233,29 +243,32 @@ _advance_position():
 State: TASK2_NAVIGATE_TO_LOOSE
 route = ROUTE_FACTORY_TO_LOOSE[_last_delivered_label]
   (nhà máy cuối cùng vừa giao kiện NV1)
+_run_route(route) — fail → DONE (bỏ NV2)
 ```
 
 ### Bước 2: Nâng hàng rời
 
 ```
 State: TASK2_PICKUP
-approach_shelf() → lift.pickup(shelf_level=1, require_both=False) → retreat_from_shelf()
+_approach_shelf("TASK2_PICKUP") — fail → DONE
+lift.pickup(shelf_level=1, require_both=False)
+_retreat_from_shelf("TASK2_PICKUP")
   NV2: chỉ cần 1 IR thấy pallet (kho hàng rời — 1 kiện)
-Thất bại → DONE (bỏ qua NV2)
+Nâng thất bại → DONE (bỏ qua NV2)
 ```
 
 ### Bước 3: Kệ 4 → Nhà máy liên hợp
 
 ```
 State: TASK2_NAVIGATE_TO_JOINT
-execute_route(ROUTE_LOOSE_TO_JOINT)
+_run_route(ROUTE_LOOSE_TO_JOINT) — fail → DONE
 ```
 
 ### Bước 4: Đặt hàng
 
 ```
 State: TASK2_DROP
-approach_shelf() → lift.dropoff() → retreat_from_shelf()
+_approach_shelf("TASK2_DROP") → lift.dropoff() → _retreat_from_shelf("TASK2_DROP")
   Chỉ coi NV2 hoàn thành nếu IR xác nhận đã thả (cả 2 càng hoặc càng có pallet)
 → DONE ✅
 ```
@@ -281,31 +294,33 @@ INIT (chờ nút) ──→ START (reset càng, exit_start_zone → chạm line 
 ┌─────────────── LẶP 6 LƯỢT (tối đa 3 kệ × 2 tầng) ─────┐
 │                                                         │
 │  NAVIGATE_TO_SHELF                                      │
-│    ├ Lần đầu: ROUTE_START_TO_SHELF_0 (forward 1)        │
+│    ├ Lần đầu: _run_route(ROUTE_START_TO_SHELF_0)        │
 │    ├ Tầng 2: tại chỗ                                   │
-│    └ Kệ tiếp: ROUTE_BETWEEN_SHELVES                     │
+│    └ Kệ tiếp: _run_route(ROUTE_BETWEEN_SHELVES)         │
+│    navigate fail → _retry_or_skip_tier("navigate")      │
 │    (hết kệ → DONE hoặc NV2 nếu đủ 12 kiện)             │
 │                     │                                   │
 │  PICKUP_PAIR ◄──────┘                                   │
-│    approach_shelf() ── siêu âm dừng 4cm                 │
+│    _approach_shelf() ── siêu âm dừng 4cm                │
 │    classify_pair()  ── HSV trái/phải (sau tiếp cận)   │
 │    _plan_delivery() ── tối ưu thứ tự giao (route cost)  │
 │    lift.pickup(require_both=True) ── NV1: cả 2 IR phải thấy pallet │
-│    retreat_from_shelf() ── siêu âm lùi 15cm             │
+│    _retreat_from_shelf() ── siêu âm lùi 15cm            │
 │         │                                               │
-│     thành công │  scan/nâng fail                        │
+│     thành công │  scan/nâng/approach fail               │
 │         │      └── _retry_or_skip_tier()                │
 │         │            ├ retry (MAX_TIER_RETRIES)         │
 │         │            └ skip → tầng/kệ tiếp              │
 │         │                                               │
 │  DELIVER_FIRST → DROP_FIRST                             │
+│    _run_route() — fail vẫn thử hạ                       │
 │    Cùng NM: dropoff() (+2 kiện nếu IR xác nhận)        │
 │    Khác NM: _drop_single_side() (+1 kiện nếu IR OK)     │
 │         │                                               │
 │    ┌────┴────┐                                          │
 │  Cùng NM   Khác NM                                      │
 │    │          │                                         │
-│    │    DELIVER_SECOND                                  │
+│    │    DELIVER_SECOND (_last_delivered_label → route)  │
 │    │    DROP_SECOND: dropoff + stow_forks (+1 nếu IR OK) │
 │    └────┬─────┘                                         │
 │         │                                               │
@@ -313,8 +328,9 @@ INIT (chờ nút) ──→ START (reset càng, exit_start_zone → chạm line 
 │  >=12 kiện            <12 + còn giờ                     │
 │    │                       │                            │
 │    │               RETURN_TO_WAREHOUSE                  │
-│    │                 ROUTE_FACTORY_TO_SHELF             │
+│    │                 _run_route(ROUTE_FACTORY_TO_SHELF) │
 │    │                   [_last_delivered_label]          │
+│    │                 fail → log, vẫn _advance_position()│
 │    │                 _advance_position()                │
 │    │                       └────→ (lặp lại)             │
 └────┼────────────────────────────────────────────────────┘
@@ -322,8 +338,9 @@ INIT (chờ nút) ──→ START (reset càng, exit_start_zone → chạm line 
      ▼
   NV1 HOÀN THÀNH (12/12)
      │
-  TASK2_NAVIGATE_TO_LOOSE → TASK2_PICKUP (require_both=False)
+  TASK2_NAVIGATE_TO_LOOSE (_run_route) → TASK2_PICKUP (require_both=False)
      → TASK2_NAVIGATE_TO_JOINT → TASK2_DROP (IR xác nhận)
+     navigate/approach NV2 fail → DONE
      │
      ▼
    DONE
@@ -337,16 +354,22 @@ INIT (chờ nút) ──→ START (reset càng, exit_start_zone → chạm line 
 |-----------|-------|
 | Sắp hết giờ (<10s) | `is_time_safe()` check sau mỗi state → DONE |
 | Không tìm thấy line khi exit start | Kiểm tra hướng 9h, GAP line, `EXIT_START_TIMEOUT` → DONE |
+| Navigation fail (mất line / timeout giao lộ) | `execute_route()` → `False`; đến kệ fail → `_retry_or_skip_tier("navigate")`; giao hàng fail → log, vẫn thử hạ; NV2 fail → DONE |
+| Route rỗng (thiếu config) | Log warning, coi navigation fail |
+| Tiếp cận kệ timeout (PICKUP) | `_retry_or_skip_tier("approach")` |
+| Tiếp cận kệ timeout (DROP) | Log cảnh báo, vẫn thử hạ hàng |
 | Scan fail (confidence thấp) | Retry MAX_PAIR_SCAN_ATTEMPTS → _retry_or_skip_tier |
 | Nâng thất bại (IR không thấy pallet) | Retry PICKUP_MAX_RETRIES → _retry_or_skip_tier |
-| I2C/SPI lỗi khi đọc IR | pickup/drop **không** coi thành công; log lỗi |
+| SPI/ADC lỗi khi đọc IR (`last_read_ok=False`) | pickup/drop **không** coi thành công; log lỗi |
 | Hết retry tầng kệ | Bỏ qua tầng, _advance_position(), sang tầng/kệ tiếp |
 | Hết kệ (current_shelf >= 3) | DONE hoặc NV2 nếu đủ 12 kiện |
 | Hạ xong nhưng IR vẫn thấy pallet | Không tăng packages_delivered; log cảnh báo "có thể kẹt" |
 | Drop thất bại (IR/SPI) | Không tăng packages_delivered; robot vẫn chuyển state tiếp |
 | Mất line (6 sensor = 0) | `_recover_line()` quét trái/phải tìm lại |
-| Bám line timeout (>15s) | Dừng, log lỗi |
-| Siêu âm timeout (>5s) | Dừng, log cảnh báo |
+| Bám line timeout (>15s) | `navigate_intersections()` → False → propagate lên state machine |
+| Chạm giao lộ khi căn line (exit start) | Dừng căn (`break`); **không** đếm giao lộ — ROUTE_START đếm |
+| Siêu âm timeout (>5s) | `_approach_shelf` / `_retreat_from_shelf` log cảnh báo |
 | Ctrl+C / SIGTERM | `_emergency_stop()` → tắt tất cả motor |
 | Camera nhận diện thất bại | **Không** gán label mặc định — retry hoặc bỏ tầng |
+| NV2 navigate fail | DONE (bỏ NV2) |
 | NV2 nâng thất bại | Bỏ qua NV2 → DONE |
