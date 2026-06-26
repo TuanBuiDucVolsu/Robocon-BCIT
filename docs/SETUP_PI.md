@@ -257,7 +257,7 @@ Nhấn `Ctrl+C` để dừng.
 
 ## Bước 12: Test phần cứng (sau khi đấu nối)
 
-Sau khi đấu nối phần cứng theo `docs/HUONG_DAN_PHAN_CUNG.md`, test từng module:
+Sau khi đấu nối phần cứng theo `docs/PHAN_CUNG.md`, test từng module:
 
 ```bash
 cd ~/Robocon-BCIT
@@ -374,7 +374,7 @@ python3 main.py                  # DEBUG_MODE=True → mở web debug
 
 ## Bước 14: Rút màn hình, chuyển sang SSH
 
-Từ giờ trở đi, dùng SSH từ laptop (xem chi tiết: `docs/HUONG_DAN_SSH_WIFI.md`):
+Từ giờ trở đi, dùng SSH từ laptop:
 
 ```bash
 # Trên laptop:

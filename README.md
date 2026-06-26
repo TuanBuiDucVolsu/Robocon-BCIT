@@ -59,11 +59,9 @@ Robocon-BCIT/
 │   └── robot.service      #   Systemd unit file
 │
 └── docs/                  # Tài liệu
-    ├── HUONG_DAN_CAI_DAT_LAN_DAU.md    # Cài đặt Pi lần đầu (14 bước)
-    ├── HUONG_DAN_SSH_WIFI.md           # SSH + WiFi + debug không dây
-    ├── HUONG_DAN_PHAN_CUNG.md          # Sơ đồ đấu nối phần cứng
-    ├── HUONG_DAN_LAP_QTR8A_MCP3008.md  # Lắp QTR-8A + MCP3008 chi tiết
-    ├── CAC_BUOC_ROBOT_HOAT_DONG.md     # Luồng state machine chi tiết
+    ├── SETUP_PI.md    # Cài đặt Pi lần đầu (14 bước)
+    ├── PHAN_CUNG.md          # Sơ đồ đấu nối phần cứng
+    ├── CAC_BUOC_HOAT_DONG.md     # Luồng state machine chi tiết
     ├── Thể lệ.pdf                      # Thể lệ giải đấu
     ├── Hướng dẫn thi công.pdf          # Hướng dẫn thi công đạo cụ
     ├── Hình dán khối bảng O2.pdf       # File in decal kiện hàng
@@ -72,7 +70,7 @@ Robocon-BCIT/
 
 ## Cài đặt nhanh
 
-> Chi tiết đầy đủ từng bước: xem `docs/HUONG_DAN_CAI_DAT_LAN_DAU.md`
+> Chi tiết đầy đủ từng bước: xem `docs/SETUP_PI.md`
 
 ### 1. Cài thư viện hệ thống (bắt buộc chạy trước pip)
 
@@ -108,7 +106,7 @@ pip install -r requirements.txt
 
 ```bash
 ls /dev/spidev*                          # Phải thấy spidev0.0 và spidev0.1
-python3 -m unittest tests.test_logic -v  # Unit test logic — 31 test, chạy trên PC
+python3 -m unittest tests.test_logic -v  # Unit test logic — 44 test, chạy trên PC
 ```
 
 ## Cách chạy
@@ -130,7 +128,23 @@ Giao diện web:
 - **Cảm biến dò line**: 6 mắt QTR-8A + ADC raw, độ lệch, phát hiện giao lộ
 - **IR pallet**: trái/phải realtime qua MCP3008 CH6–7
 
-> Không cần nối màn hình vào Pi — SSH + web debug qua WiFi. Xem `docs/HUONG_DAN_SSH_WIFI.md`
+> Không cần nối màn hình vào Pi — SSH + web debug qua WiFi.
+
+### Chế độ luyện tập tự động — lặp bằng nút ⭐ (tiện nhất khi tập)
+
+```bash
+bash scripts/practice.sh        # = ROBOT_LOOP=1 python3 main.py
+```
+
+Chạy **full nhiệm vụ tự động** rồi **tự reset, chờ nhấn nút để chạy lại** — không cần
+SSH/restart giữa các lượt. Mỗi lượt: đặt robot về ô xuất phát (hướng 9h) → nhấn nút.
+**Ctrl+C** để thoát. Lỗi 1 lượt không làm sập chương trình — dừng motor rồi về chờ nút.
+
+| | Web debug | Luyện tập lặp | Thi đấu |
+|---|:---:|:---:|:---:|
+| Lệnh | `python3 main.py` (DEBUG_MODE=True) | `scripts/practice.sh` | systemd / `ROBOT_COMPETE=1` |
+| Điều khiển | Tay (web W/A/S/D) | Tự động, nút khởi động | Tự động, nút khởi động |
+| Sau khi xong | — | **Chờ nút → chạy lại** | Dừng hẳn, thoát |
 
 ### Chế độ thi đấu (tự động)
 
@@ -145,6 +159,11 @@ sudo systemctl start robot
 ```
 
 Robot chờ nhấn nút (GPIO 16) → chạy tự động 240 giây → dừng.
+
+> **Khôi phục sau lỗi:** nếu robot gặp exception giữa trận, nó dừng an toàn rồi thoát mã 1
+> → systemd tự khởi động lại sau ~2s → về chờ nút. Mốc thời gian trận được lưu (`/tmp`) nên
+> khi nhấn nút lại, robot chạy **nốt thời gian còn lại** (không reset 240s). Đặt robot về ô
+> xuất phát rồi nhấn nút để chạy lại phần còn thiếu.
 
 ### Test từng module
 
@@ -232,7 +251,7 @@ Nguồn:                         Cầu phân áp cho ECHO:
            └→ XH-M401 (5.1V) → Pi USB-C
 ```
 
-> Chi tiết: xem `docs/HUONG_DAN_PHAN_CUNG.md`
+> Chi tiết: xem `docs/PHAN_CUNG.md`
 
 ### Bảng GPIO
 
@@ -288,7 +307,7 @@ INIT (chờ nút) → START (reset càng, exit_start_zone → chạm line R0)
 ```
 
 **Thời gian dự kiến: ~180–185s hiện tại → ~135–145s sau calibrate / 240s giới hạn**
-(chi tiết phân bổ: `docs/TOI_UU_TOC_DO.md` mục 1)
+(chi tiết phân bổ: `docs/TOC_DO.md` mục 1)
 
 ### Điều hướng quan trọng
 
@@ -328,7 +347,7 @@ Các giá trị cần đo thực nghiệm trên sa bàn, cập nhật trong `con
 | `LINE_KP`, `LINE_KD` | Hệ số PD bám line | Thử trên sa bàn |
 | `LINE_BLACK_IS_HIGH`, `LINE_THRESHOLD` | Polarity + ngưỡng QTR-8A | `python3 -m tools.calibrate_line` |
 | `EXIT_START_*` | Thoát ô start | test_motion option 6 |
-| `ROUTE_*` | Số giao lộ các route | ✅ đã verify từ file in chuẩn — xem `docs/SA_BAN_O2_LUOI.md` |
+| `ROUTE_*` | Số giao lộ các route | ✅ đã verify từ file in chuẩn — xem `docs/SA_BAN.md` |
 | `get_return_route` / đoạn dọc | Return về đúng hàng kệ | Test scenario foxconn→samsung → Kệ3 T2 |
 | `COLOR_RANGES` | Dải màu HSV | test_vision option 2 |
 | `PALLET_THRESHOLD` | Ngưỡng IR pallet | test_lift option 3 |
@@ -336,19 +355,17 @@ Các giá trị cần đo thực nghiệm trên sa bàn, cập nhật trong `con
 
 > **Tiếp cận 2 pha + PWM cả 2 chiều:** `approach_shelf()` đi nhanh ở xa, chậm khi gần
 > (siêu âm lấy median 3 mẫu chống nhiễu). Động cơ bánh PWM cả tiến lẫn lùi → lùi/xoay
-> đúng tốc độ. Xem chi tiết tối ưu: `docs/TOI_UU_TOC_DO.md`.
+> đúng tốc độ. Xem chi tiết tối ưu: `docs/TOC_DO.md`.
 
 ## Tài liệu
 
 | File | Nội dung |
 |------|----------|
-| `docs/HUONG_DAN_CAI_DAT_LAN_DAU.md` | Cài đặt Pi lần đầu (flash OS → chạy robot, 14 bước) |
-| `docs/HUONG_DAN_SSH_WIFI.md` | SSH + WiFi + debug web không dây + hotspot điện thoại |
-| `docs/HUONG_DAN_PHAN_CUNG.md` | Sơ đồ đấu nối phần cứng chi tiết + checklist |
-| `docs/HUONG_DAN_LAP_QTR8A_MCP3008.md` | Lắp QTR-8A + MCP3008 từng bước |
-| `docs/CAC_BUOC_ROBOT_HOAT_DONG.md` | Luồng state machine chi tiết (từng state, biến theo dõi) |
-| `docs/TOI_UU_TOC_DO.md` | Phân tích thời gian + 6 tối ưu tốc độ + fast profile config |
-| `docs/SA_BAN_O2_LUOI.md` | Lưới sa bàn O2 đối chiếu từ file in chuẩn + verify số giao lộ |
+| `docs/SETUP_PI.md` | Cài đặt Pi lần đầu (flash OS → chạy robot, 14 bước) |
+| `docs/PHAN_CUNG.md` | Sơ đồ đấu nối phần cứng chi tiết + checklist |
+| `docs/CAC_BUOC_HOAT_DONG.md` | Luồng state machine chi tiết (từng state, biến theo dõi) |
+| `docs/TOC_DO.md` | Phân tích thời gian + 6 tối ưu tốc độ + fast profile config |
+| `docs/SA_BAN.md` | Lưới sa bàn O2 đối chiếu từ file in chuẩn + verify số giao lộ |
 
 ## Lưu ý quan trọng
 

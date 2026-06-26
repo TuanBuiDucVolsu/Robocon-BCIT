@@ -8,6 +8,8 @@ Unit test logic — chạy trên PC hoặc Pi, không cần GPIO/camera.
 import os
 import subprocess
 import sys
+import tempfile
+import time
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -15,7 +17,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import config
 from control.motion import LineSensor, Motion
-from main import Robot
+from main import Robot, State
 
 
 def _robot_stub() -> Robot:
@@ -286,6 +288,77 @@ class TestRouteConfigIntegrity(unittest.TestCase):
 
     def test_start_route_not_empty(self):
         self.assertTrue(len(config.ROUTE_START_TO_SHELF_0) > 0)
+
+
+class TestResetForNewRun(unittest.TestCase):
+    """_reset_for_new_run() xoá sạch trạng thái 1 lượt cho chế độ luyện tập."""
+
+    def test_reset_clears_all_run_state(self):
+        robot = object.__new__(Robot)
+        # Giả lập trạng thái "bẩn" sau 1 lượt
+        robot.state = State.DONE
+        robot.packages_delivered = 12
+        robot.pickup_count = 6
+        robot.current_shelf = 3
+        robot.current_tier = 2
+        robot.match_start_time = 123.0
+        robot._tier_retries = 1
+        robot.carried_labels = ["samsung", "foxconn"]
+        robot.delivery_queue = ["amkor"]
+        robot._last_delivered_label = "amkor"
+
+        robot._reset_for_new_run()
+
+        self.assertEqual(robot.state, State.INIT)
+        self.assertEqual(robot.packages_delivered, 0)
+        self.assertEqual(robot.pickup_count, 0)
+        self.assertEqual(robot.current_shelf, 0)
+        self.assertEqual(robot.current_tier, 1)
+        self.assertEqual(robot.match_start_time, 0.0)
+        self.assertEqual(robot._tier_retries, 0)
+        self.assertEqual(robot.carried_labels, [None, None])
+        self.assertEqual(robot.delivery_queue, [])
+        self.assertIsNone(robot._last_delivered_label)
+
+
+class TestMatchResume(unittest.TestCase):
+    """Khôi phục trận sau lỗi: lưu/đọc/xoá mốc bắt đầu để chạy nốt thời gian còn lại."""
+
+    def setUp(self):
+        self.robot = object.__new__(Robot)
+        self.robot.match_start_time = 0.0
+        fd, self.tmp = tempfile.mkstemp(prefix="match_state_")
+        os.close(fd)
+        os.remove(self.tmp)  # để trống — test tự kiểm soát
+        self._saved = config.MATCH_STATE_FILE
+        config.MATCH_STATE_FILE = self.tmp
+
+    def tearDown(self):
+        if os.path.exists(self.tmp):
+            os.remove(self.tmp)
+        config.MATCH_STATE_FILE = self._saved
+
+    def test_no_file_returns_none(self):
+        self.assertIsNone(self.robot._load_match_resume())
+
+    def test_persist_then_load_within_window(self):
+        self.robot.match_start_time = time.time()
+        self.robot._persist_match_start()
+        epoch = self.robot._load_match_resume()
+        self.assertIsNotNone(epoch)
+        self.assertAlmostEqual(epoch, self.robot.match_start_time, places=1)
+
+    def test_stale_match_returns_none_and_clears(self):
+        self.robot.match_start_time = time.time() - config.MATCH_DURATION - 5
+        self.robot._persist_match_start()
+        self.assertIsNone(self.robot._load_match_resume())
+        self.assertFalse(os.path.exists(self.tmp))  # tự xoá file quá hạn
+
+    def test_clear_removes_file(self):
+        self.robot.match_start_time = time.time()
+        self.robot._persist_match_start()
+        self.robot._clear_match_state()
+        self.assertFalse(os.path.exists(self.tmp))
 
 
 try:

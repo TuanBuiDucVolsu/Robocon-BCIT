@@ -21,7 +21,7 @@
 
 **Tổng: 16/16 cổng GPIO — dùng hết, không dư.**
 
-> **Line vs IR — độc lập chức năng, chung MCP3008:** QTR (CH0–5) và IR pallet (CH6–7) là hai nhóm cảm biến riêng (vị trí, nhiệm vụ, code). Chúng cùng nối vào **một chip MCP3008** vì Pi không đọc analog trực tiếp và tiết kiệm GPIO (SPI chỉ 4 chân cho 8 kênh analog). Chi tiết lắp từng bước: `docs/HUONG_DAN_LAP_QTR8A_MCP3008.md`
+> **Line vs IR — độc lập chức năng, chung MCP3008:** QTR (CH0–5) và IR pallet (CH6–7) là hai nhóm cảm biến riêng (vị trí, nhiệm vụ, code). Chúng cùng nối vào **một chip MCP3008** vì Pi không đọc analog trực tiếp và tiết kiệm GPIO (SPI chỉ 4 chân cho 8 kênh analog).
 
 ---
 

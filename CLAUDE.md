@@ -81,8 +81,8 @@ control/lift.py      — 2 càng độc lập: PalletSensors (SPI), require_both
 vision/vision.py     — Nhận diện màu HSV (không dùng AI model), classify_pair()
 debug/server.py      — Flask web debug UI (MJPEG stream, line sensor, classify_pair)
 scripts/             — install.sh, start.sh, robot.service (systemd auto-start)
-docs/                — CAC_BUOC_ROBOT_HOAT_DONG.md, HUONG_DAN_PHAN_CUNG.md, ...
-tests/               — test_motion/lift/vision/smoke + test_logic (31 unit test)
+docs/                — CAC_BUOC_HOAT_DONG.md, PHAN_CUNG.md, ...
+tests/               — test_motion/lift/vision/smoke + test_logic (44 unit test)
 ```
 
 ## State machine (luồng chính)
@@ -144,13 +144,13 @@ get_return_route(from_factory, target_shelf)
   loại cảm biến. Cờ `config.LINE_BLACK_IS_HIGH` (mặc định False) tự đảo tín hiệu tại
   nguồn nếu QTR đọc đen ra giá trị cao → không phải sửa logic phía dưới. Chốt cờ +
   `LINE_THRESHOLD` bằng `python3 -m tools.calibrate_line` (chạy trên Pi).
-- **Số giao lộ các `ROUTE_*`**: ✅ đã đối chiếu file in sa bàn chuẩn (docs/SA_BAN_O2_LUOI.md).
+- **Số giao lộ các `ROUTE_*`**: ✅ đã đối chiếu file in sa bàn chuẩn (docs/SA_BAN.md).
 
 ## Test
 
 | Script | Mục đích |
 |--------|----------|
-| `tests/test_logic.py` | 39 unit test — PC, không GPIO (gồm logic + polarity + phân loại màu) |
+| `tests/test_logic.py` | 44 unit test — PC, không GPIO (logic + polarity + phân loại màu + reset + resume) |
 | `tests/test_motion.py` | 12 option — motor, line, route, exit start |
 | `tests/test_lift.py` | 8 option — nâng/hạ, IR, drop từng càng, NV2 |
 | `tests/test_vision.py` | 7 option — camera, HSV, classify_pair |
@@ -225,8 +225,20 @@ Phân tích màu HSV (OpenCV), không cần model AI.
 - Số giao lộ trong route là ƯỚC LƯỢNG — đội phải đo thực tế trên sa bàn
 - `TURN_TIME = 0.6s` cần calibrate trên robot thật
 - `LIFT_TIME_SHELF_1/2` cần calibrate riêng cho từng càng
-- `DEBUG_MODE = True` khi luyện tập (web debug); `False` khi thi đấu thủ công
-- **systemd** (`scripts/start.sh`): đặt `ROBOT_COMPETE=1` → luôn chạy state machine dù `DEBUG_MODE=True` trong config
+- **3 chế độ chạy** (`main()`):
+  - `ROBOT_LOOP=1` (`scripts/practice.sh`) → **luyện tập lặp**: `run_practice_loop()` chạy
+    state machine → `_reset_for_new_run()` → chờ nút → lặp; KHÔNG dọn phần cứng giữa lượt;
+    Ctrl+C thoát. Ưu tiên trước cả DEBUG_MODE.
+  - `DEBUG_MODE=True` (mặc định) → web debug (điều khiển tay).
+  - thi đấu: `ROBOT_COMPETE=1` (systemd `start.sh`) ép DEBUG_MODE=False → `run()` chạy 1 trận
+    rồi `_shutdown()` thoát hẳn.
+- `run()` = 1 trận; `run_practice_loop()` = nhiều lượt. Cả 2 dùng chung `_run_state_machine()`
+  (không cleanup) + `_shutdown()` (cleanup 1 lần khi thoát).
+- **Khôi phục sau lỗi (thi đấu):** exception giữa trận → `run()` dừng an toàn, thoát **mã 1**
+  → systemd `Restart=on-failure` (RestartSec=2, StartLimitIntervalSec=0) khởi động lại → về
+  INIT chờ nút. Mốc bắt đầu trận lưu ở `MATCH_STATE_FILE` (`/tmp`) nên lần chạy lại dùng
+  **đồng hồ gốc** → chạy nốt thời gian còn lại (`_load_match_resume`/`_persist_match_start`/
+  `_clear_match_state`). Xong sạch hoặc dừng tay (signal) → xoá file → thoát mã 0 (không restart).
 - Không có network call khi thi đấu
 - Vision fail → retry hoặc bỏ tầng, **không** gán label mặc định
 - NV1 pickup cần **cả 2 IR**; NV2 chỉ cần **1 IR**

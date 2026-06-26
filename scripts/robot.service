@@ -1,6 +1,9 @@
 [Unit]
 Description=Robot Tự Động Bảng O2 — Robocon 2026
 After=multi-user.target
+# Không giới hạn tần suất restart — để robot luôn tự khởi động lại trong suốt trận khi
+# gặp lỗi. Logic resume tự dừng sau khi hết 240s nên không lặp vô hạn qua nhiều trận.
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
@@ -8,7 +11,7 @@ User=mbw12345
 WorkingDirectory=/home/mbw12345/Robocon-BCIT
 ExecStart=/bin/bash /home/mbw12345/Robocon-BCIT/scripts/start.sh
 Restart=on-failure
-RestartSec=5
+RestartSec=2
 StandardOutput=append:/home/mbw12345/Robocon-BCIT/robot_log.txt
 StandardError=append:/home/mbw12345/Robocon-BCIT/robot_log.txt
 

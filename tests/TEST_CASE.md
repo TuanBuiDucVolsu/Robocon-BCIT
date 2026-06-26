@@ -14,7 +14,7 @@ Thư mục `tests/` có 2 nhóm test:
 
 ## A. Unit test — `test_logic.py` (chạy trên PC, không cần GPIO)
 
-Kiểm tra logic route, cost, polarity cảm biến, phân loại màu, plan delivery… bằng mock. **39 test.**
+Kiểm tra logic route, cost, polarity cảm biến, phân loại màu, reset luyện tập, plan delivery… bằng mock. **44 test.**
 
 ```bash
 cd /home/mbw12345/Robocon-BCIT
@@ -127,7 +127,7 @@ python3 tests/test_smoke.py
 # Chốt LINE_BLACK_IS_HIGH + LINE_THRESHOLD cho QTR-8A
 python3 -m tools.calibrate_line
 ```
-Xem thêm: [../docs/SA_BAN_O2_LUOI.md](../docs/SA_BAN.md).
+Xem thêm: [../docs/SA_BAN.md](../docs/SA_BAN.md).
 
 ---
 
@@ -138,7 +138,8 @@ Xem thêm: [../docs/SA_BAN_O2_LUOI.md](../docs/SA_BAN.md).
 3. `test_motion` #5 #4 (cảm biến line) → #10 (`TURN_TIME`) → #7 (bám line) → #2 #3.
 4. `test_lift` #3 (IR) → #1 #2 → #4..#8.
 5. `test_vision` #2 (HSV) → #6 (cặp kiện).
-6. `test_smoke` #1 → #2 → #3 → #5 → cuối cùng chạy `python3 main.py`.
+6. `test_smoke` #1 → #2 → #3 → #5 → cuối cùng chạy full bằng **`bash scripts/practice.sh`**
+   (luyện tập lặp: xong 1 lượt tự reset, nhấn nút chạy lại, Ctrl+C thoát).
 
 > Các giá trị cần đo (TURN_TIME, LINE_KP/KD, LIFT_TIME_*, COLOR_RANGES…) cập nhật trong
 > [../config.py](../config.py). Số giao lộ các `ROUTE_*` đã verify từ file in chuẩn — không cần đếm lại.

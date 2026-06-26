@@ -5,6 +5,7 @@ State machine điều phối toàn bộ nhiệm vụ.
 Nâng 2 kiện hàng/lượt (2 pallet cạnh nhau trên cùng tầng kệ).
 """
 
+import os
 import time
 import enum
 import logging
@@ -93,6 +94,11 @@ class Robot:
         # Label cuối cùng đã giao thực tế (dùng để chọn route quay về)
         self._last_delivered_label: str | None = None
 
+        # Khôi phục sau lỗi (chế độ thi đấu)
+        self._resume_epoch: float | None = None   # mốc trận dở để chạy nốt thời gian
+        self._enable_match_persist = False         # chỉ True ở run() thi đấu
+        self._exit_code = 0                        # main() dùng để systemd restart khi ≠ 0
+
         # Nút khởi động
         self._start_button = Button(config.START_BUTTON_PIN, pull_up=True, bounce_time=0.1)
 
@@ -107,6 +113,8 @@ class Robot:
         logger.warning("Nhận tín hiệu dừng (signal %s)", sig)
         self.state = State.EMERGENCY_STOP
         self._emergency_stop()
+        # Dừng chủ động (Ctrl+C / systemctl stop) → xoá trận dở để không tự resume lần sau
+        self._clear_match_state()
         sys.exit(0)
 
     # ----------------------------------------------------------
@@ -210,8 +218,46 @@ class Robot:
         logger.info("Trạng thái: INIT — chờ nút khởi động...")
         self._start_button.wait_for_press()
         logger.info("Nút khởi động đã được nhấn!")
-        self.match_start_time = time.time()
+        if self._resume_epoch is not None:
+            # Khôi phục sau lỗi: dùng lại đồng hồ gốc → chạy nốt thời gian còn lại
+            self.match_start_time = self._resume_epoch
+            logger.warning("KHÔI PHỤC sau lỗi — đồng hồ gốc, còn ~%.0fs", self.time_remaining())
+        else:
+            self.match_start_time = time.time()
+            if self._enable_match_persist:
+                self._persist_match_start()
         return State.START
+
+    # ---- Khôi phục sau lỗi (chỉ chế độ thi đấu, qua systemd Restart=on-failure) ----
+
+    def _state_file(self) -> str:
+        return getattr(config, "MATCH_STATE_FILE", "/tmp/robot_match_state")
+
+    def _persist_match_start(self):
+        """Lưu mốc bắt đầu trận để restart sau lỗi còn biết thời gian đã trôi."""
+        try:
+            with open(self._state_file(), "w") as f:
+                f.write(str(self.match_start_time))
+        except OSError as e:
+            logger.warning("Không ghi được file trạng thái trận: %s", e)
+
+    def _load_match_resume(self) -> float | None:
+        """Trả mốc bắt đầu nếu đang có trận dở (còn trong 240s); quá hạn → None + xoá file."""
+        try:
+            with open(self._state_file()) as f:
+                epoch = float(f.read().strip())
+        except (OSError, ValueError):
+            return None
+        if time.time() - epoch >= config.MATCH_DURATION:
+            self._clear_match_state()
+            return None
+        return epoch
+
+    def _clear_match_state(self):
+        try:
+            os.remove(self._state_file())
+        except OSError:
+            pass
 
     def _handle_start(self) -> State:
         logger.info("Trạng thái: START — bắt đầu trận đấu (240s)")
@@ -585,42 +631,103 @@ class Robot:
         State.TASK2_DROP: "_handle_task2_drop",
     }
 
-    def run(self):
-        """Chạy state machine cho đến khi DONE hoặc hết giờ."""
+    def _run_state_machine(self):
+        """Chạy state machine MỘT lượt đến DONE/EMERGENCY_STOP. KHÔNG dọn phần cứng."""
         logger.info("========== BẮT ĐẦU STATE MACHINE ==========")
+        while self.state not in (State.DONE, State.EMERGENCY_STOP):
+            handler_name = self.STATE_HANDLERS.get(self.state)
+            if handler_name is None:
+                logger.error("Không có handler cho state: %s", self.state)
+                break
 
+            handler = getattr(self, handler_name)
+            next_state = handler()
+
+            logger.info("Chuyển trạng thái: %s -> %s", self.state.value, next_state.value)
+            self.state = next_state
+
+            if self.match_start_time > 0 and not self.is_time_safe():
+                logger.warning("Hết thời gian an toàn! Dừng lại.")
+                self.state = State.DONE
+
+    def run(self):
+        """
+        Chế độ THI ĐẤU: chạy MỘT trận rồi dọn dẹp và thoát.
+        Nếu gặp exception → dừng an toàn rồi thoát **mã 1** để systemd (Restart=on-failure)
+        khởi động lại; lần chạy mới đọc lại đồng hồ trận → chạy NỐT thời gian còn lại
+        (về INIT chờ nhấn nút). Xong sạch → xoá file trận → thoát mã 0 (không restart).
+        """
+        self._enable_match_persist = True
+        self._resume_epoch = self._load_match_resume()
+        if self._resume_epoch is not None:
+            logger.warning("Phát hiện trận đang dở — sẽ KHÔI PHỤC khi nhấn nút (còn ~%.0fs)",
+                           config.MATCH_DURATION - (time.time() - self._resume_epoch))
+
+        crashed = False
         try:
-            while self.state not in (State.DONE, State.EMERGENCY_STOP):
-                handler_name = self.STATE_HANDLERS.get(self.state)
-                if handler_name is None:
-                    logger.error("Không có handler cho state: %s", self.state)
-                    break
-
-                handler = getattr(self, handler_name)
-                next_state = handler()
-
-                logger.info("Chuyển trạng thái: %s -> %s", self.state.value, next_state.value)
-                self.state = next_state
-
-                if self.match_start_time > 0 and not self.is_time_safe():
-                    logger.warning("Hết thời gian an toàn! Dừng lại.")
-                    self.state = State.DONE
-
+            self._run_state_machine()
         except Exception as e:
             logger.exception("LỖI NGHIÊM TRỌNG: %s", e)
             self._emergency_stop()
-
+            crashed = True
         finally:
-            self._finish()
+            self._log_result()
+            if crashed:
+                self._exit_code = 1   # giữ file trận → systemd restart sẽ chạy nốt
+                logger.error("Thoát mã 1 — systemd sẽ khởi động lại để chạy nốt trận")
+            else:
+                self._clear_match_state()
+            self._shutdown()
 
-    def _finish(self):
+    def run_practice_loop(self):
+        """
+        Chế độ LUYỆN TẬP: chạy 1 lượt → log kết quả → reset → CHỜ NHẤN NÚT → lặp lại.
+        KHÔNG dọn phần cứng giữa các lượt (giữ nút + motor sẵn sàng). Ctrl+C để thoát.
+        Lỗi 1 lượt không làm sập chương trình — dừng motor rồi về chờ nút lượt sau.
+        """
+        run_no = 0
+        try:
+            while True:
+                run_no += 1
+                logger.info("=" * 52)
+                logger.info("LƯỢT LUYỆN TẬP #%d — đặt robot về ô xuất phát (hướng 9h) "
+                            "rồi NHẤN NÚT để bắt đầu", run_no)
+                logger.info("=" * 52)
+                self._reset_for_new_run()
+                try:
+                    self._run_state_machine()
+                except Exception as e:
+                    logger.exception("Lỗi lượt #%d: %s — dừng motor, về chờ nút", run_no, e)
+                self.motion.stop()
+                self._log_result()
+        finally:
+            self._shutdown()
+
+    def _reset_for_new_run(self):
+        """Đặt lại toàn bộ trạng thái cho 1 lượt mới (dùng trong luyện tập)."""
+        self.state = State.INIT
+        self.packages_delivered = 0
+        self.pickup_count = 0
+        self.current_shelf = 0
+        self.current_tier = 1
+        self.match_start_time = 0.0
+        self._tier_retries = 0
+        self.carried_labels = [None, None]
+        self.delivery_queue = []
+        self._last_delivered_label = None
+
+    def _log_result(self):
         self.motion.stop()
         elapsed = self.elapsed() if self.match_start_time > 0 else 0
-        logger.info("========== KẾT THÚC ==========")
+        logger.info("========== KẾT THÚC LƯỢT ==========")
         logger.info("Thời gian: %.1f giây", elapsed)
         logger.info("Kiện hàng đã giao: %d/%d (trong %d lượt nâng)",
                      self.packages_delivered, config.TOTAL_PACKAGES_TASK1,
                      self.pickup_count)
+
+    def _shutdown(self):
+        """Dọn dẹp phần cứng MỘT lần khi thoát hẳn (thi đấu xong hoặc Ctrl+C)."""
+        self.motion.stop()
         self.motion.cleanup()
         self.lift.cleanup()
         self.vision.cleanup()
@@ -633,6 +740,13 @@ class Robot:
 # ============================================================
 
 def main():
+    # Chế độ LUYỆN TẬP (ROBOT_LOOP=1): chạy state machine lặp, nhấn nút mỗi lượt.
+    # Ưu tiên trước cả DEBUG_MODE để dùng được nút thật trên sa bàn.
+    if os.environ.get("ROBOT_LOOP") == "1":
+        logger.warning("*** CHẾ ĐỘ LUYỆN TẬP — nhấn nút để chạy lại mỗi lượt, Ctrl+C để thoát ***")
+        Robot().run_practice_loop()
+        return
+
     if config.DEBUG_MODE:
         logger.warning("*** CHẾ ĐỘ DEBUG — KHÔNG DÙNG KHI THI ĐẤU ***")
         from debug import run_debug_server
@@ -641,6 +755,7 @@ def main():
 
     robot = Robot()
     robot.run()
+    sys.exit(robot._exit_code)   # ≠ 0 khi lỗi → systemd restart để chạy nốt trận
 
 
 if __name__ == "__main__":

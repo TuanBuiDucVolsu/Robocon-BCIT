@@ -4,7 +4,7 @@
 > (Google Drive trong Phụ lục 04 thể lệ). Đây là bản in thật, **đúng tỉ lệ** —
 > không phải sơ đồ minh hoạ trong file Thể lệ.pdf.
 >
-> Sơ đồ chú thích: [sa_ban_O2_luoi_chu_thich.png](sa_ban_O2_luoi_chu_thich.png)
+> Sơ đồ chú thích: [sa_ban.png](sa_ban.png)
 
 ## 1. Đường màu đen = đường line
 
@@ -55,7 +55,7 @@
 
 Số giao lộ đã chốt. Những thứ sau là **timing/cảm biến**, đo trên sân thật:
 
-- `TURN_TIME` — thời gian xoay 90° (xem [TOI_UU_TOC_DO.md](TOI_UU_TOC_DO.md)).
+- `TURN_TIME` — thời gian xoay 90° (xem [TOC_DO.md](TOC_DO.md)).
 - `LINE_KP` / `LINE_KD`, `LINE_THRESHOLD`, `INTERSECTION_THRESHOLD`.
 - **⚠️ Cực kỳ lưu ý cảm biến QTR-8A:** sa bàn là **line đen / nền sáng** (khớp giả
   định config). Nhưng nhiều module QTR-8A đọc bề mặt **đen ra giá trị CAO** (ngược).
