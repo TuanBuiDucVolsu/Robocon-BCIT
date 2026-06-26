@@ -127,7 +127,7 @@ python3 tests/test_smoke.py
 # Chốt LINE_BLACK_IS_HIGH + LINE_THRESHOLD cho QTR-8A
 python3 -m tools.calibrate_line
 ```
-Xem thêm: [../docs/SA_BAN_O2_LUOI.md](../docs/SA_BAN_O2_LUOI.md).
+Xem thêm: [../docs/SA_BAN_O2_LUOI.md](../docs/SA_BAN.md).
 
 ---
 
