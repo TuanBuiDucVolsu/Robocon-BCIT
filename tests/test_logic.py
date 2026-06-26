@@ -54,6 +54,34 @@ class TestBetweenRoute(unittest.TestCase):
     def test_unknown_pair_returns_empty(self):
         self.assertEqual(Robot._between_route("unknown_a", "unknown_b"), [])
 
+    def test_reverse_fallback_when_direct_missing(self):
+        """Chiều ngược được dùng nếu thiếu key trực tiếp."""
+        saved = config.ROUTE_BETWEEN_FACTORIES.pop(("samsung", "foxconn"), None)
+        try:
+            route = Robot._between_route("samsung", "foxconn")
+            self.assertEqual(route, config.ROUTE_BETWEEN_FACTORIES[("foxconn", "samsung")])
+        finally:
+            if saved is not None:
+                config.ROUTE_BETWEEN_FACTORIES[("samsung", "foxconn")] = saved
+
+
+class TestReturnCost(unittest.TestCase):
+    def test_tier1_targets_same_shelf(self):
+        robot = _robot_stub()
+        robot.current_shelf = 0
+        robot.current_tier = 1
+        cost = robot._return_cost("foxconn")
+        route = config.get_return_route("foxconn", 0)
+        self.assertEqual(cost, Robot._route_cost(route))
+
+    def test_tier2_targets_next_shelf(self):
+        robot = _robot_stub()
+        robot.current_shelf = 0
+        robot.current_tier = 2
+        cost = robot._return_cost("foxconn")
+        route = config.get_return_route("foxconn", 1)
+        self.assertEqual(cost, Robot._route_cost(route))
+
 
 class TestPlanDelivery(unittest.TestCase):
     def test_same_label_single_stop(self):
@@ -63,6 +91,8 @@ class TestPlanDelivery(unittest.TestCase):
 
     def test_different_labels_picks_shorter_route(self):
         robot = _robot_stub()
+        robot.current_shelf = 0
+        robot.current_tier = 1
         robot._plan_delivery("samsung", "foxconn")
         self.assertEqual(len(robot.delivery_queue), 2)
         self.assertSetEqual(set(robot.delivery_queue), {"samsung", "foxconn"})
@@ -70,10 +100,12 @@ class TestPlanDelivery(unittest.TestCase):
         cost_a = (
             Robot._route_cost(config.ROUTE_SHELF_TO_FACTORY["samsung"])
             + Robot._route_cost(Robot._between_route("samsung", "foxconn"))
+            + robot._return_cost("foxconn")
         )
         cost_b = (
             Robot._route_cost(config.ROUTE_SHELF_TO_FACTORY["foxconn"])
             + Robot._route_cost(Robot._between_route("foxconn", "samsung"))
+            + robot._return_cost("samsung")
         )
         if cost_a <= cost_b:
             self.assertEqual(robot.delivery_queue[0], "samsung")
@@ -89,6 +121,38 @@ class TestLineSensorDigital(unittest.TestCase):
         self.assertEqual(digital, [1, 1, 0, 0])
 
 
+class TestLineSensorPolarity(unittest.TestCase):
+    """LINE_BLACK_IS_HIGH đảo tín hiệu ngay tại nguồn để giữ 0.0=line."""
+
+    def setUp(self):
+        self._bus = MagicMock()
+        self._bus.available = True
+        self._bus.read_many.return_value = [0.1, 0.2, 0.8, 0.9, 0.5, 0.6]
+        self._saved = config.LINE_BLACK_IS_HIGH
+
+    def tearDown(self):
+        config.LINE_BLACK_IS_HIGH = self._saved
+
+    def test_normal_polarity_passthrough(self):
+        config.LINE_BLACK_IS_HIGH = False
+        sensor = LineSensor(self._bus)
+        self.assertEqual(sensor.read_raw(), [0.1, 0.2, 0.8, 0.9, 0.5, 0.6])
+
+    def test_inverted_polarity(self):
+        config.LINE_BLACK_IS_HIGH = True
+        sensor = LineSensor(self._bus)
+        got = [round(v, 2) for v in sensor.read_raw()]
+        self.assertEqual(got, [0.9, 0.8, 0.2, 0.1, 0.5, 0.4])
+
+    def test_inverted_keeps_line_low_for_digital(self):
+        # Mắt trên line đen (đọc CAO 0.95) → sau đảo phải thành "trên line" (digital 1)
+        config.LINE_BLACK_IS_HIGH = True
+        self._bus.read_many.return_value = [0.95, 0.95, 0.05, 0.05, 0.05, 0.05]
+        sensor = LineSensor(self._bus)
+        digital = LineSensor.digital_from_raw(sensor.read_raw())
+        self.assertEqual(digital, [1, 1, 0, 0, 0, 0])
+
+
 class TestMotionRoute(unittest.TestCase):
     def setUp(self):
         self.motion = Motion()
@@ -99,17 +163,17 @@ class TestMotionRoute(unittest.TestCase):
     def test_navigate_zero_returns_true(self):
         self.assertTrue(self.motion.navigate_intersections(0))
 
-    @patch.object(Motion, "follow_line_until_intersection", return_value=False)
-    def test_execute_route_fails_on_lost_line(self, _mock_follow):
+    @patch.object(Motion, "navigate_intersections", return_value=False)
+    def test_execute_route_fails_on_lost_line(self, _mock_nav):
         self.assertFalse(self.motion.execute_route([("forward", 1)]))
 
-    @patch.object(Motion, "follow_line_until_intersection", return_value=True)
-    def test_execute_route_succeeds(self, _mock_follow):
+    @patch.object(Motion, "navigate_intersections", return_value=True)
+    def test_execute_route_succeeds(self, _mock_nav):
         self.assertTrue(self.motion.execute_route([("forward", 2)]))
 
+    @patch.object(Motion, "navigate_intersections", return_value=True)
     @patch.object(Motion, "turn_left_90")
-    @patch.object(Motion, "follow_line_until_intersection", return_value=True)
-    def test_execute_route_with_turn(self, _mock_follow, mock_turn):
+    def test_execute_route_with_turn(self, mock_turn, _mock_nav):
         route = [("forward", 1), ("left",), ("forward", 1)]
         self.assertTrue(self.motion.execute_route(route))
         mock_turn.assert_called_once()
@@ -163,6 +227,56 @@ class TestConfigCompeteMode(unittest.TestCase):
         self.assertEqual(result.stdout.strip(), "False")
 
 
+class TestVerticalOnShelfColumn(unittest.TestCase):
+    def test_same_row_empty(self):
+        self.assertEqual(config._vertical_on_shelf_column(0, 0), [])
+
+    def test_down_and_up_differ(self):
+        down = config._vertical_on_shelf_column(4, 0)
+        up = config._vertical_on_shelf_column(0, 4)
+        self.assertNotEqual(down, up)
+        self.assertEqual(down[0], ("right",))
+        self.assertEqual(up[0], ("left",))
+        self.assertEqual(down[1], ("forward", 4))
+        self.assertEqual(up[1], ("forward", 4))
+
+
+class TestReturnRoute(unittest.TestCase):
+    def test_samsung_to_kesh3_adds_vertical(self):
+        """Samsung (R4) → Kệ 3 (R0) phải có thêm đoạn dọc so với base."""
+        base = config.ROUTE_FACTORY_TO_SHELF["samsung"]
+        route = config.get_return_route("samsung", 0)
+        self.assertGreater(len(route), len(base))
+        self.assertEqual(route[:len(base)], base)
+
+    def test_foxconn_to_kesh3_same_row(self):
+        """Foxconn (R0) → Kệ 3 (R0) — không cần đoạn dọc thêm."""
+        route = config.get_return_route("foxconn", 0)
+        self.assertEqual(route, config.ROUTE_FACTORY_TO_SHELF["foxconn"])
+
+    def test_foxconn_to_kesh2_goes_up(self):
+        route = config.get_return_route("foxconn", 1)
+        self.assertIn(("forward", 2), route)
+
+    def test_unknown_factory_returns_base_only(self):
+        route = config.get_return_route("unknown", 0)
+        self.assertEqual(route, [])
+
+
+class TestNextPickupShelf(unittest.TestCase):
+    def test_tier1_advances_to_same_shelf(self):
+        robot = _robot_stub()
+        robot.current_shelf = 0
+        robot.current_tier = 1
+        self.assertEqual(robot._next_pickup_shelf(), 0)
+
+    def test_tier2_advances_to_next_shelf(self):
+        robot = _robot_stub()
+        robot.current_shelf = 0
+        robot.current_tier = 2
+        self.assertEqual(robot._next_pickup_shelf(), 1)
+
+
 class TestRouteConfigIntegrity(unittest.TestCase):
     """Route trong config phải có cặp BETWEEN_FACTORIES đầy đủ khi cần."""
 
@@ -172,6 +286,52 @@ class TestRouteConfigIntegrity(unittest.TestCase):
 
     def test_start_route_not_empty(self):
         self.assertTrue(len(config.ROUTE_START_TO_SHELF_0) > 0)
+
+
+try:
+    import cv2 as _cv2
+    import numpy as _np
+except ImportError:
+    _cv2 = _np = None
+
+
+@unittest.skipIf(_cv2 is None or _np is None, "cần cv2 + numpy")
+class TestVisionColorClassify(unittest.TestCase):
+    """_classify_by_color: ưu tiên màu sắc nét hơn Amkor (xám)."""
+
+    @classmethod
+    def setUpClass(cls):
+        from vision.vision import Vision
+        cls.vision = object.__new__(Vision)  # bỏ qua __init__ (không cần camera)
+
+    def _frame(self, fill_rgb, center_rgb=None, center_side=0):
+        """Ảnh RGB 100x100 nền fill_rgb, ô vuông giữa center_rgb cạnh center_side."""
+        f = _np.full((100, 100, 3), fill_rgb, dtype=_np.uint8)
+        if center_rgb is not None and center_side > 0:
+            s = (100 - center_side) // 2
+            f[s:s + center_side, s:s + center_side] = center_rgb
+        return f
+
+    def _label(self, frame):
+        return self.vision._classify_by_color(frame)[0]
+
+    def test_solid_blue_is_samsung(self):
+        self.assertEqual(self._label(self._frame((0, 0, 255))), "samsung")
+
+    def test_solid_yellow_is_foxconn(self):
+        self.assertEqual(self._label(self._frame((255, 255, 0))), "foxconn")
+
+    def test_solid_red_is_hana(self):
+        self.assertEqual(self._label(self._frame((255, 0, 0))), "hana_micron")
+
+    def test_solid_gray_is_amkor(self):
+        self.assertEqual(self._label(self._frame((160, 160, 160))), "amkor")
+
+    def test_blue_chip_on_gray_bg_is_samsung_not_amkor(self):
+        # Regression: nền xám 56% > chip xanh 44% pixel. Logic cũ -> amkor (sai).
+        # Logic mới ưu tiên màu chromatic đạt ngưỡng -> samsung (đúng).
+        frame = self._frame((160, 160, 160), center_rgb=(0, 0, 255), center_side=40)
+        self.assertEqual(self._label(frame), "samsung")
 
 
 if __name__ == "__main__":

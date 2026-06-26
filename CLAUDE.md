@@ -81,7 +81,8 @@ control/lift.py      — 2 càng độc lập: PalletSensors (SPI), require_both
 vision/vision.py     — Nhận diện màu HSV (không dùng AI model), classify_pair()
 debug/server.py      — Flask web debug UI (MJPEG stream, line sensor, classify_pair)
 scripts/             — install.sh, start.sh, robot.service (systemd auto-start)
-docs/                — CAC_BUOC_ROBOT_HOAT_DONG.md, PHAN_CUNG.md
+docs/                — CAC_BUOC_ROBOT_HOAT_DONG.md, HUONG_DAN_PHAN_CUNG.md, ...
+tests/               — test_motion/lift/vision/smoke + test_logic (31 unit test)
 ```
 
 ## State machine (luồng chính)
@@ -95,8 +96,10 @@ NAVIGATE_TO_SHELF → PICKUP_PAIR (approach + classify_pair + pickup + retreat)
 ```
 
 - **Không còn state SCAN_PAIR riêng** — quét camera nằm trong PICKUP_PAIR, sau `_approach_shelf()`
-- **`_last_delivered_label`**: route quay về kho, route NV2, và route DELIVER_SECOND (từ NM1 → NM2)
-- **`_plan_delivery()`**: so sánh route cost gồm forward + turn (ROUTE_TURN_COST) + đoạn BETWEEN_FACTORIES
+- **`_last_delivered_label`**: route DELIVER_SECOND, NV2, và điểm xuất phát `get_return_route()`
+- **`get_return_route(factory, target_shelf)`**: quay về đúng hàng kệ (R0/R2/R4) trước pickup tầng 2
+- **`_plan_delivery()`**: so sánh route cost = shelf→NM1 + BETWEEN + **return về kệ** (`_return_cost`)
+- **`_between_route(a,b)`**: tra `ROUTE_BETWEEN_FACTORIES`; fallback chiều `(b,a)` nếu thiếu key
 - **`_retry_or_skip_tier()`**: scan/nâng/**navigate/approach** fail → retry MAX_TIER_RETRIES lần trước khi bỏ tầng
 - **`_run_route()` / `_approach_shelf()` / `_retreat_from_shelf()`**: wrapper kiểm tra kết quả navigation & siêu âm
 
@@ -105,12 +108,55 @@ NAVIGATE_TO_SHELF → PICKUP_PAIR (approach + classify_pair + pickup + retreat)
 | Tình huống | Hành vi |
 |-----------|---------|
 | `execute_route()` / `navigate_intersections()` fail (mất line, timeout) | Trả `False`; log lỗi |
-| Navigate đến kệ fail | `_retry_or_skip_tier("navigate")` |
+| Navigate đến kệ fail | `_retry_or_skip_tier("navigate")` → **NAVIGATE_TO_SHELF** |
 | `approach_shelf()` timeout ở PICKUP | `_retry_or_skip_tier("approach")` |
 | Navigate DELIVER fail | Log cảnh báo, **vẫn thử hạ** (tiết kiệm thời gian) |
 | Navigate RETURN fail | Log cảnh báo, vẫn `_advance_position()` |
 | Navigate NV2 fail | Chuyển `DONE` (bỏ NV2) |
+| Không có HC-SR04 | `approach_shelf()` / `retreat_from_shelf()` → `False` (không tiến mù) |
 | Route rỗng | Log warning, coi là fail |
+
+## Route quay về kho (`get_return_route`)
+
+```python
+get_return_route(from_factory, target_shelf)
+  = ROUTE_FACTORY_TO_SHELF[factory]     # nhà máy → cột kệ cùng hàng
+  + _vertical_on_shelf_column(from, to) # dọc cột kệ nếu khác hàng
+```
+
+- `FACTORY_BOARD_ROW`: samsung=R4, hana=R3, amkor=R1, foxconn=R0
+- `SHELF_BOARD_ROW`: Kệ3=0→R0, Kệ2=1→R2, Kệ1=2→R4
+- **Xuống hàng** (R4→R0): `right → forward N → left`
+- **Lên hàng** (R0→R4): `left → forward N → right`
+- `target_shelf` = `_next_pickup_shelf()` **trước** `_advance_position()`
+- Tầng 2 cùng kệ: sau return robot đã ở đúng hàng → `NAVIGATE_TO_SHELF` tại chỗ
+
+## Motion — điều khiển động cơ & tiếp cận
+
+- **PWM cả 2 chiều**: chân tiến (IN1/IN3) và lùi (IN2/IN4) đều là `PWMOutputDevice`.
+  `backward()` / phần lùi của `turn_left/right()` chạy ĐÚNG tốc độ (không full speed) →
+  retreat êm, không giật pallet; xoay cân tâm → calibrate `TURN_TIME` chính xác hơn.
+- **`approach_shelf()` 2 pha**: nhanh (`APPROACH_FAST_SPEED`) khi > `APPROACH_SLOW_DISTANCE`,
+  chậm (`APPROACH_SLOW_SPEED`) khi gần → dừng chính xác ở `APPROACH_DISTANCE` (4cm).
+- **Siêu âm median**: `approach_shelf` / `retreat_from_shelf` dùng `get_distance(samples=3)`
+  (median) chống nhiễu HC-SR04 → tránh dừng sai gây retry tầng.
+- **Polarity QTR-8A**: `LineSensor.read_raw()` chuẩn hoá để **0.0 = trên line** bất kể
+  loại cảm biến. Cờ `config.LINE_BLACK_IS_HIGH` (mặc định False) tự đảo tín hiệu tại
+  nguồn nếu QTR đọc đen ra giá trị cao → không phải sửa logic phía dưới. Chốt cờ +
+  `LINE_THRESHOLD` bằng `python3 -m tools.calibrate_line` (chạy trên Pi).
+- **Số giao lộ các `ROUTE_*`**: ✅ đã đối chiếu file in sa bàn chuẩn (docs/SA_BAN_O2_LUOI.md).
+
+## Test
+
+| Script | Mục đích |
+|--------|----------|
+| `tests/test_logic.py` | 39 unit test — PC, không GPIO (gồm logic + polarity + phân loại màu) |
+| `tests/test_motion.py` | 12 option — motor, line, route, exit start |
+| `tests/test_lift.py` | 8 option — nâng/hạ, IR, drop từng càng, NV2 |
+| `tests/test_vision.py` | 7 option — camera, HSV, classify_pair |
+| `tests/test_smoke.py` | Smoke tích hợp trên sa bàn |
+
+Scenario calibrate quan trọng: **Kệ3 T1 → giao foxconn → samsung → return → Kệ3 T2**
 
 ## Lift API (càng độc lập + 2 IR qua SPI)
 
@@ -135,8 +181,9 @@ Các route định nghĩa trong `config.py`:
 - `ROUTE_START_TO_SHELF_0` — sau exit start (đã chạm line) → forward 1 giao lộ → Kệ 3
 - `ROUTE_BETWEEN_SHELVES` — Kệ → kệ tiếp (tiến 2 giao lộ)
 - `ROUTE_SHELF_TO_FACTORY[label]` — Kệ → nhà máy (quay phải 2 lần + đi ngang + rẽ nếu cần)
-- `ROUTE_FACTORY_TO_SHELF[label]` — Nhà máy → về kệ
-- `ROUTE_BETWEEN_FACTORIES[(a,b)]` — Giữa 2 nhà máy (12 cặp đầy đủ cả 2 chiều)
+- `ROUTE_FACTORY_TO_SHELF[label]` — Đoạn cơ bản: nhà máy → cột kệ (cùng hàng NM)
+- `get_return_route(factory, target_shelf)` — Ghép base + đoạn dọc đúng hàng kệ đích
+- `ROUTE_BETWEEN_FACTORIES[(a,b)]` — Giữa 2 nhà máy (12 cặp 2 chiều; `_between_route` fallback)
 - `ROUTE_FACTORY_TO_LOOSE[label]` — Nhà máy → Kệ 4 (thụt dưới R0)
 - `ROUTE_LOOSE_TO_JOINT` — Kệ 4 → nhà máy liên hợp (R2)
 
@@ -164,9 +211,14 @@ Phân tích màu HSV (OpenCV), không cần model AI.
 - **Samsung (01)**: chip xanh dương — H=90-130, S>60, V>40
 - **Foxconn (02)**: chip vàng đồng — H=15-40, S>60, V>80
 - **Amkor (03)**: khối nhôm Al xám — S<40 (saturation thấp)
-- **Hana Micron (04)**: QR code viền đỏ — H=0-10 hoặc 160-179
+- **Hana Micron (04)**: QR code + **ngoặc đỏ ở GÓC** — H=0-10 hoặc 160-179
 - Nâng 2 kiện → chia ảnh trái/phải → `classify_pair()`
 - Camera resolution: 640x480
+- **Ưu tiên màu sắc nét hơn Amkor (xám)**: `_classify_by_color` chọn màu chromatic
+  (`CHROMATIC_LABELS`) nếu đạt ngưỡng, KỂ CẢ khi Amkor đếm nhiều pixel hơn → nền
+  trắng/xám không "ăn" mất Samsung/Hana. ROI cắt giữa theo `ROI_MARGIN` (giảm nếu
+  Hana hay bị nhầm Amkor vì ngoặc đỏ nằm ở góc). Giá trị HSV/ROI vẫn cần chốt bằng
+  camera thật (test_vision #2/#6).
 
 ## Quy tắc quan trọng
 

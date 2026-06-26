@@ -177,10 +177,10 @@ L298N #1:
   5V (logic)      ──→ XH-M401 output 5V
   GND             ──→ GND chung
 
-  IN1 ←── GPIO 17  →  Motor TRÁI tiến (có PWM điều tốc)
-  IN2 ←── GPIO 27  →  Motor TRÁI lùi
-  IN3 ←── GPIO 22  →  Motor PHẢI tiến (có PWM điều tốc)
-  IN4 ←── GPIO 23  →  Motor PHẢI lùi
+  IN1 ←── GPIO 17  →  Motor TRÁI tiến (PWM điều tốc)
+  IN2 ←── GPIO 27  →  Motor TRÁI lùi (PWM điều tốc)
+  IN3 ←── GPIO 22  →  Motor PHẢI tiến (PWM điều tốc)
+  IN4 ←── GPIO 23  →  Motor PHẢI lùi (PWM điều tốc)
 
   OUT1/OUT2 ──→ Motor bánh TRÁI
   OUT3/OUT4 ──→ Motor bánh PHẢI
@@ -188,8 +188,10 @@ L298N #1:
 
 ### Lưu ý
 
-- **PWM** trên IN1 và IN3 để điều chỉnh tốc độ (0-100%)
-- IN2 và IN4 chỉ dùng digital (bật/tắt) cho chiều lùi
+- **PWM cả 2 chiều**: IN1/IN3 (tiến) và IN2/IN4 (lùi) đều dùng PWM → điều tốc được
+  cả tiến lẫn lùi. Lùi (retreat) và phần lùi của xoay 90° chạy đúng tốc độ cài đặt,
+  không còn full speed → êm hơn, không giật pallet, xoay cân tâm.
+- Khi tiến: IN1/IN3 = PWM(speed), IN2/IN4 = 0. Khi lùi: ngược lại.
 - Jumper ENA/ENB trên L298N giữ nguyên (enable mặc định)
 
 ---
@@ -337,6 +339,12 @@ Nhìn từ trên xuống:
 - [ ] Thi đấu / systemd: `scripts/start.sh` đặt `ROBOT_COMPETE=1` → state machine (không mở web)
 - [ ] Robot ≤ 400×400×400mm khi xuất phát, **quay mặt sang trái (9h)** trong ô start
 - [ ] Test exit start: `python3 tests/test_motion.py` option **6**
+- [ ] Test route: option **11**; calibrate xoay 90°: option **10**
+- [ ] Test classify_pair: `python3 tests/test_vision.py` option **6**
+- [ ] Test drop từng càng: `python3 tests/test_lift.py` option **6**
+- [ ] Smoke test sa bàn: `python3 tests/test_smoke.py` option **5**
+- [ ] Calibrate return route: scenario **foxconn→samsung → pickup Kệ3 T2**
+- [ ] Unit test: `python3 -m unittest tests.test_logic -v` (31 test, PC/Pi)
 - [ ] Pin ≤ 12V, ≤ 5000mAh
 
 

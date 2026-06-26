@@ -41,10 +41,18 @@ class LineSensor:
         return config.LINE_THRESHOLD / 1023.0
 
     def read_raw(self) -> list[float]:
-        """Đọc giá trị analog 0.0-1.0 (0.0 = đen/line, 1.0 = trắng/nền)."""
+        """Đọc giá trị analog 0.0-1.0, chuẩn hoá sao cho 0.0 = đen/line, 1.0 = trắng/nền.
+
+        Nếu config.LINE_BLACK_IS_HIGH=True (QTR-8A đọc đen ra giá trị cao) thì đảo
+        tín hiệu ngay tại đây, để toàn bộ logic phía dưới giữ nguyên giả định
+        "0.0 = trên line".
+        """
         if not self.available:
             return [1.0] * config.LINE_SENSOR_COUNT
-        return self._bus.read_many(self._channels)
+        raw = self._bus.read_many(self._channels)
+        if getattr(config, "LINE_BLACK_IS_HIGH", False):
+            return [1.0 - v for v in raw]
+        return raw
 
     @staticmethod
     def digital_from_raw(raw: list[float]) -> list[int]:
@@ -69,13 +77,13 @@ class Motion:
     def __init__(self, mcp_bus: Mcp3008Bus | None = None):
         self._mcp_bus = mcp_bus or get_mcp3008_bus()
 
-        # Bánh trái: IN1 = PWM (tiến), IN2 = digital (lùi)
+        # Bánh trái: IN1 = PWM (tiến), IN2 = PWM (lùi) — PWM cả 2 chiều để điều tốc
         self._left_fwd = PWMOutputDevice(config.IN1_XE_T, frequency=config.PWM_FREQUENCY)
-        self._left_rev = DigitalOutputDevice(config.IN2_XE_T)
+        self._left_rev = PWMOutputDevice(config.IN2_XE_T, frequency=config.PWM_FREQUENCY)
 
-        # Bánh phải: IN1 = PWM (tiến), IN2 = digital (lùi)
+        # Bánh phải: IN1 = PWM (tiến), IN2 = PWM (lùi)
         self._right_fwd = PWMOutputDevice(config.IN1_XE_P, frequency=config.PWM_FREQUENCY)
-        self._right_rev = DigitalOutputDevice(config.IN2_XE_P)
+        self._right_rev = PWMOutputDevice(config.IN2_XE_P, frequency=config.PWM_FREQUENCY)
 
         self._line_sensor = LineSensor(self._mcp_bus)
         self._last_error = 0.0
@@ -128,22 +136,22 @@ class Motion:
         logger.debug("Lùi - speed=%s", speed)
         self._left_fwd.value = 0
         self._right_fwd.value = 0
-        self._left_rev.on()
-        self._right_rev.on()
+        self._left_rev.value = self._pct(speed)
+        self._right_rev.value = self._pct(speed * config.PWM_COMPENSATION)
 
     def turn_left(self, speed: float = config.SPEED_TURN):
         logger.debug("Xoay trái - speed=%s", speed)
         self._left_fwd.value = 0
-        self._left_rev.on()
-        self._right_rev.off()
+        self._left_rev.value = self._pct(speed)
+        self._right_rev.value = 0
         self._right_fwd.value = self._pct(speed * config.PWM_COMPENSATION)
 
     def turn_right(self, speed: float = config.SPEED_TURN):
         logger.debug("Xoay phải - speed=%s", speed)
-        self._left_rev.off()
+        self._left_rev.value = 0
         self._left_fwd.value = self._pct(speed)
         self._right_fwd.value = 0
-        self._right_rev.on()
+        self._right_rev.value = self._pct(speed * config.PWM_COMPENSATION)
 
     def stop(self):
         logger.debug("Dừng")
@@ -239,25 +247,32 @@ class Motion:
     # Tiếp cận kệ / lùi ra
     # ----------------------------------------------------------
 
-    def approach_shelf(self, target_cm: float = config.APPROACH_DISTANCE,
-                       speed: float = config.APPROACH_SPEED) -> bool:
+    def approach_shelf(self, target_cm: float = config.APPROACH_DISTANCE) -> bool:
+        """
+        Tiếp cận kệ 2 pha: đi NHANH ở xa, chuyển CHẬM khi gần để dừng chính xác.
+        Pha xa (> APPROACH_SLOW_DISTANCE): APPROACH_FAST_SPEED.
+        Pha gần (≤ APPROACH_SLOW_DISTANCE): APPROACH_SLOW_SPEED.
+        """
         if self._distance_sensor is None:
-            logger.warning("Không có cảm biến siêu âm — tiến 0.5s (fallback)")
-            self.forward(speed)
-            time.sleep(0.5)
-            self.stop()
-            return True
+            logger.error("Không có cảm biến siêu âm — không thể tiếp cận kệ an toàn")
+            return False
 
-        logger.info("Tiếp cận kệ — mục tiêu %.1fcm, tốc độ %d%%", target_cm, speed)
+        logger.info("Tiếp cận kệ 2 pha — mục tiêu %.1fcm (nhanh %d%% → chậm %d%% dưới %.1fcm)",
+                    target_cm, config.APPROACH_FAST_SPEED,
+                    config.APPROACH_SLOW_SPEED, config.APPROACH_SLOW_DISTANCE)
         start = time.time()
-        self.forward(speed)
 
         while time.time() - start < config.APPROACH_TIMEOUT:
-            dist = self.get_distance()
+            dist = self.get_distance(samples=3)  # median chống nhiễu HC-SR04
             if dist <= target_cm:
                 self.stop()
                 logger.info("Đã đến vị trí kệ — khoảng cách %.1fcm", dist)
                 return True
+            # Pha xa: nhanh; pha gần: chậm để dừng chính xác, không đâm kệ
+            speed = (config.APPROACH_SLOW_SPEED
+                     if dist <= config.APPROACH_SLOW_DISTANCE
+                     else config.APPROACH_FAST_SPEED)
+            self.forward(speed)
             time.sleep(0.02)
 
         self.stop()
@@ -267,18 +282,15 @@ class Motion:
     def retreat_from_shelf(self, target_cm: float = config.RETREAT_DISTANCE,
                            speed: float = config.APPROACH_SPEED) -> bool:
         if self._distance_sensor is None:
-            logger.warning("Không có cảm biến siêu âm — lùi 0.5s (fallback)")
-            self.backward(speed)
-            time.sleep(0.5)
-            self.stop()
-            return True
+            logger.error("Không có cảm biến siêu âm — không thể lùi an toàn")
+            return False
 
         logger.info("Lùi ra khỏi kệ — mục tiêu %.1fcm", target_cm)
         start = time.time()
         self.backward(speed)
 
         while time.time() - start < config.APPROACH_TIMEOUT:
-            dist = self.get_distance()
+            dist = self.get_distance(samples=3)  # median chống nhiễu HC-SR04
             if dist >= target_cm:
                 self.stop()
                 logger.info("Đã lùi đủ xa — khoảng cách %.1fcm", dist)

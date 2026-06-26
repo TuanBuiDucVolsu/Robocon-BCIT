@@ -158,15 +158,21 @@ class Robot:
 
     @staticmethod
     def _between_route(from_label: str, to_label: str) -> list:
-        return config.ROUTE_BETWEEN_FACTORIES.get(
-            (from_label, to_label),
-            config.ROUTE_BETWEEN_FACTORIES.get((to_label, from_label), []),
-        )
+        direct = config.ROUTE_BETWEEN_FACTORIES.get((from_label, to_label))
+        if direct is not None:
+            return direct
+        return config.ROUTE_BETWEEN_FACTORIES.get((to_label, from_label), [])
+
+    def _return_cost(self, last_factory_label: str) -> int:
+        """Chi phí quay về kệ pickup tiếp theo sau khi giao kiện cuối."""
+        target = self.current_shelf if self.current_tier == 1 else self.current_shelf + 1
+        route = config.get_return_route(last_factory_label, target)
+        return self._route_cost(route)
 
     def _plan_delivery(self, label_left: str, label_right: str):
         """
         Lên kế hoạch giao 2 kiện theo thứ tự tối ưu.
-        So sánh tổng chi phí: kho → NM1 → NM2 (gồm cả lần xoay).
+        So sánh tổng chi phí: kho → NM1 → NM2 → return về kệ (gồm cả lần xoay).
         Nếu cùng nhà máy → giao 1 lần duy nhất.
         """
         if label_left == label_right:
@@ -179,19 +185,21 @@ class Robot:
         cost_left_first = (
             self._route_cost(route_left)
             + self._route_cost(self._between_route(label_left, label_right))
+            + self._return_cost(label_right)
         )
         cost_right_first = (
             self._route_cost(route_right)
             + self._route_cost(self._between_route(label_right, label_left))
+            + self._return_cost(label_left)
         )
 
         if cost_left_first <= cost_right_first:
             self.delivery_queue = [label_left, label_right]
-            logger.info("Giao: %s → %s (tổng cost=%d vs %d)",
+            logger.info("Giao: %s → %s (tổng cost=%d vs %d, gồm return)",
                         label_left, label_right, cost_left_first, cost_right_first)
         else:
             self.delivery_queue = [label_right, label_left]
-            logger.info("Giao: %s → %s (tổng cost=%d vs %d)",
+            logger.info("Giao: %s → %s (tổng cost=%d vs %d, gồm return)",
                         label_right, label_left, cost_right_first, cost_left_first)
 
     # ----------------------------------------------------------
@@ -305,11 +313,14 @@ class Robot:
             logger.warning("Navigation lệch — vẫn thử hạ hàng tại %s", factory)
         return State.DROP_FIRST
 
-    def _get_drop_side(self, label: str) -> str:
+    def _get_drop_side(self, label: str) -> str | None:
         """Xác định càng nào (left/right) đang giữ kiện có label này."""
         if self.carried_labels[0] == label:
             return "left"
-        return "right"
+        if self.carried_labels[1] == label:
+            return "right"
+        logger.error("Label %s không khớp càng %s", label, self.carried_labels)
+        return None
 
     def _drop_single_side(self, side: str) -> bool:
         """Thả 1 kiện và nâng lại càng vừa thả. Trả về True nếu IR xác nhận."""
@@ -339,7 +350,9 @@ class Robot:
                 logger.error("DROP_FIRST thất bại — IR vẫn thấy pallet hoặc lỗi cảm biến")
         else:
             side = self._get_drop_side(label)
-            if self._drop_single_side(side):
+            if side is None:
+                logger.error("DROP_FIRST — bỏ qua drop, không xác định được càng")
+            elif self._drop_single_side(side):
                 self.packages_delivered += 1
             else:
                 logger.error("DROP_FIRST thất bại — càng %s chưa thả được pallet", side)
@@ -377,11 +390,7 @@ class Robot:
             )
         factory = self.vision.get_factory_name(label)
 
-        route_key = (prev_label, label)
-        rev_key = (label, prev_label)
-        route = config.ROUTE_BETWEEN_FACTORIES.get(
-            route_key, config.ROUTE_BETWEEN_FACTORIES.get(rev_key, [])
-        )
+        route = self._between_route(prev_label, label)
 
         logger.info("Giao kiện 2: %s → %s (từ %s)", label, factory, prev_label)
 
@@ -399,23 +408,26 @@ class Robot:
         self._last_delivered_label = label
         side = self._get_drop_side(label)
 
-        logger.info("Trạng thái: DROP_SECOND — %s (càng %s)", label, side)
+        logger.info("Trạng thái: DROP_SECOND — %s (càng %s)", label, side or "?")
 
-        self._approach_shelf(f"DROP_SECOND {label}")
-
-        dropped = False
-        if side == "left":
-            dropped = self.lift.dropoff_left()
+        if side is None:
+            logger.error("DROP_SECOND — bỏ qua drop, không xác định được càng")
         else:
-            dropped = self.lift.dropoff_right()
+            self._approach_shelf(f"DROP_SECOND {label}")
 
-        if dropped:
-            self.lift.stow_forks(side)
-            self.packages_delivered += 1
-        else:
-            logger.error("DROP_SECOND thất bại — càng %s chưa thả được pallet", side)
+            dropped = False
+            if side == "left":
+                dropped = self.lift.dropoff_left()
+            else:
+                dropped = self.lift.dropoff_right()
 
-        self._retreat_from_shelf(f"DROP_SECOND {label}")
+            if dropped:
+                self.lift.stow_forks(side)
+                self.packages_delivered += 1
+            else:
+                logger.error("DROP_SECOND thất bại — càng %s chưa thả được pallet", side)
+
+            self._retreat_from_shelf(f"DROP_SECOND {label}")
         logger.info("Đã giao %d/%d kiện",
                      self.packages_delivered, config.TOTAL_PACKAGES_TASK1)
 
@@ -428,11 +440,21 @@ class Robot:
 
         return State.RETURN_TO_WAREHOUSE
 
+    def _next_pickup_shelf(self) -> int:
+        """Kệ sẽ pickup sau _advance_position() (trước khi gọi advance)."""
+        if self.current_tier == 1:
+            return self.current_shelf
+        return self.current_shelf + 1
+
     def _handle_return_to_warehouse(self) -> State:
-        """Quay về kho, chuyển sang tầng/kệ tiếp theo."""
-        route = config.ROUTE_FACTORY_TO_SHELF.get(self._last_delivered_label, [])
-        logger.info("Quay về kho từ %s...", self._last_delivered_label)
-        if not self._run_route(route, f"RETURN từ {self._last_delivered_label}"):
+        """Quay về kho đúng hàng kệ pickup tiếp theo, rồi chuyển tầng/kệ."""
+        target_shelf = self._next_pickup_shelf()
+        factory = self._last_delivered_label
+        route = config.get_return_route(factory, target_shelf) if factory else []
+        logger.info("Quay về kho từ %s → kệ %d (hàng R%d)...",
+                     factory, target_shelf,
+                     config.SHELF_BOARD_ROW.get(target_shelf, -1))
+        if not self._run_route(route, f"RETURN {factory} → kệ {target_shelf}"):
             logger.warning("Quay về kho có thể lệch vị trí")
 
         self._advance_position()
@@ -481,10 +503,11 @@ class Robot:
     def _handle_task2_drop(self) -> State:
         logger.info("Nhiệm vụ 2: đặt hàng tại nhà máy liên hợp...")
         self._approach_shelf("TASK2_DROP")
-        if not self.lift.dropoff():
-            logger.error("TASK2_DROP thất bại — IR vẫn thấy pallet hoặc lỗi cảm biến")
+        if self.lift.dropoff():
+            logger.info("NHIỆM VỤ 2 HOÀN THÀNH!")
+        else:
+            logger.error("NHIỆM VỤ 2: drop thất bại — IR vẫn thấy pallet hoặc lỗi cảm biến")
         self._retreat_from_shelf("TASK2_DROP")
-        logger.info("NHIỆM VỤ 2 HOÀN THÀNH!")
         return State.DONE
 
     # ----------------------------------------------------------
@@ -524,6 +547,8 @@ class Robot:
             self._tier_retries += 1
             logger.warning("%s thất bại — thử lại tầng (lần %d/%d)",
                            reason.capitalize(), self._tier_retries, config.MAX_TIER_RETRIES)
+            if reason == "navigate":
+                return State.NAVIGATE_TO_SHELF
             return State.PICKUP_PAIR
 
         logger.error("%s thất bại — bỏ qua tầng kệ %d tầng %d",

@@ -86,9 +86,10 @@ class Vision:
         """
         h, w = frame.shape[:2]
 
-        # Cắt vùng trung tâm (bỏ viền ngoài, chỉ lấy 60% giữa)
-        margin_x = int(w * 0.2)
-        margin_y = int(h * 0.2)
+        # Cắt vùng trung tâm (bỏ viền ngoài). ROI_MARGIN tinh chỉnh trong config.
+        margin = getattr(config, "ROI_MARGIN", 0.2)
+        margin_x = int(w * margin)
+        margin_y = int(h * margin)
         roi = frame[margin_y:h - margin_y, margin_x:w - margin_x]
 
         # Chuyển RGB → BGR → HSV (picamera2 trả về RGB)
@@ -107,11 +108,23 @@ class Vision:
             pixel_count = int(cv2.countNonZero(mask))
             scores[label] = pixel_count / total_pixels
 
-        best_label = max(scores, key=scores.get)
-        best_score = scores[best_label]
+        # Ưu tiên màu sắc nét hơn Amkor (xám) để nền trắng/xám không "ăn" mất
+        # kiện có màu. Chỉ rơi về Amkor khi không màu chromatic nào đạt ngưỡng.
+        chromatic = {l: scores[l] for l in config.CHROMATIC_LABELS if l in scores}
+        if chromatic:
+            best_chroma = max(chromatic, key=chromatic.get)
+            if chromatic[best_chroma] >= config.CONFIDENCE_THRESHOLD:
+                best_label, best_score = best_chroma, chromatic[best_chroma]
+            else:
+                best_label = max(scores, key=scores.get)
+                best_score = scores[best_label]
+        else:
+            best_label = max(scores, key=scores.get)
+            best_score = scores[best_label]
 
-        logger.debug("Tỷ lệ màu: %s",
-                      {k: f"{v*100:.1f}%" for k, v in sorted(scores.items(), key=lambda x: -x[1])})
+        logger.debug("Tỷ lệ màu: %s -> %s",
+                      {k: f"{v*100:.1f}%" for k, v in sorted(scores.items(), key=lambda x: -x[1])},
+                      best_label)
 
         return best_label, best_score
 
