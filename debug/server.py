@@ -148,17 +148,21 @@ def create_app() -> Flask:
             })
 
         with _lock:
-            raw = _motion.read_line_sensor_raw()
+            raw = _motion.read_line_sensor_raw()          # đã chuẩn hoá (theo polarity robot dùng)
             values = LineSensor.digital_from_raw(raw)
             error = _motion.compute_line_error_analog(raw)
+            # ADC THẬT từ phần cứng (chưa đảo) — để calibrate polarity luôn đúng,
+            # bất kể LINE_BLACK_IS_HIGH đang True hay False.
+            bus = get_mcp3008_bus()
+            raw_adc = [bus.read_adc(ch) for ch in range(config.LINE_SENSOR_COUNT)]
         active = sum(values)
-        raw_adc = [int(round(v * 1023)) for v in raw]
         return jsonify({
             "values": values,
             "raw_adc": raw_adc,
             "error": round(error, 2),
             "active": active,
             "is_intersection": active >= config.INTERSECTION_THRESHOLD,
+            "black_is_high": bool(getattr(config, "LINE_BLACK_IS_HIGH", False)),
         })
 
     @app.route("/api/pallet_sensor")
