@@ -102,16 +102,18 @@ def test_line_follow(m: Motion):
 
 
 def test_distance_sensor(m: Motion):
-    print("\n[TEST] Cảm biến siêu âm HC-SR04 (10 lần, cách 0.5s)...")
+    print("\n[TEST] Cảm biến siêu âm HC-SR04 real-time — Ctrl+C để thoát")
     print("  Di chuyển vật trước robot để xem khoảng cách thay đổi:")
-    for i in range(10):
+    i = 0
+    while True:
         dist = m.get_distance()
+        i += 1
         if dist < 0:
-            print(f"  Lần {i+1}: KHÔNG CÓ cảm biến siêu âm")
-            break
-        bar = "█" * int(min(dist, 50) / 2)
-        print(f"  Lần {i+1}: {dist:6.1f}cm {bar}")
-        time.sleep(0.5)
+            print(f"\r  [{i:4d}] KHÔNG CÓ cảm biến siêu âm (GPIO {config.ULTRASONIC_TRIG_PIN}/{config.ULTRASONIC_ECHO_PIN})", end="", flush=True)
+        else:
+            bar = "█" * int(min(dist, 60) / 2)
+            print(f"\r  [{i:4d}] {dist:6.1f}cm  {bar:<30}", end="", flush=True)
+        time.sleep(0.2)
 
 
 def test_approach_shelf(m: Motion):
@@ -189,6 +191,54 @@ def test_spi_line_and_ir(m: Motion):
         lift.cleanup()
 
 
+def test_motor_diagnosis(m: Motion):
+    """Chạy từng motor riêng lẻ để xác định motor nào bị ngược chiều."""
+    speed = 50
+    dur = 1.5
+
+    print("\n[CHẨN ĐOÁN] Chạy từng motor riêng — quan sát bánh nào quay và chiều quay")
+    print(f"  Tốc độ {speed}%, mỗi bước {dur}s\n")
+
+    actions = [
+        ("BÁNH TRÁI — tiến",  lambda: _run_left(m, speed, forward=True)),
+        ("BÁNH TRÁI — lùi",   lambda: _run_left(m, speed, forward=False)),
+        ("BÁNH PHẢI — tiến",  lambda: _run_right(m, speed, forward=True)),
+        ("BÁNH PHẢI — lùi",   lambda: _run_right(m, speed, forward=False)),
+    ]
+
+    for label, fn in actions:
+        input(f"  Nhấn Enter để chạy: {label} ...")
+        fn()
+        time.sleep(dur)
+        m.stop()
+        time.sleep(0.5)
+
+    print("\n  Nếu TRÁI tiến nhưng bánh quay ngược → swap IN1_XE_T ↔ IN2_XE_T trong config.py")
+    print("  Nếu PHẢI tiến nhưng bánh quay ngược → swap IN1_XE_P ↔ IN2_XE_P trong config.py")
+
+
+def _run_left(m: Motion, speed: float, forward: bool):
+    m._left_rev.value = 0
+    m._right_fwd.value = 0
+    m._right_rev.value = 0
+    if forward:
+        m._left_fwd.value = speed / 100
+    else:
+        m._left_fwd.value = 0
+        m._left_rev.value = speed / 100
+
+
+def _run_right(m: Motion, speed: float, forward: bool):
+    m._left_fwd.value = 0
+    m._left_rev.value = 0
+    m._right_rev.value = 0
+    if forward:
+        m._right_fwd.value = speed / 100
+    else:
+        m._right_fwd.value = 0
+        m._right_rev.value = speed / 100
+
+
 def main():
     print("=" * 50)
     print("TEST MODULE ĐỘNG CƠ DI CHUYỂN")
@@ -209,6 +259,7 @@ def main():
         "10": ("Xoay 90° (calibrate TURN_TIME)", test_turn_90),
         "11": ("execute_route (route config)", test_execute_route),
         "12": ("Shared SPI: line + IR cùng lúc", test_spi_line_and_ir),
+        "d": ("Chẩn đoán motor từng bánh riêng", test_motor_diagnosis),
         "0": ("Chạy tất cả", None),
     }
 
@@ -216,7 +267,7 @@ def main():
     for key, (name, _) in tests.items():
         print(f"  {key}. {name}")
 
-    choice = input("\nNhập số (0-12): ").strip()
+    choice = input("\nNhập số (0-12, d): ").strip()
 
     try:
         if choice == "0":

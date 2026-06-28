@@ -15,18 +15,18 @@ IN1_XE_T = 17  # Tiến trái
 IN2_XE_T = 27  # Lùi trái
 
 # Cụm xe phải (có PWM chống lệch tốc độ)
-IN1_XE_P = 22  # Tiến phải (PWM)
-IN2_XE_P = 23  # Lùi phải
+IN1_XE_P = 23  # Tiến phải (PWM)
+IN2_XE_P = 22  # Lùi phải
 
 # --- Cơ cấu nâng (cẩu) ---
-# Cụm cẩu trái
-IN3_CAU_T = 24  # Nâng trái
-IN4_CAU_T = 25  # Hạ trái
+# Cẩu PHẢI (vật lý): mạch 2 chân (không có ENA)
+IN3_CAU_T = 25  # Nâng phải
+IN4_CAU_T = 24  # Hạ phải
 
-# Cụm cẩu phải (có ENA bật/tắt)
-ENA_CAU_P = 5   # Enable cẩu phải
-IN1_CAU_P = 6   # Nâng phải
-IN2_CAU_P = 13  # Hạ phải
+# Cẩu TRÁI (vật lý): mạch có ENA bật/tắt
+ENA_CAU_P = 5   # Enable cẩu trái
+IN1_CAU_P = 13  # Nâng trái
+IN2_CAU_P = 6   # Hạ trái
 
 # --- Nút khởi động ---
 START_BUTTON_PIN = 16  # Nút vật lý kích hoạt chế độ tự động
@@ -92,8 +92,17 @@ PWM_COMPENSATION = 0.95      # Hệ số bù lệch tốc độ bánh phải (< 
 # CƠ CẤU NÂNG - THỜI GIAN (giây)
 # ============================================================
 LIFT_TIME_FLOOR = 0.0        # Thời gian hạ xuống mặt sàn (gốc 0)
-LIFT_TIME_SHELF_1 = 0.8      # Thời gian nâng lên tầng 1 kệ
-LIFT_TIME_SHELF_2 = 1.5      # Thời gian nâng lên tầng 2 kệ
+LIFT_TIME_SHELF_1 = 0.150      # Thời gian nâng lên tầng 1 kệ (cơ sở)
+LIFT_TIME_SHELF_2 = 1.5      # Thời gian nâng lên tầng 2 kệ (cơ sở)
+
+# Bù sai lệch khi NÂNG (giây thêm/bớt — dương=chạy lâu hơn, âm=dừng sớm hơn)
+LIFT_LEFT_EXTRA  = -0.050    # Bù cẩu TRÁI khi nâng
+LIFT_RIGHT_EXTRA = 0.0       # Bù cẩu PHẢI khi nâng
+
+# Bù riêng khi HẠ (nếu 1 bên khó hạ do ma sát cơ khí → tăng giá trị bên đó)
+LIFT_LEFT_LOWER_EXTRA  = 0.300  # Bù cẩu TRÁI khi hạ
+LIFT_RIGHT_LOWER_EXTRA = 0.0  # Bù cẩu PHẢI khi hạ
+
 LIFT_SPEED = 80              # Duty cycle động cơ nâng (0-100) — dùng trong debug UI
 PICKUP_MAX_RETRIES = 2       # Số lần thử nâng lại nếu cảm biến không thấy pallet
 PICKUP_VERIFY_DELAY = 0.3    # Thời gian chờ sau nâng trước khi kiểm tra cảm biến (giây)
@@ -108,7 +117,7 @@ LINE_THRESHOLD = 500         # Ngưỡng analog: < 500 = trên line (đen), >= 5
 # Calibrate: chạy `python3 -m tools.calibrate_line` (hoặc xem ADC trong web debug),
 # đặt mắt lên line đen vs nền sáng. Nếu LINE ĐEN cho giá trị LỚN → đặt True.
 # Đặt True sẽ tự đảo tín hiệu ngay tại nguồn → KHÔNG cần sửa gì khác.
-LINE_BLACK_IS_HIGH = False
+LINE_BLACK_IS_HIGH = True
 # Trọng số vị trí 6 mắt (lệch trái âm, lệch phải dương)
 LINE_WEIGHTS = [-2.5, -1.5, -0.5, 0.5, 1.5, 2.5]
 LINE_KP = 15.0               # Hệ số P (PD control)

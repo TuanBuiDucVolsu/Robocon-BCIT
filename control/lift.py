@@ -99,14 +99,14 @@ class Lift:
 
     def __init__(self, mcp_bus: Mcp3008Bus | None = None):
         self._mcp_bus = mcp_bus or get_mcp3008_bus()
-        # Cẩu trái: IN3 = nâng, IN4 = hạ
-        self._left_up = DigitalOutputDevice(config.IN3_CAU_T)
-        self._left_down = DigitalOutputDevice(config.IN4_CAU_T)
+        # Cẩu TRÁI (vật lý): mạch có ENA — ENA_CAU_P, IN1_CAU_P=nâng, IN2_CAU_P=hạ
+        self._left_en   = DigitalOutputDevice(config.ENA_CAU_P)
+        self._left_up   = DigitalOutputDevice(config.IN1_CAU_P)
+        self._left_down = DigitalOutputDevice(config.IN2_CAU_P)
 
-        # Cẩu phải: ENA = bật/tắt, IN1 = nâng, IN2 = hạ
-        self._right_en = DigitalOutputDevice(config.ENA_CAU_P)
-        self._right_up = DigitalOutputDevice(config.IN1_CAU_P)
-        self._right_down = DigitalOutputDevice(config.IN2_CAU_P)
+        # Cẩu PHẢI (vật lý): mạch 2 chân — IN3_CAU_T=nâng, IN4_CAU_T=hạ
+        self._right_up   = DigitalOutputDevice(config.IN3_CAU_T)
+        self._right_down = DigitalOutputDevice(config.IN4_CAU_T)
 
         # 2 cảm biến IR pallet qua MCP3008 SPI
         self.pallet = PalletSensors(self._mcp_bus)
@@ -120,31 +120,31 @@ class Lift:
     # ----------------------------------------------------------
 
     def _raise_left(self, duration: float):
+        self._left_en.on()
         self._left_up.on()
         self._left_down.off()
         time.sleep(duration)
+        self._left_en.off()
         self._left_up.off()
 
     def _lower_left(self, duration: float):
+        self._left_en.on()
         self._left_up.off()
         self._left_down.on()
         time.sleep(duration)
+        self._left_en.off()
         self._left_down.off()
 
     def _raise_right(self, duration: float):
-        self._right_en.on()
         self._right_up.on()
         self._right_down.off()
         time.sleep(duration)
-        self._right_en.off()
         self._right_up.off()
 
     def _lower_right(self, duration: float):
-        self._right_en.on()
         self._right_up.off()
         self._right_down.on()
         time.sleep(duration)
-        self._right_en.off()
         self._right_down.off()
 
     # ----------------------------------------------------------
@@ -152,29 +152,38 @@ class Lift:
     # ----------------------------------------------------------
 
     def _raise_both(self, duration: float):
-        logger.info("Nâng cả 2 càng - duration=%.2fs", duration)
-        self._left_up.on()
-        self._left_down.off()
-        self._right_en.on()
-        self._right_up.on()
-        self._right_down.off()
-        time.sleep(duration)
-        self._stop_all()
+        left_dur  = duration + config.LIFT_LEFT_EXTRA
+        right_dur = duration + config.LIFT_RIGHT_EXTRA
+        logger.info("Nâng cả 2 càng - trái=%.2fs phải=%.2fs", left_dur, right_dur)
+        self._left_en.on(); self._left_up.on(); self._left_down.off()
+        self._right_up.on(); self._right_down.off()
+        self._run_timed(left_dur, right_dur, raising=True)
 
     def _lower_both(self, duration: float):
-        logger.info("Hạ cả 2 càng - duration=%.2fs", duration)
-        self._left_up.off()
-        self._left_down.on()
-        self._right_en.on()
-        self._right_up.off()
-        self._right_down.on()
-        time.sleep(duration)
-        self._stop_all()
+        left_dur  = duration + config.LIFT_LEFT_LOWER_EXTRA
+        right_dur = duration + config.LIFT_RIGHT_LOWER_EXTRA
+        logger.info("Hạ cả 2 càng - trái=%.2fs phải=%.2fs", left_dur, right_dur)
+        self._left_en.on(); self._left_up.off(); self._left_down.on()
+        self._right_up.off(); self._right_down.on()
+        self._run_timed(left_dur, right_dur, raising=False)
+
+    def _run_timed(self, left_dur: float, right_dur: float, raising: bool):
+        """Dừng từng bên đúng thời điểm để 2 càng lên/xuống bằng nhau."""
+        if left_dur <= right_dur:
+            time.sleep(max(left_dur, 0))
+            self._left_en.off(); self._left_up.off(); self._left_down.off()
+            time.sleep(max(right_dur - left_dur, 0))
+            self._right_up.off(); self._right_down.off()
+        else:
+            time.sleep(max(right_dur, 0))
+            self._right_up.off(); self._right_down.off()
+            time.sleep(max(left_dur - right_dur, 0))
+            self._left_en.off(); self._left_up.off(); self._left_down.off()
 
     def _stop_all(self):
+        self._left_en.off()
         self._left_up.off()
         self._left_down.off()
-        self._right_en.off()
         self._right_up.off()
         self._right_down.off()
 
@@ -345,9 +354,9 @@ class Lift:
 
     def cleanup(self):
         self._stop_all()
+        self._left_en.close()
         self._left_up.close()
         self._left_down.close()
-        self._right_en.close()
         self._right_up.close()
         self._right_down.close()
         self.pallet.cleanup()
