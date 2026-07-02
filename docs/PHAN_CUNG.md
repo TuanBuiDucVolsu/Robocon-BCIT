@@ -179,8 +179,8 @@ L298N #1:
 
   IN1 ←── GPIO 17  →  Motor TRÁI tiến (PWM điều tốc)
   IN2 ←── GPIO 27  →  Motor TRÁI lùi (PWM điều tốc)
-  IN3 ←── GPIO 22  →  Motor PHẢI tiến (PWM điều tốc)
-  IN4 ←── GPIO 23  →  Motor PHẢI lùi (PWM điều tốc)
+  IN3 ←── GPIO 23  →  Motor PHẢI tiến (PWM điều tốc)
+  IN4 ←── GPIO 22  →  Motor PHẢI lùi (PWM điều tốc)
 
   OUT1/OUT2 ──→ Motor bánh TRÁI
   OUT3/OUT4 ──→ Motor bánh PHẢI
@@ -206,22 +206,22 @@ L298N #2:
   5V (logic)      ──→ XH-M401 output 5V
   GND             ──→ GND chung
 
-  Càng TRÁI:
-    IN3 ←── GPIO 24  →  Nâng trái
-    IN4 ←── GPIO 25  →  Hạ trái
-    OUT3/OUT4 ──→ Motor cẩu TRÁI
+  Càng TRÁI (mạch có ENA):
+    ENA ←── GPIO  5  →  Enable trái (bật/tắt)
+    IN1 ←── GPIO 13  →  Nâng trái
+    IN2 ←── GPIO  6  →  Hạ trái
+    OUT1/OUT2 ──→ Motor cẩu TRÁI
 
-  Càng PHẢI:
-    ENA ←── GPIO  5  →  Enable phải (bật/tắt)
-    IN1 ←── GPIO  6  →  Nâng phải
-    IN2 ←── GPIO 13  →  Hạ phải
-    OUT1/OUT2 ──→ Motor cẩu PHẢI
+  Càng PHẢI (mạch 2 chân):
+    IN3 ←── GPIO 25  →  Nâng phải
+    IN4 ←── GPIO 24  →  Hạ phải
+    OUT3/OUT4 ──→ Motor cẩu PHẢI
 ```
 
-### Tại sao ENA riêng cho cẩu phải?
+### Tại sao ENA riêng cho cẩu trái?
 
-Cẩu trái dùng trực tiếp IN3/IN4 (jumper ENB giữ nguyên = luôn enable).
-Cẩu phải dùng ENA để bật/tắt riêng — phần mềm cần enable trước khi nâng/hạ.
+Cẩu phải dùng trực tiếp IN3/IN4 (jumper ENB giữ nguyên = luôn enable).
+Cẩu trái dùng ENA để bật/tắt riêng — phần mềm cần enable trước khi nâng/hạ.
 
 ---
 
@@ -280,18 +280,18 @@ GND: TẤT CẢ module nối chung GND với nhau và với Pi
 | 9 | SPI MISO (data từ MCP3008) | Input | MCP3008 |
 | 10 | SPI MOSI (data đến MCP3008) | Output | MCP3008 |
 | 11 | SPI SCLK (clock) | Output | MCP3008 |
-| 5 | ENA cẩu phải | Output | L298N #2 |
-| 6 | IN1 cẩu phải (nâng) | Output | L298N #2 |
-| 13 | IN2 cẩu phải (hạ) | Output | L298N #2 |
+| 5 | ENA cẩu trái | Output | L298N #2 |
+| 6 | IN2 cẩu trái (hạ) | Output | L298N #2 |
+| 13 | IN1 cẩu trái (nâng) | Output | L298N #2 |
 | 16 | Nút khởi động | Input | Nút bấm |
 | 17 | IN1 bánh trái (tiến, PWM) | Output | L298N #1 |
 | 19 | HC-SR04 TRIG | Output | Siêu âm |
 | 20 | HC-SR04 ECHO | Input | Siêu âm |
-| 22 | IN3 bánh phải (tiến, PWM) | Output | L298N #1 |
-| 23 | IN4 bánh phải (lùi) | Output | L298N #1 |
-| 24 | IN3 cẩu trái (nâng) | Output | L298N #2 |
-| 25 | IN4 cẩu trái (hạ) | Output | L298N #2 |
-| 27 | IN2 bánh trái (lùi) | Output | L298N #1 |
+| 22 | IN4 bánh phải (lùi, PWM) | Output | L298N #1 |
+| 23 | IN3 bánh phải (tiến, PWM) | Output | L298N #1 |
+| 24 | IN4 cẩu phải (hạ) | Output | L298N #2 |
+| 25 | IN3 cẩu phải (nâng) | Output | L298N #2 |
+| 27 | IN2 bánh trái (lùi, PWM) | Output | L298N #1 |
 
 **Tổng: 16/16 — đúng giới hạn thể lệ, không dư chân nào.**
 

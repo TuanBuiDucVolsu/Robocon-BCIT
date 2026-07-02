@@ -138,7 +138,7 @@ def test_dropoff_same_factory(lift: Lift):
 def test_left_only(lift: Lift):
     """Test cẩu TRÁI độc lập — cẩu phải không chạy."""
     dur = 1.5
-    print(f"\n[TEST] CẨU TRÁI độc lập (ENA={config.ENA_CAU_P}, IN1={config.IN1_CAU_P}, IN2={config.IN2_CAU_P})")
+    print(f"\n[TEST] CẨU TRÁI độc lập (ENA={config.ENA_CAU_T}, IN1={config.IN1_CAU_T}, IN2={config.IN2_CAU_T})")
 
     input("  Nhấn Enter → NÂNG trái...")
     lift._left_en.on(); lift._left_up.on(); lift._left_down.off()
@@ -156,7 +156,7 @@ def test_left_only(lift: Lift):
 def test_right_only(lift: Lift):
     """Test cẩu PHẢI độc lập — cẩu trái không chạy."""
     dur = 1.5
-    print(f"\n[TEST] CẨU PHẢI độc lập (IN3={config.IN3_CAU_T}, IN4={config.IN4_CAU_T})")
+    print(f"\n[TEST] CẨU PHẢI độc lập (IN3={config.IN3_CAU_P}, IN4={config.IN4_CAU_P})")
 
     input("  Nhấn Enter → NÂNG phải...")
     lift._right_up.on(); lift._right_down.off()

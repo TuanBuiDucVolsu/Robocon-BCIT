@@ -261,18 +261,18 @@ Nguồn:                         Cầu phân áp cho ECHO:
 | 9 | SPI MISO | mcp3008_bus.py |
 | 10 | SPI MOSI | mcp3008_bus.py |
 | 11 | SPI SCLK | mcp3008_bus.py |
-| 5 | ENA cẩu phải | lift.py |
-| 6 | IN1 cẩu phải (nâng) | lift.py |
-| 13 | IN2 cẩu phải (hạ) | lift.py |
+| 5 | ENA cẩu trái | lift.py |
+| 6 | IN2 cẩu trái (hạ) | lift.py |
+| 13 | IN1 cẩu trái (nâng) | lift.py |
 | 16 | Nút khởi động | main.py |
 | 17 | IN1 bánh trái (tiến, PWM) | motion.py |
 | 19 | HC-SR04 TRIG | motion.py |
 | 20 | HC-SR04 ECHO | motion.py |
-| 22 | IN1 bánh phải (tiến, PWM) | motion.py |
-| 23 | IN2 bánh phải (lùi) | motion.py |
-| 24 | IN3 cẩu trái (nâng) | lift.py |
-| 25 | IN4 cẩu trái (hạ) | lift.py |
-| 27 | IN2 bánh trái (lùi) | motion.py |
+| 22 | IN2 bánh phải (lùi, PWM) | motion.py |
+| 23 | IN1 bánh phải (tiến, PWM) | motion.py |
+| 24 | IN4 cẩu phải (hạ) | lift.py |
+| 25 | IN3 cẩu phải (nâng) | lift.py |
+| 27 | IN2 bánh trái (lùi, PWM) | motion.py |
 
 **16/16 GPIO** — vừa đúng giới hạn thể lệ
 

@@ -99,14 +99,14 @@ class Lift:
 
     def __init__(self, mcp_bus: Mcp3008Bus | None = None):
         self._mcp_bus = mcp_bus or get_mcp3008_bus()
-        # Cẩu TRÁI (vật lý): mạch có ENA — ENA_CAU_P, IN1_CAU_P=nâng, IN2_CAU_P=hạ
-        self._left_en   = DigitalOutputDevice(config.ENA_CAU_P)
-        self._left_up   = DigitalOutputDevice(config.IN1_CAU_P)
-        self._left_down = DigitalOutputDevice(config.IN2_CAU_P)
+        # Cẩu TRÁI (vật lý): mạch có ENA — ENA_CAU_T, IN1_CAU_T=nâng, IN2_CAU_T=hạ
+        self._left_en   = DigitalOutputDevice(config.ENA_CAU_T)
+        self._left_up   = DigitalOutputDevice(config.IN1_CAU_T)
+        self._left_down = DigitalOutputDevice(config.IN2_CAU_T)
 
-        # Cẩu PHẢI (vật lý): mạch 2 chân — IN3_CAU_T=nâng, IN4_CAU_T=hạ
-        self._right_up   = DigitalOutputDevice(config.IN3_CAU_T)
-        self._right_down = DigitalOutputDevice(config.IN4_CAU_T)
+        # Cẩu PHẢI (vật lý): mạch 2 chân — IN3_CAU_P=nâng, IN4_CAU_P=hạ
+        self._right_up   = DigitalOutputDevice(config.IN3_CAU_P)
+        self._right_down = DigitalOutputDevice(config.IN4_CAU_P)
 
         # 2 cảm biến IR pallet qua MCP3008 SPI
         self.pallet = PalletSensors(self._mcp_bus)
