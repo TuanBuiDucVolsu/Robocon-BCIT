@@ -36,6 +36,7 @@ self.carried_labels = [None, None]  # [label_trái, label_phải] trên càng
 self.delivery_queue = []            # Thứ tự giao [label1, label2]
 self._last_delivered_label = None   # Nhà máy vừa giao — get_return_route + DELIVER_SECOND
 self._tier_retries = 0              # Số lần đã thử lại tầng kệ hiện tại
+self._start_route_done = False      # Đã chạy THÀNH CÔNG ROUTE_START_TO_SHELF_0 chưa
 ```
 
 ## Cách robot cập nhật tiến độ
@@ -106,10 +107,13 @@ State: START → exit_start_zone()
   Tiến thẳng (hướng 9h) → chạm line R0 → căn giữa line (tối đa EXIT_START_ALIGN_TIME)
 
 State: NAVIGATE_TO_SHELF
-pickup_count == 0 → _run_route(ROUTE_START_TO_SHELF_0)
+not _start_route_done → _run_route(ROUTE_START_TO_SHELF_0)
+  Chỉ đánh dấu _start_route_done=True khi CHẠY THÀNH CÔNG (không phải dựa vào
+  pickup_count) — nếu route này fail và bị bỏ tầng (tier tăng lên 2 nhưng vẫn ở
+  kệ 0), lần sau vẫn thử lại đúng route này thay vì nhầm "đã ở kệ, chỉ cần pass"
   Fail (mất line / timeout) → _retry_or_skip_tier("navigate")
-pickup_count > 0, tier 2 → tại chỗ
-pickup_count > 0, tier 1 → _run_route(ROUTE_BETWEEN_SHELVES); fail → retry/skip tầng
+_start_route_done, tier 2 → tại chỗ
+_start_route_done, tier 1 → _run_route(ROUTE_BETWEEN_SHELVES); fail → retry/skip tầng
 
 Robot (trong ô start, đã chạm line R0, hướng 9h)
   │ ("forward", 1)    → Bám line sang trái, 1 giao lộ → dừng tại Kệ 3
@@ -379,7 +383,7 @@ INIT (chờ nút) ──→ START (reset càng, exit_start_zone → chạm line 
 | Tình huống | Xử lý |
 |-----------|-------|
 | Sắp hết giờ (<10s) | `is_time_safe()` check sau mỗi state → DONE |
-| Không tìm thấy line khi exit start | Kiểm tra hướng 9h, GAP line, `EXIT_START_TIMEOUT` → DONE |
+| Không tìm thấy line khi exit start | Retry `MAX_TIER_RETRIES + 1` lần (như các lỗi navigation khác); hết retry → kiểm tra hướng 9h, GAP line, `EXIT_START_TIMEOUT` → DONE |
 | Navigation fail (mất line / timeout giao lộ) | `execute_route()` → `False`; đến kệ fail → `_retry_or_skip_tier("navigate")` → **NAVIGATE_TO_SHELF**; giao hàng fail → log, vẫn thử hạ; NV2 fail → DONE |
 | Route rỗng (thiếu config) | Log warning, coi navigation fail |
 | Tiếp cận kệ timeout (PICKUP) | `_retry_or_skip_tier("approach")` |

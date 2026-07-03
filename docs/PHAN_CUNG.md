@@ -341,10 +341,10 @@ Nhìn từ trên xuống:
 - [ ] Test exit start: `python3 tests/test_motion.py` option **6**
 - [ ] Test route: option **11**; calibrate xoay 90°: option **10**
 - [ ] Test classify_pair: `python3 tests/test_vision.py` option **6**
-- [ ] Test drop từng càng: `python3 tests/test_lift.py` option **6**
+- [ ] Test drop từng càng: `python3 tests/test_lift.py` option **5**
 - [ ] Smoke test sa bàn: `python3 tests/test_smoke.py` option **5**
 - [ ] Calibrate return route: scenario **foxconn→samsung → pickup Kệ3 T2**
-- [ ] Unit test: `python3 -m unittest tests.test_logic -v` (31 test, PC/Pi)
+- [ ] Unit test: `python3 -m unittest tests.test_logic -v` (45 test, PC/Pi)
 - [ ] Pin ≤ 12V, ≤ 5000mAh
 
 

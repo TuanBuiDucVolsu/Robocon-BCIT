@@ -106,7 +106,7 @@ pip install -r requirements.txt
 
 ```bash
 ls /dev/spidev*                          # Phải thấy spidev0.0 và spidev0.1
-python3 -m unittest tests.test_logic -v  # Unit test logic — 44 test, chạy trên PC
+python3 -m unittest tests.test_logic -v  # Unit test logic — 45 test, chạy trên PC
 ```
 
 ## Cách chạy
@@ -350,7 +350,7 @@ Các giá trị cần đo thực nghiệm trên sa bàn, cập nhật trong `con
 | `ROUTE_*` | Số giao lộ các route | ✅ đã verify từ file in chuẩn — xem `docs/SA_BAN.md` |
 | `get_return_route` / đoạn dọc | Return về đúng hàng kệ | Test scenario foxconn→samsung → Kệ3 T2 |
 | `COLOR_RANGES` | Dải màu HSV | test_vision option 2 |
-| `PALLET_THRESHOLD` | Ngưỡng IR pallet | test_lift option 3 |
+| `PALLET_THRESHOLD` | Ngưỡng IR pallet | test_lift option a (raw ADC) / option 8 (live) |
 | `APPROACH_FAST/SLOW_SPEED`, `APPROACH_SLOW_DISTANCE` | Tiếp cận kệ 2 pha | test_motion option 9 — đảm bảo không vọt quá 4cm |
 
 > **Tiếp cận 2 pha + PWM cả 2 chiều:** `approach_shelf()` đi nhanh ở xa, chậm khi gần

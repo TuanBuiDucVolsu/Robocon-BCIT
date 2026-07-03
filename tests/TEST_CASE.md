@@ -14,7 +14,7 @@ Thư mục `tests/` có 2 nhóm test:
 
 ## A. Unit test — `test_logic.py` (chạy trên PC, không cần GPIO)
 
-Kiểm tra logic route, cost, polarity cảm biến, phân loại màu, reset luyện tập, plan delivery… bằng mock. **44 test.**
+Kiểm tra logic route, cost, polarity cảm biến, phân loại màu, reset luyện tập, plan delivery… bằng mock. **45 test.**
 
 ```bash
 cd /home/mbw12345/Robocon-BCIT
@@ -86,12 +86,16 @@ python3 tests/test_lift.py
 |---|------|
 | 1 | Nâng/Hạ cơ bản |
 | 2 | Các tầng kệ (1 và 2) |
-| 3 | Cảm biến IR pallet trái/phải (calibrate `PALLET_THRESHOLD`) |
-| 4 | Pickup/Dropoff tầng 1 |
-| 5 | Pickup/Dropoff tầng 2 |
-| 6 | Drop từng càng NV1 (left/right + stow) |
-| 7 | Pickup NV2 (`require_both=False`) |
-| 8 | `dropoff()` 2 kiện cùng nhà máy |
+| 3 | Pickup/Dropoff tầng 1 |
+| 4 | Pickup/Dropoff tầng 2 |
+| 5 | Drop từng càng NV1 (left/right + stow) |
+| 6 | Pickup NV2 (`require_both=False`) |
+| 7 | `dropoff()` 2 kiện cùng nhà máy |
+| 8 | IR real-time (Ctrl+C để thoát) |
+| a | Scan tất cả 8 channel MCP3008 (tìm channel IR, calibrate `PALLET_THRESHOLD`) |
+| b | Cẩu TRÁI độc lập (nâng/hạ) |
+| c | Cẩu PHẢI độc lập (nâng/hạ) |
+| d | Calibrate độ cao + bù lệch (lưu `config.py`) |
 
 ### `test_vision.py` — camera & nhận diện màu HSV
 ```bash
@@ -136,7 +140,7 @@ Xem thêm: [../docs/SA_BAN.md](../docs/SA_BAN.md).
 1. `test_logic` (trên PC, trước khi mang đi) → đảm bảo logic xanh.
 2. `tools.calibrate_line` → chốt polarity + ngưỡng line.
 3. `test_motion` #5 #4 (cảm biến line) → #10 (`TURN_TIME`) → #7 (bám line) → #2 #3.
-4. `test_lift` #3 (IR) → #1 #2 → #4..#8.
+4. `test_lift` #a (raw ADC — chốt `PALLET_THRESHOLD`) → #8 (IR live — xác nhận lại) → #1 #2 → #3..#7.
 5. `test_vision` #2 (HSV) → #6 (cặp kiện).
 6. `test_smoke` #1 → #2 → #3 → #5 → cuối cùng chạy full bằng **`bash scripts/practice.sh`**
    (luyện tập lặp: xong 1 lượt tự reset, nhấn nút chạy lại, Ctrl+C thoát).

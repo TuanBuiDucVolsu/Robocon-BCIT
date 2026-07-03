@@ -82,7 +82,7 @@ vision/vision.py     — Nhận diện màu HSV (không dùng AI model), classif
 debug/server.py      — Flask web debug UI (MJPEG stream, line sensor, classify_pair)
 scripts/             — install.sh, start.sh, robot.service (systemd auto-start)
 docs/                — CAC_BUOC_HOAT_DONG.md, PHAN_CUNG.md, ...
-tests/               — test_motion/lift/vision/smoke + test_logic (44 unit test)
+tests/               — test_motion/lift/vision/smoke + test_logic (45 unit test)
 ```
 
 ## State machine (luồng chính)
@@ -108,6 +108,7 @@ NAVIGATE_TO_SHELF → PICKUP_PAIR (approach + classify_pair + pickup + retreat)
 | Tình huống | Hành vi |
 |-----------|---------|
 | `execute_route()` / `navigate_intersections()` fail (mất line, timeout) | Trả `False`; log lỗi |
+| `exit_start_zone()` fail (START) | Retry `MAX_TIER_RETRIES + 1` lần tại chỗ; hết retry → `DONE` |
 | Navigate đến kệ fail | `_retry_or_skip_tier("navigate")` → **NAVIGATE_TO_SHELF** |
 | `approach_shelf()` timeout ở PICKUP | `_retry_or_skip_tier("approach")` |
 | Navigate DELIVER fail | Log cảnh báo, **vẫn thử hạ** (tiết kiệm thời gian) |
@@ -150,7 +151,7 @@ get_return_route(from_factory, target_shelf)
 
 | Script | Mục đích |
 |--------|----------|
-| `tests/test_logic.py` | 44 unit test — PC, không GPIO (logic + polarity + phân loại màu + reset + resume) |
+| `tests/test_logic.py` | 45 unit test — PC, không GPIO (logic + polarity + phân loại màu + reset + resume) |
 | `tests/test_motion.py` | 12 option — motor, line, route, exit start |
 | `tests/test_lift.py` | 8 option — nâng/hạ, IR, drop từng càng, NV2 |
 | `tests/test_vision.py` | 7 option — camera, HSV, classify_pair |
