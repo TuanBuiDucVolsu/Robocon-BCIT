@@ -43,23 +43,6 @@ def test_shelf_levels(lift: Lift):
     time.sleep(1)
 
 
-def test_pallet_sensor(lift: Lift):
-    print(f"\n[TEST] Cảm biến IR pallet (ngưỡng PALLET_THRESHOLD={config.PALLET_THRESHOLD})")
-    if not lift.pallet.available:
-        print("  ⚠ MCP3008 không khả dụng — bỏ qua test đọc thực")
-        return
-    print("  Đặt/bỏ pallet trên từng càng để kiểm tra:")
-    for i in range(10):
-        left, right, ok = lift.pallet.read_status()
-        left_adc, right_adc = lift.pallet.read_adc()
-        if not ok:
-            print(f"  Lần {i+1}: LỖI đọc SPI/ADC")
-        else:
-            print(f"  Lần {i+1}: trái={'CÓ ██' if left else 'KHÔNG ░░'} (ADC {left_adc:4d})"
-                  f"  phải={'CÓ ██' if right else 'KHÔNG ░░'} (ADC {right_adc:4d})")
-        time.sleep(0.5)
-
-
 def test_pickup_dropoff(lift: Lift):
     print("\n[TEST] Pickup tầng 1 (cần cả 2 IR)...")
     success = lift.pickup(shelf_level=1, require_both=True)
@@ -336,13 +319,12 @@ def main():
     tests = {
         "1": ("Nâng/Hạ cơ bản", test_raise_lower),
         "2": ("Các tầng kệ (1 và 2)", test_shelf_levels),
-        "3": ("Cảm biến IR pallet trái/phải", test_pallet_sensor),
-        "4": ("Pickup/Dropoff tầng 1 (có xác nhận)", test_pickup_dropoff),
-        "5": ("Pickup/Dropoff tầng 2 (có xác nhận)", test_pickup_shelf2),
-        "6": ("Drop từng càng NV1 (left/right + stow)", test_drop_single_side),
-        "7": ("Pickup NV2 (require_both=False)", test_pickup_nv2),
-        "8": ("dropoff() 2 kiện cùng NM", test_dropoff_same_factory),
-        "9": ("IR real-time (Ctrl+C để thoát)", test_ir_live),
+        "3": ("Pickup/Dropoff tầng 1 (có xác nhận)", test_pickup_dropoff),
+        "4": ("Pickup/Dropoff tầng 2 (có xác nhận)", test_pickup_shelf2),
+        "5": ("Drop từng càng NV1 (left/right + stow)", test_drop_single_side),
+        "6": ("Pickup NV2 (require_both=False)", test_pickup_nv2),
+        "7": ("dropoff() 2 kiện cùng NM", test_dropoff_same_factory),
+        "8": ("IR real-time (Ctrl+C để thoát)", test_ir_live),
         "a": ("Scan tất cả 8 channel MCP3008", test_mcp3008_all),
         "b": ("Cẩu TRÁI độc lập (nâng/hạ)", test_left_only),
         "c": ("Cẩu PHẢI độc lập (nâng/hạ)", test_right_only),
@@ -354,12 +336,12 @@ def main():
     for key, (name, _) in tests.items():
         print(f"  {key}. {name}")
 
-    choice = input("\nNhập số (0-9, a/b/c/d): ").strip()
+    choice = input("\nNhập số (0-8, a/b/c/d): ").strip()
 
     try:
         if choice == "0":
             for key, (name, func) in tests.items():
-                if func and key not in ("6", "7", "8", "9", "b", "c"):
+                if func and key not in ("5", "6", "7", "8", "b", "c"):
                     func(lift)
         elif choice in tests and tests[choice][1]:
             tests[choice][1](lift)

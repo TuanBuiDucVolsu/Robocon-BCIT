@@ -129,6 +129,7 @@ class TestLineSensorPolarity(unittest.TestCase):
     def setUp(self):
         self._bus = MagicMock()
         self._bus.available = True
+        self._bus.last_read_ok = True
         self._bus.read_many.return_value = [0.1, 0.2, 0.8, 0.9, 0.5, 0.6]
         self._saved = config.LINE_BLACK_IS_HIGH
 
@@ -153,6 +154,16 @@ class TestLineSensorPolarity(unittest.TestCase):
         sensor = LineSensor(self._bus)
         digital = LineSensor.digital_from_raw(sensor.read_raw())
         self.assertEqual(digital, [1, 1, 0, 0, 0, 0])
+
+    def test_read_error_returns_neutral_not_inverted(self):
+        # SPI/ADC lỗi (last_read_ok=False): dù LINE_BLACK_IS_HIGH=True, KHÔNG được
+        # đảo fallback thô 1.0 thành 0.0 ("trên line" giả) — phải trả trung tính
+        # "không thấy line" để tránh giao lộ giả khi bus glitch giữa trận.
+        config.LINE_BLACK_IS_HIGH = True
+        self._bus.last_read_ok = False
+        self._bus.read_many.return_value = [1.0] * 6
+        sensor = LineSensor(self._bus)
+        self.assertEqual(sensor.read_raw(), [1.0] * config.LINE_SENSOR_COUNT)
 
 
 class TestMotionRoute(unittest.TestCase):

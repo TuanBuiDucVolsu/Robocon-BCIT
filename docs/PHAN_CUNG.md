@@ -334,7 +334,7 @@ Nhìn từ trên xuống:
 - [ ] (Tuỳ chọn) `sudo usermod -aG spi $USER` nếu lỗi quyền đọc SPI
 - [ ] Test line digital: `python3 tests/test_motion.py` option **4**
 - [ ] Calibrate QTR raw ADC: `python3 tests/test_motion.py` option **5** → chỉnh `LINE_THRESHOLD`
-- [ ] Test IR pallet: `python3 tests/test_lift.py` option **3** → chỉnh `PALLET_THRESHOLD`
+- [ ] Test IR pallet: `python3 tests/test_lift.py` option **8** (IR real-time) hoặc **a** (scan cả 8 channel MCP3008) → chỉnh `PALLET_THRESHOLD`
 - [ ] Debug web (DEBUG_MODE=True, chạy `python3 main.py` trực tiếp): line 6 mắt + ADC, IR tại `:5000`
 - [ ] Thi đấu / systemd: `scripts/start.sh` đặt `ROBOT_COMPETE=1` → state machine (không mở web)
 - [ ] Robot ≤ 400×400×400mm khi xuất phát, **quay mặt sang trái (9h)** trong ô start
