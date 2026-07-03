@@ -25,6 +25,34 @@ _vision: Vision | None = None
 _hw_error: str | None = None
 _lock = threading.Lock()
 
+# Watchdog cho /api/move — nếu mất kết nối (Wi-Fi rớt, tab crash) giữa lúc đang
+# giữ nút di chuyển, "stop" từ client có thể không bao giờ tới. Tự dừng motor
+# nếu quá lâu không có lệnh /api/move mới nào (kể cả lặp lại cùng hướng).
+_MOVE_WATCHDOG_TIMEOUT_S = 3.0
+_last_move_ts = 0.0
+_move_active = False
+_watchdog_started = False
+
+
+def _move_watchdog_loop():
+    global _move_active
+    while True:
+        time.sleep(0.2)
+        with _lock:
+            if (_move_active and _motion is not None
+                    and time.time() - _last_move_ts > _MOVE_WATCHDOG_TIMEOUT_S):
+                _motion.stop()
+                _move_active = False
+                logger.warning("Watchdog: tự dừng motor — quá %.1fs không có lệnh /api/move mới",
+                               _MOVE_WATCHDOG_TIMEOUT_S)
+
+
+def _ensure_watchdog_started():
+    global _watchdog_started
+    if not _watchdog_started:
+        _watchdog_started = True
+        threading.Thread(target=_move_watchdog_loop, daemon=True).start()
+
 
 def _init_hardware():
     """Khởi tạo phần cứng 1 lần duy nhất (lazy init)."""
@@ -36,6 +64,7 @@ def _init_hardware():
         _motion = Motion(mcp_bus=bus)
         _lift = Lift(mcp_bus=bus)
         _vision = Vision()
+        _ensure_watchdog_started()
         logger.info("Phần cứng đã khởi tạo thành công")
     except Exception as e:
         _hw_error = str(e)
@@ -78,6 +107,7 @@ def create_app() -> Flask:
 
     @app.route("/api/move", methods=["POST"])
     def move():
+        global _last_move_ts, _move_active
         if _motion is None:
             return jsonify({"ok": False, "error": _hw_error or "Phần cứng chưa sẵn sàng"})
 
@@ -96,6 +126,8 @@ def create_app() -> Flask:
                 _motion.turn_right(speed)
             else:
                 _motion.stop()
+            _last_move_ts = time.time()
+            _move_active = action != "stop"
 
         logger.info("Di chuyển: %s (speed=%.0f)", action, speed)
         return jsonify({"ok": True, "action": action})
@@ -112,6 +144,11 @@ def create_app() -> Flask:
         data = request.get_json(force=True)
         action = data.get("action")
 
+        if action == "pickup":
+            shelf = int(data.get("shelf", 1))
+            if shelf not in (0, 1, 2):
+                return jsonify({"ok": False, "error": f"shelf không hợp lệ: {shelf} (chỉ 0/1/2)"})
+
         with _lock:
             if action == "up":
                 level = min(_lift._current_level + 1, 2)
@@ -120,7 +157,6 @@ def create_app() -> Flask:
                 level = max(_lift._current_level - 1, 0)
                 _lift.go_to_level(level)
             elif action == "pickup":
-                shelf = int(data.get("shelf", 1))
                 _lift.pickup(shelf)
             elif action == "dropoff":
                 _lift.dropoff()
@@ -204,7 +240,8 @@ def create_app() -> Flask:
             return
 
         while True:
-            frame = _vision._capture_frame()
+            with _lock:
+                frame = _vision._capture_frame()
             if frame is None:
                 time.sleep(0.1)
                 continue
@@ -234,7 +271,8 @@ def create_app() -> Flask:
         if _vision is None or _vision._camera is None:
             return jsonify({"ok": False, "error": "Camera không khả dụng"}), 503
 
-        frame = _vision._capture_frame()
+        with _lock:
+            frame = _vision._capture_frame()
         if frame is None:
             return jsonify({"ok": False, "error": "Không chụp được ảnh"}), 500
 
@@ -252,7 +290,8 @@ def create_app() -> Flask:
             return jsonify({"ok": False, "label": None, "confidence": 0,
                             "factory": None, "error": "Vision chưa sẵn sàng"})
 
-        label, confidence = _vision.classify_package()
+        with _lock:
+            label, confidence = _vision.classify_package()
         factory = _vision.get_factory_name(label) if label else None
         return jsonify({
             "ok": label is not None,
@@ -267,7 +306,8 @@ def create_app() -> Flask:
             return jsonify({"ok": False, "left": None, "right": None,
                             "error": "Vision chưa sẵn sàng"})
 
-        label_l, label_r = _vision.classify_pair()
+        with _lock:
+            label_l, label_r = _vision.classify_pair()
         factory_l = _vision.get_factory_name(label_l) if label_l else None
         factory_r = _vision.get_factory_name(label_r) if label_r else None
         return jsonify({

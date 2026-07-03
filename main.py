@@ -86,6 +86,7 @@ class Robot:
         self.current_tier = 1             # Tầng kệ hiện tại (1 = dưới, 2 = trên)
         self.match_start_time = 0.0
         self._tier_retries = 0            # Số lần đã thử lại tầng kệ hiện tại
+        self._start_route_done = False    # Đã chạy THÀNH CÔNG route START → Kệ 3 chưa
 
         # 2 kiện đang mang trên càng
         self.carried_labels: list[str | None] = [None, None]
@@ -264,11 +265,17 @@ class Robot:
         self.lift.reset()
 
         # Thoát ô start → tìm line R0 → căn giữa (giao lộ do ROUTE_START đếm)
-        if not self.motion.exit_start_zone():
-            logger.error("Không thoát được ô start — dừng!")
-            return State.DONE
+        # Thử lại như các lỗi navigation khác — 1 lần glitch cảm biến ngay lúc
+        # xuất phát không nên khiến cả trận kết thúc ngay lập tức.
+        max_attempts = config.MAX_TIER_RETRIES + 1
+        for attempt in range(1, max_attempts + 1):
+            if self.motion.exit_start_zone():
+                return State.NAVIGATE_TO_SHELF
+            logger.warning("Thoát ô start thất bại — thử lại (lần %d/%d)",
+                           attempt, max_attempts)
 
-        return State.NAVIGATE_TO_SHELF
+        logger.error("Không thoát được ô start sau %d lần thử — dừng!", max_attempts)
+        return State.DONE
 
     def _handle_navigate_to_shelf(self) -> State:
         """Di chuyển đến giá kệ hiện tại."""
@@ -279,10 +286,14 @@ class Robot:
         logger.info("Di chuyển đến kệ %d, tầng %d...",
                      self.current_shelf, self.current_tier)
 
-        if self.pickup_count == 0:
-            # Lần đầu: exit_start_zone() đã chạm line R0 → forward 1 giao lộ đến Kệ 3
+        if not self._start_route_done:
+            # Chưa từng tới được Kệ 3: exit_start_zone() đã chạm line R0 → forward 1
+            # giao lộ đến Kệ 3. Chỉ đánh dấu xong khi CHẠY THÀNH CÔNG — nếu route này
+            # thất bại và bị bỏ qua tầng (tier tăng lên 2 nhưng vẫn ở kệ 0), lần sau
+            # vẫn phải thử lại route này thay vì nhầm là "đã ở kệ, chỉ cần pass".
             if not self._run_route(config.ROUTE_START_TO_SHELF_0, "START → Kệ 3"):
                 return self._retry_or_skip_tier("navigate")
+            self._start_route_done = True
         elif self.current_tier == 2:
             # Tầng 2 cùng kệ → không cần di chuyển, chỉ quay lại tiếp cận
             pass
@@ -369,13 +380,14 @@ class Robot:
         return None
 
     def _drop_single_side(self, side: str) -> bool:
-        """Thả 1 kiện và nâng lại càng vừa thả. Trả về True nếu IR xác nhận."""
+        """Thả 1 kiện và nâng lại càng vừa thả. Trả về True nếu IR xác nhận.
+        Luôn nâng lại càng dù IR không xác nhận — tránh càng cạ sàn/kệ khi
+        robot lùi và di chuyển tiếp sau đó."""
         if side == "left":
             dropped = self.lift.dropoff_left()
         else:
             dropped = self.lift.dropoff_right()
-        if dropped:
-            self.lift.raise_after_drop(side)
+        self.lift.raise_after_drop(side)
         return dropped
 
     def _handle_drop_first(self) -> State:
@@ -467,8 +479,10 @@ class Robot:
             else:
                 dropped = self.lift.dropoff_right()
 
+            # Luôn gập càng còn lại về sàn dù IR không xác nhận — tránh 1 càng
+            # kẹt ở giữa chừng (khác tầng với càng kia) khi robot di chuyển tiếp.
+            self.lift.stow_forks(side)
             if dropped:
-                self.lift.stow_forks(side)
                 self.packages_delivered += 1
             else:
                 logger.error("DROP_SECOND thất bại — càng %s chưa thả được pallet", side)
@@ -712,6 +726,7 @@ class Robot:
         self.current_tier = 1
         self.match_start_time = 0.0
         self._tier_retries = 0
+        self._start_route_done = False
         self.carried_labels = [None, None]
         self.delivery_queue = []
         self._last_delivered_label = None

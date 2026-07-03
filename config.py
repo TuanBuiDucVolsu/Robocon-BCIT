@@ -356,7 +356,11 @@ def get_return_route(from_factory: str, target_shelf: int) -> list:
     base = list(ROUTE_FACTORY_TO_SHELF.get(from_factory, []))
     from_row = FACTORY_BOARD_ROW.get(from_factory)
     to_row = SHELF_BOARD_ROW.get(target_shelf)
-    if from_row is None or to_row is None:
+    if to_row is None:
+        # target_shelf ngoài phạm vi hợp lệ (đã hết kệ NV1) — không có kệ để quay
+        # về, trả route rỗng thay vì route THIẾU đoạn dọc (dễ lệch vị trí hơn).
+        return []
+    if from_row is None:
         return base
     return base + _vertical_on_shelf_column(from_row, to_row)
 
@@ -374,7 +378,7 @@ ROUTE_BETWEEN_FACTORIES = {
     ("amkor", "hana_micron"):     [("right",), ("right",), ("forward", 2)],
     ("amkor", "samsung"):         [("right",), ("right",), ("forward", 3)],
     ("foxconn", "amkor"):         [("right",), ("right",), ("forward", 1)],
-    ("foxconn", "hana_micron"):   [("right",), ("right",), ("forward", 2)],
+    ("foxconn", "hana_micron"):   [("right",), ("right",), ("forward", 3)],
     ("foxconn", "samsung"):       [("right",), ("right",), ("forward", 4)],
 }
 

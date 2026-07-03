@@ -50,6 +50,10 @@ class LineSensor:
         if not self.available:
             return [1.0] * config.LINE_SENSOR_COUNT
         raw = self._bus.read_many(self._channels)
+        if not self._bus.last_read_ok:
+            # Lỗi đọc SPI/ADC — trả giá trị trung tính "không thấy line" thay vì
+            # đảo cực fallback thành "trên line" giả (tránh giao lộ giả).
+            return [1.0] * config.LINE_SENSOR_COUNT
         if getattr(config, "LINE_BLACK_IS_HIGH", False):
             return [1.0 - v for v in raw]
         return raw
@@ -113,13 +117,18 @@ class Motion:
     # ----------------------------------------------------------
 
     def get_distance(self, samples: int = 1) -> float:
+        """Đo khoảng cách (cm). Trả -1.0 nếu không có cảm biến HOẶC lỗi đọc."""
         if self._distance_sensor is None:
             return -1.0
-        if samples <= 1:
-            return self._distance_sensor.distance * 100
-        readings = [self._distance_sensor.distance * 100 for _ in range(samples)]
-        readings.sort()
-        return readings[len(readings) // 2]
+        try:
+            if samples <= 1:
+                return self._distance_sensor.distance * 100
+            readings = [self._distance_sensor.distance * 100 for _ in range(samples)]
+            readings.sort()
+            return readings[len(readings) // 2]
+        except Exception as e:
+            logger.warning("Lỗi đọc cảm biến siêu âm: %s", e)
+            return -1.0
 
     # ----------------------------------------------------------
     # Điều khiển cơ bản
@@ -264,6 +273,10 @@ class Motion:
 
         while time.time() - start < config.APPROACH_TIMEOUT:
             dist = self.get_distance(samples=3)  # median chống nhiễu HC-SR04
+            if dist < 0:
+                # Lỗi đọc mẫu này — KHÔNG hiểu nhầm thành "đã tới", thử lại
+                time.sleep(0.02)
+                continue
             if dist <= target_cm:
                 self.stop()
                 logger.info("Đã đến vị trí kệ — khoảng cách %.1fcm", dist)
@@ -291,6 +304,10 @@ class Motion:
 
         while time.time() - start < config.APPROACH_TIMEOUT:
             dist = self.get_distance(samples=3)  # median chống nhiễu HC-SR04
+            if dist < 0:
+                # Lỗi đọc mẫu này — KHÔNG hiểu nhầm thành "đã lùi đủ", thử lại
+                time.sleep(0.02)
+                continue
             if dist >= target_cm:
                 self.stop()
                 logger.info("Đã lùi đủ xa — khoảng cách %.1fcm", dist)
