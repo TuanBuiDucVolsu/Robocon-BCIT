@@ -194,6 +194,12 @@ L298N #1:
 - Khi tiến: IN1/IN3 = PWM(speed), IN2/IN4 = 0. Khi lùi: ngược lại.
 - Jumper ENA/ENB trên L298N giữ nguyên (enable mặc định)
 
+> **Bánh chạy mãi không dừng / quay ngược / chạy lệch?** Checklist tìm lỗi từng bước
+> (cô lập phần mềm vs L298N bằng VOM): [../tests/DEBUG_DONG_CO.md](../tests/DEBUG_DONG_CO.md).
+> Tóm tắt "bánh chạy mãi sau stop()": code 2 bánh đối xứng nên chỉ 1 bánh kẹt = lỗi
+> **kênh đó của L298N** (GND logic lỏng / ENB floating / cầu H chết), không phải phần mềm.
+> Cô lập: `python3 -m tools.test_right_wheel` → đo GPIO 23/22 sau stop, phải ~0V.
+
 ---
 
 ## 5. Động cơ cẩu forklift — L298N #2
@@ -376,3 +382,16 @@ python3 tests/test_motion.py
 python3 tests/test_lift.py
 # Option 3: IR trái/phải + ADC — đặt/bỏ pallet, chỉnh PALLET_THRESHOLD trong config.py
 ```
+
+### 4. Khi cảm biến line đọc toàn 0 / toàn 1023 (tìm lỗi phần cứng)
+
+```bash
+python3 tools/check_mcp3008.py            # chẩn đoán chip + 8 channel + che tay
+python3 -m tools.raw_spi_test             # đọc SPI thô (bỏ qua gpiozero)
+python3 -m tools.raw_spi_test loopback    # self-test SPI Pi (nối MOSI↔MISO)
+```
+
+> Checklist tìm lỗi MCP3008 + QTR-8A từng bước (all-0, all-1023, dò line ngược):
+> [../tests/DEBUG_CAM_BIEN_LINE.md](../tests/DEBUG_CAM_BIEN_LINE.md).
+> Tóm tắt: **toàn 0** = lỗi cấp chip (cắm ngược / MISO pin 12 hở / VREF pin 15 mất
+> 3.3V / AGND pin 14 hở), **không** phải lỗi QTR.

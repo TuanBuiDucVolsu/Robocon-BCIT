@@ -125,12 +125,29 @@ python3 tests/test_smoke.py
 
 ---
 
-## D. Công cụ calibrate riêng (ngoài menu test)
+## D. Công cụ calibrate & debug cảm biến (ngoài menu test)
 
 ```bash
 # Chốt LINE_BLACK_IS_HIGH + LINE_THRESHOLD cho QTR-8A
 python3 -m tools.calibrate_line
+
+# Chẩn đoán MCP3008 (chip + 8 channel + real-time che tay) qua gpiozero
+python3 tools/check_mcp3008.py
+
+# Đọc SPI THÔ (bỏ qua gpiozero) + loopback self-test — dùng khi đọc toàn 0/1023
+python3 -m tools.raw_spi_test
+python3 -m tools.raw_spi_test loopback
+
+# Cô lập lỗi "bánh xe chạy mãi sau stop()" — chạy 1 bánh → stop → giữ để đo VOM
+python3 -m tools.test_right_wheel
 ```
+
+> **Cảm biến line đọc toàn 0 / toàn 1023, hoặc robot dò line ngược?**
+> → checklist: [DEBUG_CAM_BIEN_LINE.md](DEBUG_CAM_BIEN_LINE.md).
+>
+> **Bánh xe chạy mãi không dừng / quay ngược / chạy lệch?**
+> → checklist: [DEBUG_DONG_CO.md](DEBUG_DONG_CO.md).
+
 Xem thêm: [../docs/SA_BAN.md](../docs/SA_BAN.md).
 
 ---

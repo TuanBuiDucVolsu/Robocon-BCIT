@@ -239,7 +239,7 @@ source ~/robot_env/bin/activate
 python3 -m unittest tests.test_logic -v
 ```
 
-Tất cả test phải `OK` (hiện **31 test**). Nếu có lỗi import, kiểm tra lại bước 8-9.
+Tất cả test phải `OK` (hiện **45 test**). Nếu có lỗi import, kiểm tra lại bước 8-9.
 
 ### Test debug web UI (không cần cảm biến):
 

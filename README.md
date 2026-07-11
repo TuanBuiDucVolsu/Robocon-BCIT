@@ -58,14 +58,18 @@ Robocon-BCIT/
 │   ├── start.sh           #   Script khởi chạy (ROBOT_COMPETE=1)
 │   └── robot.service      #   Systemd unit file
 │
+├── tools/                 # Công cụ calibrate (chạy tay trên Pi)
+│   ├── calibrate_line.py  #   Chốt LINE_BLACK_IS_HIGH + LINE_THRESHOLD
+│   └── check_mcp3008.py   #   Chẩn đoán SPI/MCP3008 (bus, nguồn, từng channel)
+│
 └── docs/                  # Tài liệu
-    ├── SETUP_PI.md    # Cài đặt Pi lần đầu (14 bước)
-    ├── PHAN_CUNG.md          # Sơ đồ đấu nối phần cứng
-    ├── CAC_BUOC_HOAT_DONG.md     # Luồng state machine chi tiết
-    ├── Thể lệ.pdf                      # Thể lệ giải đấu
-    ├── Hướng dẫn thi công.pdf          # Hướng dẫn thi công đạo cụ
-    ├── Hình dán khối bảng O2.pdf       # File in decal kiện hàng
-    └── Sa bàn.jpg                      # Sơ đồ sa bàn
+    ├── SETUP_PI.md            # Cài đặt Pi lần đầu (14 bước)
+    ├── PHAN_CUNG.md           # Sơ đồ đấu nối phần cứng
+    ├── CAC_BUOC_HOAT_DONG.md  # Luồng state machine chi tiết
+    ├── TOC_DO.md              # Phân tích thời gian + tối ưu tốc độ
+    ├── SA_BAN.md              # Lưới sa bàn đối chiếu từ file in chuẩn
+    ├── sa_ban.png             # Sơ đồ lưới sa bàn (ảnh)
+    └── Hinh_kien_hang.pdf     # File in decal kiện hàng
 ```
 
 ## Cài đặt nhanh

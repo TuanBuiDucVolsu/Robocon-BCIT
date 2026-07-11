@@ -142,7 +142,7 @@ get_return_route(from_factory, target_shelf)
 - **Siêu âm median**: `approach_shelf` / `retreat_from_shelf` dùng `get_distance(samples=3)`
   (median) chống nhiễu HC-SR04 → tránh dừng sai gây retry tầng.
 - **Polarity QTR-8A**: `LineSensor.read_raw()` chuẩn hoá để **0.0 = trên line** bất kể
-  loại cảm biến. Cờ `config.LINE_BLACK_IS_HIGH` (mặc định False) tự đảo tín hiệu tại
+  loại cảm biến. Cờ `config.LINE_BLACK_IS_HIGH` (hiện đặt True) tự đảo tín hiệu tại
   nguồn nếu QTR đọc đen ra giá trị cao → không phải sửa logic phía dưới. Chốt cờ +
   `LINE_THRESHOLD` bằng `python3 -m tools.calibrate_line` (chạy trên Pi).
 - **Số giao lộ các `ROUTE_*`**: ✅ đã đối chiếu file in sa bàn chuẩn (docs/SA_BAN.md).
@@ -152,8 +152,8 @@ get_return_route(from_factory, target_shelf)
 | Script | Mục đích |
 |--------|----------|
 | `tests/test_logic.py` | 45 unit test — PC, không GPIO (logic + polarity + phân loại màu + reset + resume) |
-| `tests/test_motion.py` | 12 option — motor, line, route, exit start |
-| `tests/test_lift.py` | 8 option — nâng/hạ, IR, drop từng càng, NV2 |
+| `tests/test_motion.py` | 12 option (1-12) + `d` chẩn đoán — motor, line, route, exit start |
+| `tests/test_lift.py` | 8 option (1-8) + `a-d` calibrate/độc lập — nâng/hạ, IR, drop từng càng, NV2 |
 | `tests/test_vision.py` | 7 option — camera, HSV, classify_pair |
 | `tests/test_smoke.py` | Smoke tích hợp trên sa bàn |
 
@@ -224,7 +224,7 @@ Phân tích màu HSV (OpenCV), không cần model AI.
 ## Quy tắc quan trọng
 
 - Số giao lộ trong route là ƯỚC LƯỢNG — đội phải đo thực tế trên sa bàn
-- `TURN_TIME = 0.6s` cần calibrate trên robot thật
+- `TURN_TIME = 0.5s` (fast-profile, CHƯA calibrate thật) cần đo lại trên robot thật
 - `LIFT_TIME_SHELF_1/2` cần calibrate riêng cho từng càng
 - **3 chế độ chạy** (`main()`):
   - `ROBOT_LOOP=1` (`scripts/practice.sh`) → **luyện tập lặp**: `run_practice_loop()` chạy
