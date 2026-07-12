@@ -106,6 +106,10 @@ except KeyboardInterrupt:
 
 # ── 6. Kết luận ──────────────────────────────────────────────────────────────
 print("\n[6] KẾT LUẬN")
+LINE_CHANNELS = set(range(6))          # CH0-5 = QTR-8A  (VCC 5V)
+IR_CHANNELS   = {6, 7}                 # CH6-7 = IR pallet (VCC 3.3V)
+CH_LABELS     = ["LINE"] * 6 + ["IR-L", "IR-R"]
+
 all_zero = all(v == 0 for v in vals)
 all_max = all(v >= 1020 for v in vals)
 all_same = len(set(vals)) == 1
@@ -144,3 +148,51 @@ elif changed:
 else:
     print("  ⚠   MCP3008 phản hồi nhưng giá trị không thay đổi khi che tay")
     print("      Kiểm tra dây OUT từng cảm biến đến CH0-CH7")
+
+# ── 7. Chẩn đoán từng channel báo lỗi ────────────────────────────────────────
+# Bỏ qua nếu toàn 0 / toàn 1023 — hai ca đó đã có hướng dẫn tổng ở mục [6].
+if not (all_zero or all_max):
+    print("\n[7] CHI TIẾT TỪNG CHANNEL")
+    bad_zero, bad_float, no_test = [], [], []
+    for i, v in enumerate(vals):
+        is_ir = i in IR_CHANNELS
+        vcc   = "3.3V" if is_ir else "5V"
+        who   = ("IR " + ("trái" if i == 6 else "phải")) if is_ir else f"QTR mắt {i}"
+        if i in changed:
+            print(f"  CH{i} [{CH_LABELS[i]}]: {v:4d}  ✓ đổi khi che → channel OK")
+            continue
+        if v == 0:
+            bad_zero.append(i)
+            print(f"  CH{i} [{CH_LABELS[i]}]: {v:4d}  ❌ =0 (kéo xuống đất)")
+            print(f"       • Dây OUT cảm biến → CH{i} tuột/đứt (chân đọc bị nối đất)")
+            print(f"       • {who} chết, hoặc cụm cảm biến mất VCC {vcc} / GND chung")
+        elif v >= 1020:
+            bad_float.append(i)
+            print(f"  CH{i} [{CH_LABELS[i]}]: {v:4d}  ⚠ ~1023 (trôi nổi/floating)")
+            print(f"       • Chưa nối cảm biến vào CH{i}, hoặc dây OUT hở → chân treo cao")
+            print(f"       • Nếu ĐÃ nối: {who} chưa cấp {vcc}, hoặc OUT không ra tín hiệu")
+        else:
+            no_test.append(i)
+            print(f"  CH{i} [{CH_LABELS[i]}]: {v:4d}  – trị hợp lệ (chưa che thử kênh này?)")
+
+    # Gợi ý theo cụm — nhiều channel cùng nhóm lỗi ⇒ nghi nguồn/GND cả cụm
+    bad = bad_zero + bad_float
+    if not bad:
+        print("\n  → Không channel nào ở mức lỗi rõ (0 hoặc 1023).")
+        if no_test:
+            print(f"     (CH {no_test}: hãy che/đưa vật vào để xác nhận còn sống.)")
+    else:
+        print(f"\n  → Channel cần kiểm: {sorted(bad)}")
+        line_bad = [i for i in bad if i in LINE_CHANNELS]
+        ir_bad   = [i for i in bad if i in IR_CHANNELS]
+        if len(line_bad) >= 2:
+            print(f"     • CH{line_bad} (nhóm LINE) cùng lỗi → nghi QTR-8A mất VCC 5V")
+            print("       hoặc GND chung của thanh QTR, không phải từng mắt lẻ.")
+        if len(ir_bad) == 2:
+            print("     • Cả CH6+CH7 (IR) lỗi → nghi nguồn 3.3V / GND chung của 2 IR.")
+        if line_bad and ir_bad:
+            print("     • CH0-5 (LINE) và CH6-7 (IR) ĐỀU lỗi tuy dùng nguồn khác nhau")
+            print("       → nghi cấp con chip MCP3008 (xem hướng dẫn all-0 ở mục [6]).")
+        if bad_float and bad_zero:
+            print("     • Có kênh =0 lẫn kênh =1023 → thường là lỗi DÂY từng cảm biến,")
+            print("       chip vẫn convert được (không phải hỏng chip).")
