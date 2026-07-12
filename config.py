@@ -86,8 +86,10 @@ PWM_FREQUENCY = 100          # Hz
 SPEED_DEFAULT = 82           # Duty cycle % mặc định (0-100) — fast-profile, CHƯA calibrate thật
 SPEED_SLOW = 40              # Tốc độ chậm (căn chỉnh, đặt hàng)
 SPEED_TURN = 62              # Tốc độ khi xoay — fast-profile, CHƯA calibrate thật
-PWM_COMPENSATION = 0.95      # Hệ số bù lệch bánh phải khi TIẾN (< 1.0 nếu phải nhanh hơn)
-PWM_COMPENSATION_REV = 0.95  # Hệ số bù riêng khi LÙI (lệch khi lùi thường khác lúc tiến)
+PWM_COMPENSATION = 0.95      # Bù bánh PHẢI khi TIẾN (< 1.0 nếu phải nhanh hơn)
+PWM_COMPENSATION_REV = 0.95  # Bù bánh PHẢI khi LÙI (lệch khi lùi thường khác lúc tiến)
+PWM_COMPENSATION_LEFT = 1.00      # Bù bánh TRÁI khi TIẾN (< 1.0 nếu TRÁI nhanh hơn)
+PWM_COMPENSATION_LEFT_REV = 1.00  # Bù bánh TRÁI khi LÙI
 
 # ============================================================
 # CƠ CẤU NÂNG - THỜI GIAN (giây)

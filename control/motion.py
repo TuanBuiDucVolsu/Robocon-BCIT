@@ -138,14 +138,14 @@ class Motion:
         logger.debug("Tiến - speed=%s", speed)
         self._left_rev.off()
         self._right_rev.off()
-        self._left_fwd.value = self._pct(speed)
+        self._left_fwd.value = self._pct(speed * config.PWM_COMPENSATION_LEFT)
         self._right_fwd.value = self._pct(speed * config.PWM_COMPENSATION)
 
     def backward(self, speed: float = config.SPEED_DEFAULT):
         logger.debug("Lùi - speed=%s", speed)
         self._left_fwd.value = 0
         self._right_fwd.value = 0
-        self._left_rev.value = self._pct(speed)
+        self._left_rev.value = self._pct(speed * config.PWM_COMPENSATION_LEFT_REV)
         self._right_rev.value = self._pct(speed * config.PWM_COMPENSATION_REV)
 
     def turn_left(self, speed: float = config.SPEED_TURN):
