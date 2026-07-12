@@ -146,7 +146,7 @@ class Motion:
         self._left_fwd.value = 0
         self._right_fwd.value = 0
         self._left_rev.value = self._pct(speed)
-        self._right_rev.value = self._pct(speed * config.PWM_COMPENSATION)
+        self._right_rev.value = self._pct(speed * config.PWM_COMPENSATION_REV)
 
     def turn_left(self, speed: float = config.SPEED_TURN):
         logger.debug("Xoay trái - speed=%s", speed)
