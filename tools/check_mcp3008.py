@@ -86,6 +86,9 @@ try:
                    device=config.MCP3008_CS) for i in range(8)]
     baseline = [int(round(ch.value * 1023)) for ch in chs]
     changed = set()
+    # Phát hiện chập chờn: cả 8 kênh cùng rớt 0 ở lúc này, cùng vọt ~1023 ở lúc khác
+    saw_all_zero = all(v == 0 for v in baseline)
+    saw_all_high = all(v >= 1020 for v in baseline)
     start = time.time()
     while time.time() - start < 5:
         vals = [int(round(ch.value * 1023)) for ch in chs]
@@ -94,6 +97,10 @@ try:
         for i, (b, v) in enumerate(zip(baseline, vals)):
             if abs(v - b) > 50:
                 changed.add(i)
+        if all(v == 0 for v in vals):
+            saw_all_zero = True
+        if all(v >= 1020 for v in vals):
+            saw_all_high = True
         time.sleep(0.15)
     print()
     for ch in chs:
@@ -113,8 +120,18 @@ CH_LABELS     = ["LINE"] * 6 + ["IR-L", "IR-R"]
 all_zero = all(v == 0 for v in vals)
 all_max = all(v >= 1020 for v in vals)
 all_same = len(set(vals)) == 1
+# Cả 8 kênh vừa rớt 0, vừa vọt ~1023 trong cùng phiên → tiếp xúc chập chờn
+intermittent = saw_all_zero and saw_all_high
 
-if all_zero:
+if intermittent:
+    print("  ⚡  TIẾP XÚC CHẬP CHỜN (dây/breadboard lỏng) — KHÔNG phải chip/Pi lỗi")
+    print("      Cả 8 kênh lúc rớt 0, lúc vọt 1023 trong CÙNG một phiên đo.")
+    print("      Chip vẫn convert được lúc dây ăn (xem mục [3] đọc ra số hợp lệ).")
+    print("      → Thủ phạm là 1 dây CHUNG của chip: VDD/VREF/MISO/CLK/CS/GND.")
+    print("      Wiggle test: lay từng dây, số nhảy ở dây nào = dây đó lỏng.")
+    print("      Fix bền: HÀN chip lên perfboard (đế IC), BỎ breadboard trước khi thi.")
+    print("      (Đừng đi theo checklist 'lỗi chip' — Pi + chip đã xác nhận tốt.)")
+elif all_zero:
     print("  ❌  TẤT CẢ 8 channel = 0 (kể cả CH6/CH7 IR pallet)")
     print("      → Lỗi ở CẤP CON CHIP MCP3008, KHÔNG phải ở QTR/IR.")
     print("        (Nếu chỉ cảm biến hỏng thì kênh hở sẽ trôi nổi ~cao, không phải 0 sạch.)")
@@ -150,8 +167,8 @@ else:
     print("      Kiểm tra dây OUT từng cảm biến đến CH0-CH7")
 
 # ── 7. Chẩn đoán từng channel báo lỗi ────────────────────────────────────────
-# Bỏ qua nếu toàn 0 / toàn 1023 — hai ca đó đã có hướng dẫn tổng ở mục [6].
-if not (all_zero or all_max):
+# Bỏ qua nếu toàn 0 / toàn 1023 / chập chờn — đã có hướng dẫn tổng ở mục [6].
+if not (all_zero or all_max or intermittent):
     print("\n[7] CHI TIẾT TỪNG CHANNEL")
     bad_zero, bad_float, no_test = [], [], []
     for i, v in enumerate(vals):
@@ -190,8 +207,12 @@ if not (all_zero or all_max):
             print("       hoặc GND chung của thanh QTR, không phải từng mắt lẻ.")
         if len(ir_bad) == 2:
             print("     • Cả CH6+CH7 (IR) lỗi → nghi nguồn 3.3V / GND chung của 2 IR.")
-        if line_bad and ir_bad:
-            print("     • CH0-5 (LINE) và CH6-7 (IR) ĐỀU lỗi tuy dùng nguồn khác nhau")
+        if changed:
+            print(f"     • CH{sorted(changed)} ĐÃ đổi khi che → chip CHẮC CHẮN sống.")
+            print("       Các kênh 1023 còn lại chỉ là cảm biến chưa nối / chưa cấp nguồn,")
+            print("       KHÔNG phải lỗi chip. Cấp nguồn + nối OUT cho đúng kênh là hết.")
+        elif line_bad and ir_bad:
+            print("     • CH0-5 (LINE) và CH6-7 (IR) ĐỀU lỗi, không kênh nào đổi khi che")
             print("       → nghi cấp con chip MCP3008 (xem hướng dẫn all-0 ở mục [6]).")
         if bad_float and bad_zero:
             print("     • Có kênh =0 lẫn kênh =1023 → thường là lỗi DÂY từng cảm biến,")
