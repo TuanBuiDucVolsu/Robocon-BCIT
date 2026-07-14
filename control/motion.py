@@ -8,19 +8,20 @@ import time
 import logging
 
 try:
-    from gpiozero import PWMOutputDevice, DigitalOutputDevice, DistanceSensor, Device
+    from gpiozero import PWMOutputDevice, DigitalOutputDevice, DistanceSensor, DigitalInputDevice, Device
     Device.ensure_pin_factory()
 except Exception:
     try:
         from gpiozero import Device
         from gpiozero.pins.mock import MockFactory, MockPWMPin
         Device.pin_factory = MockFactory(pin_class=MockPWMPin)
-        from gpiozero import PWMOutputDevice, DigitalOutputDevice, DistanceSensor
+        from gpiozero import PWMOutputDevice, DigitalOutputDevice, DistanceSensor, DigitalInputDevice
     except ImportError:
         from unittest.mock import MagicMock
         PWMOutputDevice = MagicMock
         DigitalOutputDevice = MagicMock
         DistanceSensor = MagicMock
+        DigitalInputDevice = MagicMock
 
 import config
 from control.mcp3008_bus import Mcp3008Bus, get_mcp3008_bus
@@ -75,6 +76,38 @@ class LineSensor:
         pass
 
 
+class WheelEncoder:
+    """Đếm xung từ cảm biến tốc độ khe quang (MH Sensor Series) qua ngắt GPIO.
+
+    Dùng để đo tốc độ quay thực tế của từng bánh (số xung/thời gian), phục vụ
+    chẩn đoán/calibrate `PWM_COMPENSATION` — không tham gia vòng điều khiển
+    thời gian thực (bám line vẫn dùng open-loop PWM_COMPENSATION cố định).
+    """
+
+    def __init__(self, pin: int):
+        self._count = 0
+        try:
+            self._device = DigitalInputDevice(pin)
+            self._device.when_activated = self._on_pulse
+            self.available = True
+        except Exception as e:
+            self._device = None
+            self.available = False
+            logger.warning("Encoder GPIO %d không khả dụng (%s)", pin, e)
+
+    def _on_pulse(self):
+        self._count += 1
+
+    def read_and_reset(self) -> int:
+        count = self._count
+        self._count = 0
+        return count
+
+    def close(self):
+        if self._device is not None:
+            self._device.close()
+
+
 class Motion:
     """Điều khiển 2 động cơ bánh xe (trái/phải) với PWM qua L298N."""
 
@@ -91,6 +124,10 @@ class Motion:
 
         self._line_sensor = LineSensor(self._mcp_bus)
         self._last_error = 0.0
+
+        # Encoder tốc độ bánh xe (MH Sensor Series) — đo lệch tốc độ 2 bánh
+        self._encoder_left = WheelEncoder(config.ENCODER_LEFT_PIN)
+        self._encoder_right = WheelEncoder(config.ENCODER_RIGHT_PIN)
 
         # Cảm biến siêu âm HC-SR04
         try:
@@ -129,6 +166,22 @@ class Motion:
         except Exception as e:
             logger.warning("Lỗi đọc cảm biến siêu âm: %s", e)
             return -1.0
+
+    # ----------------------------------------------------------
+    # Encoder tốc độ bánh xe
+    # ----------------------------------------------------------
+
+    def sample_wheel_pulses(self, duration: float = None) -> tuple[int, int]:
+        """Đếm xung encoder trái/phải trong `duration` giây.
+
+        Gọi trong lúc bánh đang chạy (forward()/backward() trước đó) để đo
+        tốc độ thực tế từng bánh — dùng cho chẩn đoán/calibrate PWM_COMPENSATION.
+        """
+        duration = config.ENCODER_SAMPLE_TIME if duration is None else duration
+        self._encoder_left.read_and_reset()
+        self._encoder_right.read_and_reset()
+        time.sleep(duration)
+        return self._encoder_left.read_and_reset(), self._encoder_right.read_and_reset()
 
     # ----------------------------------------------------------
     # Điều khiển cơ bản
@@ -455,5 +508,7 @@ class Motion:
         self._right_fwd.close()
         self._right_rev.close()
         self._line_sensor.cleanup()
+        self._encoder_left.close()
+        self._encoder_right.close()
         if self._distance_sensor:
             self._distance_sensor.close()

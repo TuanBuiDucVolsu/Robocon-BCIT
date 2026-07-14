@@ -15,11 +15,12 @@
 │  GPIO ──→ L298N #2 ──→ 2 motor cẩu (trái/phải độc lập)    │
 │  GPIO ──→ HC-SR04  ──→ Đo khoảng cách phía trước           │
 │  GPIO ──→ Nút bấm ──→ Khởi động robot                      │
+│  GPIO ──→ 2x Encoder (MH Sensor Series) ──→ Tốc độ bánh xe │
 │  CSI  ──→ Camera   ──→ Nhận diện kiện hàng                 │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**Tổng: 16/16 cổng GPIO — dùng hết, không dư.**
+**Tổng: 18 chân GPIO đang dùng** (BTC đã bỏ giới hạn số cổng I/O — không còn ≤16).
 
 > **Line vs IR — độc lập chức năng, chung MCP3008:** QTR (CH0–5) và IR pallet (CH6–7) là hai nhóm cảm biến riêng (vị trí, nhiệm vụ, code). Chúng cùng nối vào **một chip MCP3008** vì Pi không đọc analog trực tiếp và tiết kiệm GPIO (SPI chỉ 4 chân cho 8 kênh analog).
 
@@ -202,6 +203,33 @@ L298N #1:
 
 ---
 
+## 4b. Encoder tốc độ bánh xe — MH Sensor Series
+
+```
+Encoder TRÁI:
+  VCC ──→ 3.3V (hoặc 5V tuỳ module — xem datasheet)
+  GND ──→ GND chung
+  DO  ──→ GPIO 26 (ENCODER_LEFT_PIN)
+
+Encoder PHẢI:
+  VCC ──→ 3.3V (hoặc 5V)
+  GND ──→ GND chung
+  DO  ──→ GPIO 21 (ENCODER_RIGHT_PIN)
+```
+
+- Đĩa mã hoá (encoder disc) gắn đồng trục với bánh/trục motor, khe hở đi qua
+  khe quang của module → mỗi lần cắt qua ra 1 xung digital ở chân `DO`.
+- Dùng để **đo** tốc độ quay thực tế 2 bánh (không tham gia vòng bám line thời
+  gian thực) — phục vụ `test_motion.py` option **e** (đọc xung real-time) và
+  option **f** (tự tính & lưu `PWM_COMPENSATION` theo tỉ lệ xung trái/phải).
+- Nếu module ra digital mức 5V mà Pi input chỉ chịu 3.3V → cần cầu phân áp
+  giống ECHO của HC-SR04 (xem mục 3).
+
+> Hướng dẫn lắp cơ khí (gắn đĩa mã hoá) + đấu dây + kiểm tra chi tiết:
+> [LAP_ENCODER.md](LAP_ENCODER.md).
+
+---
+
 ## 5. Động cơ cẩu forklift — L298N #2
 
 ### 2 càng HOẠT ĐỘNG ĐỘC LẬP
@@ -298,8 +326,11 @@ GND: TẤT CẢ module nối chung GND với nhau và với Pi
 | 24 | IN4 cẩu phải (hạ) | Output | L298N #2 |
 | 25 | IN3 cẩu phải (nâng) | Output | L298N #2 |
 | 27 | IN2 bánh trái (lùi, PWM) | Output | L298N #1 |
+| 26 | Encoder bánh trái (DO) | Input | MH Sensor Series |
+| 21 | Encoder bánh phải (DO) | Input | MH Sensor Series |
 
-**Tổng: 16/16 — đúng giới hạn thể lệ, không dư chân nào.**
+**Tổng: 18 chân GPIO đang dùng.** BTC đã bỏ giới hạn số cổng I/O cho Bảng O2 —
+không còn ràng buộc ≤16 chân, có thể mở rộng thêm cảm biến/GPIO khi cần.
 
 ---
 

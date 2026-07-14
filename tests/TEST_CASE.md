@@ -77,6 +77,9 @@ python3 tests/test_motion.py
 | 10 | **Xoay 90° (calibrate `TURN_TIME`)** | Chỉnh thời gian xoay |
 | 11 | `execute_route` (route config) | Chạy thử 1 route |
 | 12 | Shared SPI: line + IR cùng lúc | Kiểm bus dùng chung |
+| d | Chẩn đoán motor từng bánh riêng | Bánh nào ngược chiều |
+| e | Đọc xung encoder real-time (Ctrl+C thoát) | Kiểm dây/kênh encoder |
+| f | **Calibrate `PWM_COMPENSATION` bằng encoder** | Tự tính & lưu, đỡ dò tay |
 
 ### `test_lift.py` — cơ cấu nâng forklift
 ```bash

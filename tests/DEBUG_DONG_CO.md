@@ -92,6 +92,14 @@ ngay khi tìm ra lỗi**.
 - [ ] **D1.** Cho chạy thẳng (`test_motion` option 1), quan sát lệch bên nào.
 - [ ] **D2.** Chỉnh `PWM_COMPENSATION` trong `config.py` (hiện 0.95 — hệ số nhân tốc
       độ bánh **phải**). Bánh phải nhanh hơn → giảm; chậm hơn → tăng (tối đa 1.0).
+      Có 2 cách chỉnh:
+      - **Tay:** đổi số, chạy lại option 1, lặp lại đến khi hết lệch.
+      - **Tự động (encoder MH Sensor Series, GPIO 26/21):** `test_motion` option
+        **f** — đo xung 2 bánh khi tiến thẳng, tự tính tỉ lệ và đề xuất giá trị
+        `PWM_COMPENSATION`, có thể lưu thẳng vào `config.py`. Option **e** đọc
+        xung real-time để kiểm tra dây/kênh encoder đã đấu đúng chưa trước khi
+        dùng option f (nếu không có xung → encoder chưa đấu đúng, đo bằng option
+        f sẽ báo "không đọc được xung").
 - [ ] **D3.** Kiểm cơ khí: bánh lỏng, ma sát lệch, caster kẹt — không phải lúc nào cũng do PWM.
 
 ---

@@ -10,7 +10,7 @@ Thi đấu dự kiến **ngày 08-09/08/2026** tại phường Bắc Giang, tỉ
 
 ### Giới hạn robot
 - Kích thước xuất phát: **≤ 400x400x400mm** (sau xuất phát có thể mở rộng)
-- Bộ điều khiển: **1 vi xử lý duy nhất**, tổng cổng I/O **≤ 16 cổng**
+- Bộ điều khiển: **1 vi xử lý duy nhất** (BTC đã bỏ giới hạn số cổng I/O — không còn ≤16 cổng)
 - Động cơ: **≤ 12** (kể cả servo, máy nén khí tính 1 động cơ)
 - Pin Bảng O2: **≤ 12V**, **≤ 5000mAh**
 - Camera AI: **bắt buộc** cho Bảng O2, xử lý **cục bộ** (không Internet)
@@ -201,9 +201,12 @@ Kệ thẳng hàng nhà máy → Samsung/Foxconn chỉ cần đi ngang (không r
 - 2 cảm biến IR pallet (trái/phải) qua MCP3008 SPI (CH6+CH7)
 - MCP3008 ADC 10-bit SPI: GPIO 8(CE0), 9(MISO), 10(MOSI), 11(SCLK)
 - HC-SR04 siêu âm (GPIO 19 TRIG, 20 ECHO) — tiếp cận kệ chính xác
+- 2 encoder tốc độ bánh xe (MH Sensor Series, GPIO 26 trái / 21 phải) — đo lệch
+  tốc độ 2 bánh, dùng cho `test_motion.py` option e/f (không tham gia bám line
+  thời gian thực, vẫn dùng `PWM_COMPENSATION` open-loop)
 - Nút khởi động (GPIO 16)
 - L298N x2 + XH-M401 hạ áp
-- Tổng: **16/16 GPIO** (vừa đúng giới hạn), **4/12 động cơ** — ĐẠT
+- Tổng: **18 GPIO đang dùng** (không còn bị giới hạn số cổng — có thể mở rộng thêm), **4/12 động cơ** — ĐẠT
 
 ## Nhận diện kiện hàng
 

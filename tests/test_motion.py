@@ -239,6 +239,76 @@ def _run_right(m: Motion, speed: float, forward: bool):
         m._right_rev.value = speed / 100
 
 
+def _save_config(key: str, value: float):
+    """Ghi đè giá trị một hằng số float trong config.py."""
+    import re
+    path = os.path.join(os.path.dirname(__file__), "..", "config.py")
+    text = open(path).read()
+    text = re.sub(
+        rf"^({re.escape(key)}\s*=\s*)[\d.+-]+",
+        lambda m: f"{m.group(1)}{value:.3f}",
+        text, flags=re.MULTILINE
+    )
+    open(path, "w").write(text)
+
+
+def test_encoder_live(m: Motion):
+    """Đọc xung encoder 2 bánh real-time trong khi tiến — kiểm tra dây/đấu đúng kênh."""
+    if not (m._encoder_left.available and m._encoder_right.available):
+        print("  Encoder chưa sẵn sàng — kiểm tra ENCODER_LEFT_PIN/ENCODER_RIGHT_PIN trong config.py.")
+        return
+
+    print("\n[TEST] Đọc xung encoder real-time khi tiến — Ctrl+C để dừng")
+    m.forward(config.SPEED_DEFAULT)
+    try:
+        while True:
+            left, right = m.sample_wheel_pulses(0.2)
+            print(f"  trái={left:3d} xung/0.2s   phải={right:3d} xung/0.2s")
+    except KeyboardInterrupt:
+        print("\n  Dừng.")
+    finally:
+        m.stop()
+
+
+def test_calibrate_pwm_by_encoder(m: Motion):
+    """So xung 2 bánh khi tiến thẳng → tự tính & lưu PWM_COMPENSATION (bánh phải)."""
+    import importlib
+
+    if not (m._encoder_left.available and m._encoder_right.available):
+        print("  Encoder chưa sẵn sàng — kiểm tra ENCODER_LEFT_PIN/ENCODER_RIGHT_PIN trong config.py.")
+        return
+
+    print("\n[CALIBRATE] Đo xung 2 bánh khi tiến thẳng 1s, tự tính PWM_COMPENSATION")
+    print("  Đặt robot lên đế (bánh không chạm đất) trước khi chạy.")
+    print("  Chỉ chỉnh chiều TIẾN — chiều lùi vẫn phải tự chỉnh PWM_COMPENSATION_REV bằng tay.\n")
+
+    while True:
+        importlib.reload(config)
+        print(f"  PWM_COMPENSATION hiện tại (bánh phải, tiến) = {config.PWM_COMPENSATION:.3f}")
+        cmd = input("  Enter = tiến 1s và đo xung / q = thoát: ").strip().lower()
+        if cmd == "q":
+            break
+
+        m.forward(config.SPEED_DEFAULT)
+        left, right = m.sample_wheel_pulses(1.0)
+        m.stop()
+
+        print(f"  trái={left} xung   phải={right} xung")
+        if left == 0 or right == 0:
+            print("  Không đọc được xung ở 1 trong 2 bánh — kiểm tra dây/đĩa mã hoá trước khi calibrate.")
+            continue
+
+        ratio = left / right
+        suggested = max(0.5, min(1.0, config.PWM_COMPENSATION * ratio))
+        nhanh_hon = "phải" if right > left else "trái"
+        print(f"  Bánh {nhanh_hon} đang quay nhanh hơn.")
+        print(f"  Đề xuất PWM_COMPENSATION = {suggested:.3f} (hiện {config.PWM_COMPENSATION:.3f})")
+
+        if input("  Lưu giá trị đề xuất vào config.py? (y/N): ").strip().lower() == "y":
+            _save_config("PWM_COMPENSATION", suggested)
+            print("  Đã lưu.")
+
+
 def main():
     print("=" * 50)
     print("TEST MODULE ĐỘNG CƠ DI CHUYỂN")
@@ -260,6 +330,8 @@ def main():
         "11": ("execute_route (route config)", test_execute_route),
         "12": ("Shared SPI: line + IR cùng lúc", test_spi_line_and_ir),
         "d": ("Chẩn đoán motor từng bánh riêng", test_motor_diagnosis),
+        "e": ("Đọc xung encoder real-time (Ctrl+C để thoát)", test_encoder_live),
+        "f": ("Calibrate PWM_COMPENSATION bằng encoder (lưu config)", test_calibrate_pwm_by_encoder),
         "0": ("Chạy tất cả", None),
     }
 
@@ -267,12 +339,12 @@ def main():
     for key, (name, _) in tests.items():
         print(f"  {key}. {name}")
 
-    choice = input("\nNhập số (0-12, d): ").strip()
+    choice = input("\nNhập số (0-12, d-f): ").strip()
 
     try:
         if choice == "0":
             for key, (name, func) in tests.items():
-                if func and key not in ("5", "10", "11", "12"):
+                if func and key not in ("5", "10", "11", "12", "e"):
                     func(m)
         elif choice in tests and tests[choice][1]:
             tests[choice][1](m)
