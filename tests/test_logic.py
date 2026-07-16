@@ -389,11 +389,14 @@ class TestVisionColorClassify(unittest.TestCase):
         cls.vision = object.__new__(Vision)  # bỏ qua __init__ (không cần camera)
 
     def _frame(self, fill_rgb, center_rgb=None, center_side=0):
-        """Ảnh RGB 100x100 nền fill_rgb, ô vuông giữa center_rgb cạnh center_side."""
-        f = _np.full((100, 100, 3), fill_rgb, dtype=_np.uint8)
+        """Ảnh BGR 100x100 (khớp format camera thật) nền fill_rgb, ô vuông giữa
+        center_rgb cạnh center_side. Tham số vẫn nhận màu theo thứ tự RGB cho dễ đọc,
+        tự đảo sang BGR trước khi build mảng."""
+        fill_bgr = tuple(reversed(fill_rgb))
+        f = _np.full((100, 100, 3), fill_bgr, dtype=_np.uint8)
         if center_rgb is not None and center_side > 0:
             s = (100 - center_side) // 2
-            f[s:s + center_side, s:s + center_side] = center_rgb
+            f[s:s + center_side, s:s + center_side] = tuple(reversed(center_rgb))
         return f
 
     def _label(self, frame):

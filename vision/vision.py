@@ -50,7 +50,7 @@ class Vision:
         try:
             self._camera = Picamera2()
             cam_config = self._camera.create_still_configuration(
-                main={"size": config.CAMERA_RESOLUTION, "format": "RGB888"}
+                main={"size": config.CAMERA_RESOLUTION, "format": "BGR888"}
             )
             self._camera.configure(cam_config)
             self._camera.start()
@@ -65,7 +65,7 @@ class Vision:
     # ----------------------------------------------------------
 
     def _capture_frame(self):
-        """Chụp 1 frame từ camera, trả về numpy array (RGB) hoặc None."""
+        """Chụp 1 frame từ camera, trả về numpy array (BGR) hoặc None."""
         if self._camera is None:
             return None
 
@@ -92,9 +92,8 @@ class Vision:
         margin_y = int(h * margin)
         roi = frame[margin_y:h - margin_y, margin_x:w - margin_x]
 
-        # Chuyển RGB → BGR → HSV (picamera2 trả về RGB)
-        bgr = cv2.cvtColor(roi, cv2.COLOR_RGB2BGR)
-        hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+        # picamera2 format="BGR888" trả về đúng thứ tự BGR mà OpenCV cần
+        hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
 
         total_pixels = roi.shape[0] * roi.shape[1]
         scores = {}
