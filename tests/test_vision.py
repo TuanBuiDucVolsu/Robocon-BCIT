@@ -22,7 +22,8 @@ def test_camera_capture(vision: Vision):
         print("  Camera hoạt động OK!")
         try:
             import cv2
-            cv2.imwrite("test_capture.jpg", frame)
+            bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            cv2.imwrite("test_capture.jpg", bgr)
             print("  Đã lưu ảnh: test_capture.jpg")
         except Exception as e:
             print(f"  Không lưu được ảnh: {e}")
@@ -46,7 +47,8 @@ def test_color_analysis(vision: Vision):
     margin_y = int(h * 0.2)
     roi = frame[margin_y:h - margin_y, margin_x:w - margin_x]
 
-    hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+    bgr = cv2.cvtColor(roi, cv2.COLOR_RGB2BGR)
+    hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
     total = roi.shape[0] * roi.shape[1]
 
     print(f"  ROI size: {roi.shape[1]}x{roi.shape[0]} ({total} pixels)")
@@ -65,7 +67,7 @@ def test_color_analysis(vision: Vision):
         print(f"    {label:12s} ({factory:18s}): {pct:5.1f}% {bar}")
 
     # Lưu ảnh ROI để kiểm tra
-    cv2.imwrite("test_roi.jpg", roi)
+    cv2.imwrite("test_roi.jpg", bgr)
     print("\n  Đã lưu ảnh ROI: test_roi.jpg")
 
 

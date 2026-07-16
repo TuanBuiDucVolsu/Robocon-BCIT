@@ -246,8 +246,13 @@ def create_app() -> Flask:
                 time.sleep(0.1)
                 continue
 
-            # picamera2 format="BGR888" đã trả về đúng thứ tự BGR mà OpenCV cần
-            _, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+            # Chuyển RGB (picamera2) sang BGR (OpenCV) để encode JPEG
+            if len(frame.shape) == 3 and frame.shape[2] == 3:
+                frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            else:
+                frame_bgr = frame
+
+            _, jpeg = cv2.imencode(".jpg", frame_bgr, [cv2.IMWRITE_JPEG_QUALITY, 70])
             yield (
                 b"--frame\r\n"
                 b"Content-Type: image/jpeg\r\n\r\n" + jpeg.tobytes() + b"\r\n"
@@ -273,7 +278,8 @@ def create_app() -> Flask:
 
         try:
             import cv2
-            _, jpeg = cv2.imencode(".jpg", frame)
+            frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            _, jpeg = cv2.imencode(".jpg", frame_bgr)
             return Response(jpeg.tobytes(), mimetype="image/jpeg")
         except ImportError:
             return jsonify({"ok": False, "error": "OpenCV không khả dụng"}), 500
