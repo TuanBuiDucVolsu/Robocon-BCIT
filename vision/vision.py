@@ -31,6 +31,22 @@ import config
 logger = logging.getLogger(__name__)
 
 
+def _center_weight_map(shape):
+    """
+    Trọng số Gauss theo khoảng cách tới tâm ROI: tâm=1.0, biên giảm dần nhưng
+    KHÔNG về 0 (không cắt cứng như tăng ROI_MARGIN — không mất góc ngoặc đỏ của
+    Hana). Giảm ảnh hưởng của nền (kệ đen/pallet nâu) hay lấn ở rìa ROI khi kiện
+    hàng nhỏ hoặc robot tiếp cận không canh giữa tuyệt đối.
+    """
+    h, w = shape
+    yy, xx = np.mgrid[0:h, 0:w]
+    cy, cx = (h - 1) / 2.0, (w - 1) / 2.0
+    scale = min(h, w) / 2.0
+    dist = np.sqrt(((yy - cy) / scale) ** 2 + ((xx - cx) / scale) ** 2)
+    sigma = getattr(config, "CENTER_WEIGHT_SIGMA", 0.85)
+    return np.exp(-(dist ** 2) / (2 * sigma ** 2))
+
+
 class Vision:
     """Nhận diện kiện hàng bằng phân tích màu HSV từ camera."""
 
@@ -98,7 +114,13 @@ class Vision:
         # picamera2 format="BGR888" trả về đúng thứ tự BGR mà OpenCV cần
         hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
 
-        total_pixels = roi.shape[0] * roi.shape[1]
+        # Trọng số theo khoảng cách tới tâm ROI — pixel giữa khung hình (nơi khối
+        # hàng thật nằm) tính nặng hơn pixel ở rìa (nơi nền kệ/pallet hay lấn vào).
+        # KHÔNG áp cho Hana: ngoặc đỏ của Hana nằm ở GÓC ROI (xem ROI_MARGIN ở
+        # config.py) — trọng số tâm sẽ dập tắt đúng đặc điểm nhận diện của nó.
+        center_weight = _center_weight_map(hsv.shape[:2])
+        uniform_weight = np.ones_like(center_weight)
+        no_center_weight = getattr(config, "NO_CENTER_WEIGHT_LABELS", ("hana_micron",))
         scores = {}
 
         for label, ranges in config.COLOR_RANGES.items():
@@ -107,8 +129,8 @@ class Vision:
                 lower_np = np.array(lower, dtype=np.uint8)
                 upper_np = np.array(upper, dtype=np.uint8)
                 mask = cv2.bitwise_or(mask, cv2.inRange(hsv, lower_np, upper_np))
-            pixel_count = int(cv2.countNonZero(mask))
-            scores[label] = pixel_count / total_pixels
+            weight = uniform_weight if label in no_center_weight else center_weight
+            scores[label] = float((weight * (mask > 0)).sum() / weight.sum())
 
         # Ưu tiên màu sắc nét hơn Amkor (xám) để nền trắng/xám không "ăn" mất
         # kiện có màu. Chỉ rơi về Amkor khi không màu chromatic nào đạt ngưỡng.

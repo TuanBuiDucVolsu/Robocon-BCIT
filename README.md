@@ -59,8 +59,9 @@ Robocon-BCIT/
 │   └── robot.service      #   Systemd unit file
 │
 ├── tools/                 # Công cụ calibrate (chạy tay trên Pi)
-│   ├── calibrate_line.py  #   Chốt LINE_BLACK_IS_HIGH + LINE_THRESHOLD
-│   └── check_mcp3008.py   #   Chẩn đoán SPI/MCP3008 (bus, nguồn, từng channel)
+│   ├── calibrate_line.py   #   Chốt LINE_BLACK_IS_HIGH + LINE_THRESHOLD
+│   ├── calibrate_vision.py #   Chốt COLOR_RANGES từ ảnh thật 4 kiện hàng
+│   └── check_mcp3008.py    #   Chẩn đoán SPI/MCP3008 (bus, nguồn, từng channel)
 │
 └── docs/                  # Tài liệu
     ├── SETUP_PI.md            # Cài đặt Pi lần đầu (14 bước)
@@ -353,7 +354,7 @@ Các giá trị cần đo thực nghiệm trên sa bàn, cập nhật trong `con
 | `EXIT_START_*` | Thoát ô start | test_motion option 6 |
 | `ROUTE_*` | Số giao lộ các route | ✅ đã verify từ file in chuẩn — xem `docs/SA_BAN.md` |
 | `get_return_route` / đoạn dọc | Return về đúng hàng kệ | Test scenario foxconn→samsung → Kệ3 T2 |
-| `COLOR_RANGES` | Dải màu HSV | test_vision option 2 |
+| `COLOR_RANGES` | Dải màu HSV | `python3 -m tools.calibrate_vision` (chốt số) rồi test_vision option 2/5 (kiểm tra lại) |
 | `PALLET_THRESHOLD` | Ngưỡng IR pallet | test_lift option a (raw ADC) / option 8 (live) |
 | `APPROACH_FAST/SLOW_SPEED`, `APPROACH_SLOW_DISTANCE` | Tiếp cận kệ 2 pha | test_motion option 9 — đảm bảo không vọt quá 4cm |
 

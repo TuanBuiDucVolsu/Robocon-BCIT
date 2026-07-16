@@ -161,6 +161,20 @@ ACHROMATIC_LABEL = "amkor"
 # Hana hay bị nhầm Amkor, giảm giá trị này (vd 0.12) để giữ lại góc đỏ.
 ROI_MARGIN = 0.2
 
+# Độ lệch chuẩn Gauss cho trọng số theo khoảng cách tới tâm ROI (vision._center_weight_map).
+# Tâm ROI luôn trọng số 1.0; ở mép ngắn của ROI trọng số còn ~0.5 (KHÔNG về 0 — không
+# cắt mất góc ngoặc đỏ của Hana như tăng ROI_MARGIN sẽ làm). Mục đích: kiện hàng nhỏ so
+# với ROI → pixel nền (kệ đen/pallet nâu) hay lấn ở rìa được tính nhẹ hơn pixel giữa khung
+# hình, nơi khối hàng thật thường nằm khi robot tiếp cận đúng vị trí.
+# Giảm giá trị (vd 0.6) → tập trung vào tâm mạnh hơn; tăng (vd 1.2) → gần với đếm đều cũ.
+# CHƯA calibrate thật — cần test trên Pi với classify_pair() thật.
+CENTER_WEIGHT_SIGMA = 0.85
+
+# Nhãn KHÔNG áp trọng số tâm — vẫn đếm đều toàn ROI như cũ. Hana có ngoặc đỏ ở GÓC
+# (xem ghi chú ROI_MARGIN ở trên) → trọng số tâm sẽ dập tắt đúng đặc điểm nhận diện
+# của nó, nên loại trừ riêng thay vì áp chung với Samsung/Foxconn/Amkor.
+NO_CENTER_WEIGHT_LABELS = ("hana_micron",)
+
 # Dải màu HSV cho từng kiện hàng (OpenCV: H=0-179, S=0-255, V=0-255)
 # Mỗi label có danh sách [(lower, upper), ...] — nhiều dải nếu màu wrap qua 0
 # Đội cần chỉnh ngưỡng theo điều kiện ánh sáng thực tế trên sa bàn

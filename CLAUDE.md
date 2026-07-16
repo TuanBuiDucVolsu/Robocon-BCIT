@@ -79,6 +79,9 @@ control/mcp3008_bus.py — Bus SPI dùng chung MCP3008 (lock)
 control/motion.py    — Di chuyển, bám line PD analog, siêu âm HC-SR04
 control/lift.py      — 2 càng độc lập: PalletSensors (SPI), require_both, _verify_released
 vision/vision.py     — Nhận diện màu HSV (không dùng AI model), classify_pair()
+                        Điểm màu có trọng số tâm ROI (_center_weight_map, config.CENTER_WEIGHT_SIGMA)
+                        để nền kệ/pallet ở rìa ảnh hưởng ít hơn — TRỪ Hana (ngoặc đỏ ở góc,
+                        config.NO_CENTER_WEIGHT_LABELS) vẫn đếm đều như cũ
 debug/server.py      — Flask web debug UI (MJPEG stream, line sensor, classify_pair)
 scripts/             — install.sh, start.sh, robot.service (systemd auto-start)
 docs/                — CAC_BUOC_HOAT_DONG.md, PHAN_CUNG.md, ...
@@ -255,4 +258,5 @@ Phân tích màu HSV (OpenCV), không cần model AI.
 - Robot phải **≤ 400x400x400mm** khi xuất phát
 - Khung robot **không dùng kim loại** (trừ ốc vít)
 - Pin **≤ 12V, ≤ 5000mAh**
-- Ánh sáng thi đấu **không đảm bảo ổn định** — cần calibrate HSV tại sân
+- Ánh sáng thi đấu **không đảm bảo ổn định** — cần calibrate HSV tại sân bằng
+  `python3 -m tools.calibrate_vision` (chụp ảnh thật 4 kiện, tự tính `COLOR_RANGES`)

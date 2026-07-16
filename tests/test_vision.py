@@ -40,17 +40,26 @@ def test_color_analysis(vision: Vision):
 
     import cv2
     import numpy as np
+    from vision.vision import _center_weight_map
 
     h, w = frame.shape[:2]
-    margin_x = int(w * 0.2)
-    margin_y = int(h * 0.2)
+    margin = getattr(config, "ROI_MARGIN", 0.2)
+    margin_x = int(w * margin)
+    margin_y = int(h * margin)
     roi = frame[margin_y:h - margin_y, margin_x:w - margin_x]
 
     hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
     total = roi.shape[0] * roi.shape[1]
 
+    # Dùng ĐÚNG cách tính điểm mà _classify_by_color() dùng khi quét thật (kể cả
+    # trọng số tâm) — nếu không, % hiển thị ở đây sẽ lệch với confidence thật lúc
+    # robot chạy, gây tinh chỉnh sai ngưỡng.
+    center_weight = _center_weight_map(hsv.shape[:2])
+    uniform_weight = np.ones_like(center_weight)
+    no_center_weight = getattr(config, "NO_CENTER_WEIGHT_LABELS", ("hana_micron",))
+
     print(f"  ROI size: {roi.shape[1]}x{roi.shape[0]} ({total} pixels)")
-    print(f"  Dải màu cấu hình:")
+    print(f"  Dải màu cấu hình (đã áp trọng số tâm, trừ {no_center_weight}):")
 
     for label, ranges in config.COLOR_RANGES.items():
         mask = np.zeros(hsv.shape[:2], dtype=np.uint8)
@@ -58,8 +67,8 @@ def test_color_analysis(vision: Vision):
             lower_np = np.array(lower, dtype=np.uint8)
             upper_np = np.array(upper, dtype=np.uint8)
             mask = cv2.bitwise_or(mask, cv2.inRange(hsv, lower_np, upper_np))
-        count = int(cv2.countNonZero(mask))
-        pct = count / total * 100
+        weight = uniform_weight if label in no_center_weight else center_weight
+        pct = (weight * (mask > 0)).sum() / weight.sum() * 100
         bar = "█" * int(pct / 2)
         factory = config.LABEL_TO_FACTORY.get(label, "?")
         print(f"    {label:12s} ({factory:18s}): {pct:5.1f}% {bar}")
