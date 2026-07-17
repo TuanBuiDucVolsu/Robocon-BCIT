@@ -164,7 +164,7 @@ ROI_MARGIN = 0.2
 # Độ lệch chuẩn Gauss cho trọng số theo khoảng cách tới tâm ROI (vision._center_weight_map).
 # Tâm ROI luôn trọng số 1.0; ở mép ngắn của ROI trọng số còn ~0.5 (KHÔNG về 0 — không
 # cắt mất góc ngoặc đỏ của Hana như tăng ROI_MARGIN sẽ làm). Mục đích: kiện hàng nhỏ so
-# với ROI → pixel nền (kệ đen/pallet nâu) hay lấn ở rìa được tính nhẹ hơn pixel giữa khung
+# với ROI → pixel nền (kệ/pallet) hay lấn ở rìa được tính nhẹ hơn pixel giữa khung
 # hình, nơi khối hàng thật thường nằm khi robot tiếp cận đúng vị trí.
 # Giảm giá trị (vd 0.6) → tập trung vào tâm mạnh hơn; tăng (vd 1.2) → gần với đếm đều cũ.
 # CHƯA calibrate thật — cần test trên Pi với classify_pair() thật.

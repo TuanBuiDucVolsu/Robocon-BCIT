@@ -11,10 +11,11 @@ Không đoán tay nữa — vẫn quét camera mỗi trận (đúng thể lệ "
 chỉ có ngưỡng nhận diện là được chốt cứng theo đúng 4 hình thật.
 
 Kiện hàng khá nhỏ so với ROI (khối 40x40x40mm trên pallet 90x90mm, trong ngăn kệ
-240x120x240mm) → phần lớn ROI có thể là NỀN (kệ đen, pallet nâu) chứ không phải
-khối hàng. Tool chụp thêm 1 mẫu "nền trống" (không có kiện hàng nào) rồi kiểm tra
-xem nền có lọt vào dải màu nào đã tính không — pallet nâu đặc biệt dễ lẫn với
-dải vàng đồng của Foxconn.
+240x120x240mm) → phần lớn ROI có thể là NỀN (kệ + pallet, màu tuỳ vật liệu thật
+đang dùng — theo thể lệ chuẩn là kệ đen/pallet nâu, nhưng bản in/thực tế có thể
+khác) chứ không phải khối hàng. Tool chụp thêm 1 mẫu "nền trống" (không có kiện
+hàng nào, đúng màu thật đang dùng) rồi kiểm tra xem nền có lọt vào dải màu nào
+đã tính không — nền màu ấm (vàng/nâu) đặc biệt dễ lẫn với dải Foxconn.
 
 Chạy trên Pi (đã cắm camera CSI):
     python3 -m tools.calibrate_vision
@@ -200,7 +201,7 @@ def _mask_pct(pixels, ranges) -> float:
 
 
 def _check_background(bg_pixels, results: dict):
-    """Cảnh báo nếu nền trống (kệ đen + pallet nâu, KHÔNG có kiện hàng) vẫn lọt dải màu nào đó.
+    """Cảnh báo nếu nền trống (kệ + pallet thật, KHÔNG có kiện hàng) vẫn lọt dải màu nào đó.
     Đây là nguyên nhân hay gặp khi kiện hàng nhỏ so với ROI — % pixel tính được chủ yếu đến từ
     nền chứ không phải khối hàng, khiến confidence "ảo" đạt ngưỡng dù không thấy kiện hàng thật."""
     if bg_pixels is None or len(bg_pixels) == 0:
@@ -252,7 +253,8 @@ def main():
     print("đúng khoảng cách/góc như lúc robot quét thật trên kệ, giữ yên rồi nhấn Enter.\n")
 
     _prompt("  → Bước 0: dọn TRỐNG kệ (không đặt kiện hàng nào), hướng camera vào đúng\n"
-            "     vị trí/khoảng cách quét thật (chỉ thấy kệ đen + pallet nâu), nhấn Enter...")
+            "     vị trí/khoảng cách quét thật (chỉ thấy kệ + pallet thật, màu gì cũng được),\n"
+            "     nhấn Enter...")
     bg_pixels = _roi_hsv_pixels(vision, SAMPLE_SECONDS)
     print(f"    Đã lấy {len(bg_pixels)} pixel mẫu nền.\n")
 
