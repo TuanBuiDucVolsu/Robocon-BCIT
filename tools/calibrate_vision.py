@@ -53,6 +53,14 @@ PERCENTILE_HIGH = 95
 PAD_H = 5                # Nới thêm quanh percentile để không quá khít (sát mép mất điểm khi ánh sáng đổi nhẹ)
 PAD_SV = 12
 
+# Decal có nhiều chi tiết (icon, chữ, viền...) chứ không phải màu đặc 1 khối — pixel
+# "có màu" (S>=CHROMA_SAT_MIN) có thể lẫn nhiều cụm Hue khác nhau (nền, chi tiết phụ,
+# phản chiếu ánh sáng). Nếu lấy percentile trên TOÀN BỘ pixel đó, dải sẽ bị kéo rộng ra
+# bao trùm cả cụm màu "rác". Nên tìm đỉnh histogram Hue (cụm lớn nhất) trước, chỉ lấy
+# percentile trong cụm đó.
+HUE_BIN_WIDTH = 5        # Độ rộng mỗi bin histogram Hue
+HUE_PEAK_WINDOW = 3      # Số bin mỗi bên quanh đỉnh giữ lại (cửa sổ rộng ~2*3*5=30 đơn vị Hue)
+
 
 def _prompt(msg: str):
     try:
@@ -91,6 +99,21 @@ def _percentile_range(values, pad: int, lo_bound: int, hi_bound: int):
     return max(lo_bound, lo), min(hi_bound, hi)
 
 
+def _hue_peak_window(values, domain_min: int, domain_max: int):
+    """Tìm đỉnh histogram Hue (cụm màu lớn nhất) rồi trả về (lo, hi, %pixel thuộc cụm đó).
+    Lọc bỏ các cụm màu phụ/nhiễu (nền, chi tiết khác trên decal...) trước khi lấy percentile."""
+    bins = np.arange(domain_min, domain_max + HUE_BIN_WIDTH, HUE_BIN_WIDTH)
+    counts, edges = np.histogram(values, bins=bins)
+    if counts.sum() == 0:
+        return domain_min, domain_max, 0.0
+    peak_idx = int(np.argmax(counts))
+    lo_bin = max(0, peak_idx - HUE_PEAK_WINDOW)
+    hi_bin = min(len(counts) - 1, peak_idx + HUE_PEAK_WINDOW)
+    lo, hi = int(edges[lo_bin]), int(edges[hi_bin + 1])
+    dominance = counts[lo_bin:hi_bin + 1].sum() / counts.sum()
+    return lo, hi, float(dominance)
+
+
 def _calibrate_chromatic(pixels, label: str):
     """Range HSV cho kiện có màu rõ (samsung/foxconn/hana_micron)."""
     h, s, v = pixels[:, 0].astype(int), pixels[:, 1].astype(int), pixels[:, 2].astype(int)
@@ -106,8 +129,17 @@ def _calibrate_chromatic(pixels, label: str):
         return None
 
     if label == "hana_micron":
-        # Đỏ wrap qua 0/179 — unwrap về khoảng [-90, 89) trước khi lấy percentile.
+        # Đỏ wrap qua 0/179 — unwrap về khoảng [-90, 89) trước khi tìm đỉnh histogram.
         h_unwrapped = np.where(hf > 90, hf - 180, hf)
+        lo_peak, hi_peak, dominance = _hue_peak_window(h_unwrapped, -90, 90)
+        print(f"    Đỉnh Hue (unwrap): [{lo_peak},{hi_peak}] — {dominance*100:.0f}% pixel có màu"
+              f" thuộc cụm chính")
+        if dominance < 0.4:
+            print("    ⚠️ Cụm màu chính chiếm <40% — mẫu có thể lẫn nhiều màu khác nhau"
+                  " (nền/chi tiết khác trong khung), kết quả kém tin cậy.")
+        peak_mask = (h_unwrapped >= lo_peak) & (h_unwrapped <= hi_peak)
+        h_unwrapped, sf, vf = h_unwrapped[peak_mask], sf[peak_mask], vf[peak_mask]
+
         lo_u, hi_u = _percentile_range(h_unwrapped, PAD_H, -90, 89)
         s_lo, s_hi = _percentile_range(sf, PAD_SV, 0, 255)
         v_lo, v_hi = _percentile_range(vf, PAD_SV, 0, 255)
@@ -117,6 +149,14 @@ def _calibrate_chromatic(pixels, label: str):
         if hi_u < 0:
             return [([lo_u + 180, s_lo, v_lo], [hi_u + 180, s_hi, v_hi])]
         return [([lo_u, s_lo, v_lo], [hi_u, s_hi, v_hi])]
+
+    lo_peak, hi_peak, dominance = _hue_peak_window(hf, 0, 179)
+    print(f"    Đỉnh Hue: [{lo_peak},{hi_peak}] — {dominance*100:.0f}% pixel có màu thuộc cụm chính")
+    if dominance < 0.4:
+        print("    ⚠️ Cụm màu chính chiếm <40% — mẫu có thể lẫn nhiều màu khác nhau"
+              " (nền/chi tiết khác trong khung), kết quả kém tin cậy.")
+    peak_mask = (hf >= lo_peak) & (hf <= hi_peak)
+    hf, sf, vf = hf[peak_mask], sf[peak_mask], vf[peak_mask]
 
     h_lo, h_hi = _percentile_range(hf, PAD_H, 0, 179)
     s_lo, s_hi = _percentile_range(sf, PAD_SV, 0, 255)

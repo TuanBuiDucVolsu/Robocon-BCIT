@@ -30,6 +30,47 @@ def test_camera_capture(vision: Vision):
         print("  LỖI: Không chụp được ảnh!")
 
 
+def test_color_order(vision: Vision):
+    """Kiểm tra thứ tự kênh màu THẬT của frame — vision.py giả định BGR (comment ở
+    _capture_frame), nhưng picamera2 đặt tên format 'BGR888'/'RGB888' hay gây nhầm
+    (không phải lúc nào cũng khớp trực giác với thứ tự kênh trả về thực tế). Nếu bị
+    đảo, mọi dải HSV trong config.COLOR_RANGES đều sai lệch có hệ thống."""
+    print("\n[TEST] Kiểm tra thứ tự kênh BGR/RGB...")
+    print("  Cầm 1 VẬT MÀU ĐỎ THUẦN (giấy đỏ, vải đỏ...) — KHÔNG dùng kiện hàng")
+    print("  (decal nhiều màu/chi tiết sẽ làm kết quả không rõ ràng).")
+    input("  → Đưa vật màu đỏ vào giữa khung hình, giữ yên, nhấn Enter...")
+
+    frame = vision._capture_frame()
+    if frame is None:
+        print("  LỖI: Không chụp được ảnh!")
+        return
+
+    h, w = frame.shape[:2]
+    margin = getattr(config, "ROI_MARGIN", 0.2)
+    my, mx = int(h * margin), int(w * margin)
+    roi = frame[my:h - my, mx:w - mx]
+
+    ch0 = float(roi[:, :, 0].mean())
+    ch1 = float(roi[:, :, 1].mean())
+    ch2 = float(roi[:, :, 2].mean())
+    print(f"  Kênh 0 (vision.py coi là B): TB = {ch0:.1f}")
+    print(f"  Kênh 1 (G):                 TB = {ch1:.1f}")
+    print(f"  Kênh 2 (vision.py coi là R): TB = {ch2:.1f}")
+
+    if ch2 > ch0 + 15:
+        print("\n  ✅ Kênh 2 (R) cao hơn hẳn kênh 0 (B) — ĐÚNG thứ tự BGR như code đang")
+        print("     giả định. Không cần sửa gì trong _init_camera().")
+    elif ch0 > ch2 + 15:
+        print("\n  ⚠️ Kênh 0 cao hơn hẳn kênh 2 — mảng ĐANG LÀ RGB (bị đảo so với giả định")
+        print("     BGR trong vision.py)! Mọi dải HSV trong config.COLOR_RANGES đều SAI có")
+        print("     hệ thống (đỏ↔lam bị hoán đổi). Cần sửa vision.py: đổi format=\"BGR888\"")
+        print("     thành format=\"RGB888\" trong _init_camera() (hoặc đảo kênh thủ công")
+        print("     frame = frame[:, :, ::-1] trong _capture_frame), rồi calibrate lại từ đầu.")
+    else:
+        print("\n  ❓ Chênh lệch không rõ ràng — thử lại với vật màu đỏ THUẦN, sáng, đủ lớn")
+        print("     để lấp gần hết khung hình, tránh ánh sáng ám vàng/trắng.")
+
+
 def test_color_analysis(vision: Vision):
     """Chụp ảnh và hiển thị tỷ lệ từng màu — dùng để tinh chỉnh ngưỡng HSV."""
     print("\n[TEST] Phân tích màu HSV...")
@@ -168,6 +209,7 @@ def main():
         "5": ("Đánh giá độ ổn định (10 lần)", test_stability),
         "6": ("Nhận diện cặp 2 kiện (classify_pair)", test_classify_pair),
         "7": ("classify_pair liên tục 5 lần", test_classify_pair_repeat),
+        "8": ("Kiểm tra thứ tự kênh BGR/RGB (chạy TRƯỚC khi tinh chỉnh màu)", test_color_order),
         "0": ("Chạy tất cả", None),
     }
 
@@ -175,7 +217,7 @@ def main():
     for key, (name, _) in tests.items():
         print(f"  {key}. {name}")
 
-    choice = input("\nNhập số (0-7): ").strip()
+    choice = input("\nNhập số (0-8): ").strip()
 
     try:
         if choice == "0":
