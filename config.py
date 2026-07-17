@@ -177,24 +177,26 @@ NO_CENTER_WEIGHT_LABELS = ("hana_micron",)
 
 # Dải màu HSV cho từng kiện hàng (OpenCV: H=0-179, S=0-255, V=0-255)
 # Mỗi label có danh sách [(lower, upper), ...] — nhiều dải nếu màu wrap qua 0
-# Đội cần chỉnh ngưỡng theo điều kiện ánh sáng thực tế trên sa bàn
+# Calibrate thật bằng tools/calibrate_vision.py trên Pi (phông nền trắng chắn
+# hết bàn/đồ vật xung quanh — xem CLAUDE.md). Nếu đổi ánh sáng/vị trí camera,
+# chạy lại tool để cập nhật.
 COLOR_RANGES = {
     # Kiện 01 — Samsung: chip XANH DƯƠNG trên nền trắng
     "samsung": [
-        ([90, 60, 40], [130, 255, 255]),
+        ([87, 54, 36], [110, 255, 161]),
     ],
     # Kiện 02 — Foxconn: chip VÀNG đồng
     "foxconn": [
-        ([15, 60, 80], [40, 255, 255]),
+        ([19, 52, 47], [51, 193, 193]),
     ],
     # Kiện 03 — Amkor: khối nhôm XÁM BẠC (saturation thấp, value trung bình)
     "amkor": [
-        ([0, 0, 100], [179, 40, 200]),
+        ([0, 4, 127], [179, 46, 240]),
     ],
     # Kiện 04 — Hana Micron: QR code viền ĐỎ/HỒNG (đỏ wrap qua 0)
     "hana_micron": [
-        ([0, 60, 60], [10, 255, 255]),     # đỏ phía dưới
-        ([160, 60, 60], [179, 255, 255]),   # đỏ phía trên
+        ([0, 52, 60], [16, 165, 210]),      # đỏ phía dưới
+        ([171, 52, 60], [179, 165, 210]),   # đỏ phía trên
     ],
 }
 
