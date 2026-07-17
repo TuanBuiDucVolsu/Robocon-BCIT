@@ -42,6 +42,13 @@ from vision import Vision
 SAMPLE_SECONDS = 2.0     # Thời gian chụp mẫu mỗi kiện hàng
 SAMPLE_INTERVAL = 0.1    # Giãn cách giữa các frame lấy mẫu
 
+# Margin RIÊNG cho lúc chụp từng kiện hàng khi calibrate (khác config.ROI_MARGIN dùng lúc
+# quét thật). Lúc calibrate thường cầm kiện trước bàn/ghế/đồ vật xung quanh — nếu nền phòng
+# có màu (bàn xanh xám, v.v.) và cắt margin rộng như production, nền dễ bị lẫn vào mẫu màu,
+# đặc biệt khi kiện hàng nhỏ trong khung. Cắt chặt hơn hẳn vì lúc calibrate có thể tự canh
+# kiện hàng vào giữa khung bằng tay (không như robot tự tiếp cận, không cần chừa biên rộng).
+CALIBRATE_ITEM_MARGIN = 0.3
+
 # Ngưỡng lọc pixel "có màu" (chip/logo) khỏi nền trắng/xám của pallet+kệ —
 # cùng logic chromatic/achromatic mà config.py đang dùng để phân loại.
 CHROMA_SAT_MIN = 60      # S >= ngưỡng này mới coi là pixel có màu (không phải nền)
@@ -71,9 +78,14 @@ def _prompt(msg: str):
         raise SystemExit(0)
 
 
-def _roi_hsv_pixels(vision: Vision, seconds: float):
-    """Chụp nhiều frame, cắt ROI (giống hệt _classify_by_color), gộp toàn bộ pixel HSV."""
-    margin = getattr(config, "ROI_MARGIN", 0.2)
+def _roi_hsv_pixels(vision: Vision, seconds: float, margin: float | None = None):
+    """Chụp nhiều frame, cắt ROI, gộp toàn bộ pixel HSV.
+    margin=None → dùng config.ROI_MARGIN (giống hệt _classify_by_color, dùng cho mẫu nền
+    để mô phỏng đúng khung hình lúc quét thật). Truyền margin riêng (chặt hơn) khi chụp
+    từng kiện hàng — lúc calibrate hay cầm kiện trước bàn/ghế/đồ đạc xung quanh (không phải
+    kệ+pallet thật), cắt chặt hơn để tránh nền phòng lẫn vào mẫu màu."""
+    if margin is None:
+        margin = getattr(config, "ROI_MARGIN", 0.2)
     pixels = []
     end = time.time() + seconds
     while time.time() < end:
@@ -250,7 +262,9 @@ def main():
 
     print("=== CALIBRATE MÀU HSV — 4 KIỆN HÀNG CỐ ĐỊNH ===\n")
     print("Với mỗi kiện: đặt MỘT MÌNH kiện hàng đó vào giữa khung hình camera,")
-    print("đúng khoảng cách/góc như lúc robot quét thật trên kệ, giữ yên rồi nhấn Enter.\n")
+    print("đúng khoảng cách/góc như lúc robot quét thật trên kệ, giữ yên rồi nhấn Enter.")
+    print("Cố canh kiện hàng vào chính giữa khung — càng giữa càng ít bị lẫn nền phòng")
+    print("(bàn/ghế/đồ vật xung quanh) vì tool cắt vùng phân tích chặt hơn lúc quét thật.\n")
 
     _prompt("  → Bước 0: dọn TRỐNG kệ (không đặt kiện hàng nào), hướng camera vào đúng\n"
             "     vị trí/khoảng cách quét thật (chỉ thấy kệ + pallet thật, màu gì cũng được),\n"
@@ -262,7 +276,7 @@ def main():
     for label in config.LABEL_TO_FACTORY:
         factory = config.LABEL_TO_FACTORY[label]
         _prompt(f"  → Đặt kiện '{label}' ({factory}) vào khung hình, nhấn Enter...")
-        pixels = _roi_hsv_pixels(vision, SAMPLE_SECONDS)
+        pixels = _roi_hsv_pixels(vision, SAMPLE_SECONDS, margin=CALIBRATE_ITEM_MARGIN)
         print(f"    Đã lấy {len(pixels)} pixel mẫu.")
         if label == config.ACHROMATIC_LABEL:
             ranges = _calibrate_achromatic(pixels)
