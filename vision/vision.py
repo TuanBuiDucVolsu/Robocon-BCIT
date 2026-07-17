@@ -68,8 +68,12 @@ class Vision:
             # create_preview_configuration (không phải still) vì app chụp liên tục
             # nhiều lần/giây — chế độ still tối ưu cho 1 tấm ảnh đơn, AWB hội tụ
             # chậm/khác nên màu bị lệch khi dùng để chụp lặp lại như rpicam-hello preview.
+            # picamera2 đặt tên format ngược trực giác: yêu cầu "RGB888" mới trả về
+            # mảng thứ tự BGR mà OpenCV cần — đã xác nhận bằng test_vision.py test 8
+            # (vật màu đỏ thuần: kênh 0 cao hơn kênh 2 khi xin "BGR888", tức mảng
+            # thực ra là RGB). Đổi sang "RGB888" để có đúng thứ tự BGR.
             cam_config = self._camera.create_preview_configuration(
-                main={"size": config.CAMERA_RESOLUTION, "format": "BGR888"}
+                main={"size": config.CAMERA_RESOLUTION, "format": "RGB888"}
             )
             self._camera.configure(cam_config)
             self._camera.start()
@@ -111,7 +115,7 @@ class Vision:
         margin_y = int(h * margin)
         roi = frame[margin_y:h - margin_y, margin_x:w - margin_x]
 
-        # picamera2 format="BGR888" trả về đúng thứ tự BGR mà OpenCV cần
+        # picamera2 format="RGB888" (xem _init_camera) trả về đúng thứ tự BGR mà OpenCV cần
         hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
 
         # Trọng số theo khoảng cách tới tâm ROI — pixel giữa khung hình (nơi khối
