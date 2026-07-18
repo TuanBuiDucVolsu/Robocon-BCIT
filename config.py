@@ -183,20 +183,20 @@ NO_CENTER_WEIGHT_LABELS = ("hana_micron",)
 COLOR_RANGES = {
     # Kiện 01 — Samsung: chip XANH DƯƠNG trên nền trắng
     "samsung": [
-        ([87, 54, 36], [110, 255, 161]),
+        ([90, 53, 44], [112, 255, 172]),
     ],
     # Kiện 02 — Foxconn: chip VÀNG đồng
     "foxconn": [
-        ([19, 52, 47], [51, 193, 193]),
+        ([19, 51, 48], [49, 200, 193]),
     ],
     # Kiện 03 — Amkor: khối nhôm XÁM BẠC (saturation thấp, value trung bình)
     "amkor": [
-        ([0, 4, 127], [179, 46, 240]),
+        ([0, 4, 128], [179, 49, 240]),
     ],
     # Kiện 04 — Hana Micron: QR code viền ĐỎ/HỒNG (đỏ wrap qua 0)
     "hana_micron": [
-        ([0, 52, 60], [16, 165, 210]),      # đỏ phía dưới
-        ([171, 52, 60], [179, 165, 210]),   # đỏ phía trên
+        ([0, 52, 53], [15, 167, 184]),      # đỏ phía dưới
+        ([170, 52, 53], [179, 167, 184]),   # đỏ phía trên
     ],
 }
 

@@ -30,6 +30,43 @@ def test_camera_capture(vision: Vision):
         print("  LỖI: Không chụp được ảnh!")
 
 
+def test_shape_analysis(vision: Vision):
+    """Chụp ảnh và hiển thị số inlier ORB so với từng ảnh mẫu — dùng để kiểm tra
+    ảnh mẫu (vision/templates/*.png) có đủ tốt không, không phải kết quả nhận diện
+    cuối (đó là _classify_frame — ORB trước, HSV dự phòng)."""
+    print("\n[TEST] So khớp ORB với ảnh mẫu...")
+    if not vision._shape_matcher.ready:
+        print("  ⚠️ Chưa có ảnh mẫu (hoặc thiếu OpenCV) — chạy "
+              "`python3 -m tools.capture_templates` trước.")
+        return
+
+    frame = vision._capture_frame()
+    if frame is None:
+        print("  LỖI: Không chụp được ảnh!")
+        return
+
+    import cv2
+    from vision.shape_match import MIN_INLIERS
+
+    roi = vision._crop_roi(frame)
+    gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+    kp, des = vision._shape_matcher._orb.detectAndCompute(gray, None)
+    print(f"  ROI: {roi.shape[1]}x{roi.shape[0]} — {len(kp) if kp else 0} keypoint")
+    print(f"  Ngưỡng nhận diện (MIN_INLIERS): {MIN_INLIERS}\n")
+
+    scores = {}
+    for label, (tkp, tdes) in vision._shape_matcher._templates.items():
+        good = vision._shape_matcher._good_matches(des, tdes)
+        inliers = vision._shape_matcher._inlier_count(kp, tkp, good)
+        scores[label] = inliers
+
+    for label, inliers in sorted(scores.items(), key=lambda x: -x[1]):
+        factory = config.LABEL_TO_FACTORY.get(label, "?")
+        flag = "✅" if inliers >= MIN_INLIERS else "  "
+        bar = "█" * min(inliers, 50)
+        print(f"  {flag} {label:12s} ({factory:18s}): {inliers:3d} inlier {bar}")
+
+
 def test_color_order(vision: Vision):
     """Kiểm tra thứ tự kênh màu THẬT của frame — vision.py giả định BGR (comment ở
     _capture_frame), nhưng picamera2 đặt tên format 'BGR888'/'RGB888' hay gây nhầm
@@ -194,9 +231,9 @@ def test_classify_pair_repeat(vision: Vision):
 
 def main():
     print("=" * 50)
-    print("TEST NHẬN DIỆN MÀU HSV")
+    print("TEST NHẬN DIỆN KIỆN HÀNG")
     print("=" * 50)
-    print(f"Phương pháp: Phân tích màu HSV (không dùng AI)")
+    print("Phương pháp: ORB (hình dạng, chính) + HSV màu (dự phòng) — không dùng AI")
     print(f"Camera: {config.CAMERA_RESOLUTION}")
 
     vision = Vision()
@@ -210,6 +247,7 @@ def main():
         "6": ("Nhận diện cặp 2 kiện (classify_pair)", test_classify_pair),
         "7": ("classify_pair liên tục 5 lần", test_classify_pair_repeat),
         "8": ("Kiểm tra thứ tự kênh BGR/RGB (chạy TRƯỚC khi tinh chỉnh màu)", test_color_order),
+        "9": ("So khớp ORB với ảnh mẫu (chẩn đoán template)", test_shape_analysis),
         "0": ("Chạy tất cả", None),
     }
 
@@ -217,7 +255,7 @@ def main():
     for key, (name, _) in tests.items():
         print(f"  {key}. {name}")
 
-    choice = input("\nNhập số (0-8): ").strip()
+    choice = input("\nNhập số (0-9): ").strip()
 
     try:
         if choice == "0":

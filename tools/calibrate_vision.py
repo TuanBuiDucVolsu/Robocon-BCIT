@@ -299,7 +299,7 @@ def main():
         if ranges is None:
             print(f'    # "{label}": GIỮ NGUYÊN dải cũ — không đủ dữ liệu để tính lại')
             continue
-        print(f'    "{label}": {_fmt_ranges(ranges)}')
+        print(f'    "{label}": {_fmt_ranges(ranges)},')
     print("}\n")
 
     print("=== KIỂM TRA CHỒNG LẤN (giữa 4 kiện hàng) ===")
