@@ -77,11 +77,17 @@ class LineSensor:
 
 
 class WheelEncoder:
-    """Đếm xung từ cảm biến tốc độ khe quang (MH Sensor Series) qua ngắt GPIO.
+    """Đếm xung encoder bánh xe (JGA25-370, kênh C1) qua ngắt GPIO.
 
+    Chỉ đếm xung trên MỘT kênh — không đọc chiều quay (chiều suy từ lệnh motor).
     Dùng để đo tốc độ quay thực tế của từng bánh (số xung/thời gian), phục vụ
     chẩn đoán/calibrate `PWM_COMPENSATION` — không tham gia vòng điều khiển
     thời gian thực (bám line vẫn dùng open-loop PWM_COMPENSATION cố định).
+
+    ⚠️ JGA25-370 cho xung dày hơn nhiều so với đĩa khe quang (~1000 xung/s mỗi
+    bánh ở tốc độ cao). Callback gpiozero có thể RỚT xung ở mức này. Chấp nhận
+    được vì calibrate chỉ so TỈ LỆ trái/phải (2 bên rớt tương đương). Nếu thấy
+    số giật thất thường thì chuyển riêng phần encoder sang pigpio.
     """
 
     def __init__(self, pin: int):
@@ -125,7 +131,7 @@ class Motion:
         self._line_sensor = LineSensor(self._mcp_bus)
         self._last_error = 0.0
 
-        # Encoder tốc độ bánh xe (MH Sensor Series) — đo lệch tốc độ 2 bánh
+        # Encoder tốc độ bánh xe (JGA25-370 kênh C1) — đo lệch tốc độ 2 bánh
         self._encoder_left = WheelEncoder(config.ENCODER_LEFT_PIN)
         self._encoder_right = WheelEncoder(config.ENCODER_RIGHT_PIN)
 

@@ -295,7 +295,7 @@ def test_calibrate_pwm_by_encoder(m: Motion):
 
         print(f"  trái={left} xung   phải={right} xung")
         if left == 0 or right == 0:
-            print("  Không đọc được xung ở 1 trong 2 bánh — kiểm tra dây/đĩa mã hoá trước khi calibrate.")
+            print("  Không đọc được xung ở 1 trong 2 bánh — kiểm tra dây encoder (C1/VCC/GND) trước khi calibrate.")
             continue
 
         ratio = left / right

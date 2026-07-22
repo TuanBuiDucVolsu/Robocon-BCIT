@@ -402,22 +402,28 @@ class TestVisionColorClassify(unittest.TestCase):
     def _label(self, frame):
         return self.vision._classify_by_color(frame)[0]
 
+    # Màu test = điểm GIỮA dải COLOR_RANGES đã calibrate thật từ camera (không phải
+    # màu tổng hợp cực đại RGB 0/255 — camera thật dưới ánh sáng thường không bao giờ
+    # cho ra S=255,V=255 tuyệt đối, nên test kiểu đó không còn khớp sau khi calibrate
+    # thật thu hẹp COLOR_RANGES). Xem tools/calibrate_vision.py để tái tạo các dải này.
+
     def test_solid_blue_is_samsung(self):
-        self.assertEqual(self._label(self._frame((0, 0, 255))), "samsung")
+        self.assertEqual(self._label(self._frame((45, 86, 110))), "samsung")
 
     def test_solid_yellow_is_foxconn(self):
-        self.assertEqual(self._label(self._frame((255, 255, 0))), "foxconn")
+        self.assertEqual(self._label(self._frame((112, 120, 61))), "foxconn")
 
     def test_solid_red_is_hana(self):
-        self.assertEqual(self._label(self._frame((255, 0, 0))), "hana_micron")
+        self.assertEqual(self._label(self._frame((120, 80, 68))), "hana_micron")
 
     def test_solid_gray_is_amkor(self):
-        self.assertEqual(self._label(self._frame((160, 160, 160))), "amkor")
+        self.assertEqual(self._label(self._frame((180, 162, 162))), "amkor")
 
     def test_blue_chip_on_gray_bg_is_samsung_not_amkor(self):
         # Regression: nền xám 56% > chip xanh 44% pixel. Logic cũ -> amkor (sai).
         # Logic mới ưu tiên màu chromatic đạt ngưỡng -> samsung (đúng).
-        frame = self._frame((160, 160, 160), center_rgb=(0, 0, 255), center_side=40)
+        # Màu = điểm giữa dải calibrate thật (xem comment ở test_solid_* phía trên).
+        frame = self._frame((180, 162, 162), center_rgb=(45, 86, 110), center_side=40)
         self.assertEqual(self._label(frame), "samsung")
 
 

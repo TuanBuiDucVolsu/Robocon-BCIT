@@ -140,10 +140,14 @@ class Vision:
     # Phân tích màu HSV — phương pháp DỰ PHÒNG
     # ----------------------------------------------------------
 
-    def _classify_by_color(self, frame) -> tuple[str, float]:
+    def _classify_by_color(self, frame) -> tuple[str | None, float]:
         """
         Phân tích màu HSV vùng trung tâm ảnh.
-        Trả về (label, confidence).
+        Trả về (label, confidence), hoặc (None, 0.0) nếu KHÔNG có pixel nào
+        trong ROI khớp bất kỳ dải màu nào (0 bằng chứng — không được đoán đại
+        nhãn đầu tiên trong COLOR_RANGES, xem "Không gán label mặc định" ở
+        CLAUDE.md). Caller vẫn nên lọc theo CONFIDENCE_THRESHOLD như bình
+        thường; đây chỉ chặn ca biên confidence=0.0 tuyệt đối.
         """
         roi = self._crop_roi(frame)
 
@@ -185,6 +189,13 @@ class Vision:
         logger.debug("Tỷ lệ màu: %s -> %s",
                       {k: f"{v*100:.1f}%" for k, v in sorted(scores.items(), key=lambda x: -x[1])},
                       best_label)
+
+        if best_score <= 0.0:
+            # Không pixel nào trong ROI khớp bất kỳ dải màu nào — 0 bằng chứng.
+            # Trả None thay vì nhãn đầu tiên trong COLOR_RANGES (tie-break ngẫu
+            # nhiên của max() trên dict toàn 0.0), tránh gán nhầm "samsung" mặc định.
+            logger.warning("Không màu nào khớp ROI (mọi dải = 0%%) — không đoán nhãn")
+            return None, 0.0
 
         return best_label, best_score
 

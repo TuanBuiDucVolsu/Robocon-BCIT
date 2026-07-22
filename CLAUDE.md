@@ -207,7 +207,8 @@ Kệ thẳng hàng nhà máy → Samsung/Foxconn chỉ cần đi ngang (không r
 ## Phần cứng
 
 - Raspberry Pi 4 Model B
-- 2 DC motor bánh xe (giảm tốc 1:48) + 2 bánh caster
+- 2 DC motor bánh xe **JGA25-370 12V/170rpm có encoder** + bánh 65mm + 2 bánh caster
+  (170rpm không tải ≈ 578mm/s; qua L298N sụt ~2V + có tải → thực tế thấp hơn)
 - 2 DC motor cẩu forklift **độc lập** (dây curoa + con lăn) — thả riêng từng càng
 - 2 thanh nâng (nâng 2 pallet cùng lúc, thả riêng khi giao 2 NM khác nhau)
 - Camera CSI (OV5647) — nhận diện HSV
@@ -215,7 +216,7 @@ Kệ thẳng hàng nhà máy → Samsung/Foxconn chỉ cần đi ngang (không r
 - 2 cảm biến IR pallet (trái/phải) qua MCP3008 SPI (CH6+CH7)
 - MCP3008 ADC 10-bit SPI: GPIO 8(CE0), 9(MISO), 10(MOSI), 11(SCLK)
 - HC-SR04 siêu âm (GPIO 19 TRIG, 20 ECHO) — tiếp cận kệ chính xác
-- 2 encoder tốc độ bánh xe (MH Sensor Series, GPIO 26 trái / 21 phải) — đo lệch
+- 2 encoder tốc độ bánh xe (JGA25-370 tích hợp, kênh C1 → GPIO 26 trái / 21 phải) — đo lệch
   tốc độ 2 bánh, dùng cho `test_motion.py` option e/f (không tham gia bám line
   thời gian thực, vẫn dùng `PWM_COMPENSATION` open-loop)
 - Nút khởi động (GPIO 16)

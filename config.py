@@ -54,8 +54,12 @@ APPROACH_FAST_SPEED = 60     # Tốc độ pha xa (nhanh)
 APPROACH_SLOW_SPEED = 25     # Tốc độ pha gần (chính xác, dừng đúng vị trí)
 APPROACH_SLOW_DISTANCE = 10  # cm — khi khoảng cách ≤ giá trị này thì chuyển sang chậm
 
-# --- Cảm biến tốc độ bánh xe (MH Sensor Series — encoder khe quang) ---
-# Mỗi module 3 chân: VCC, GND, DO (digital, ra xung mỗi lần khe đĩa cắt qua khe quang)
+# --- Encoder tốc độ bánh xe (JGA25-370 — encoder Hall TÍCH HỢP trong motor) ---
+# Motor 6 dây: 2 dây to = nguồn motor (→ L298N OUT), 4 dây nhỏ = encoder
+# (VCC, GND, C1, C2). Code chỉ dùng MỘT kênh (C1) mỗi bánh → đếm xung, KHÔNG
+# đọc chiều (chiều suy từ lệnh motor). Cấp encoder VCC = 3.3V để xung ra ≤3.3V
+# an toàn cho GPIO Pi (motor vẫn ăn 12V riêng qua L298N).
+# ⚠️ Bảng màu dây khác nhau theo lô — hỏi shop trước khi cắm, sai VCC/C1 là hỏng.
 ENCODER_LEFT_PIN = 26        # Encoder bánh trái
 ENCODER_RIGHT_PIN = 21       # Encoder bánh phải
 ENCODER_SAMPLE_TIME = 0.2    # Thời gian đếm xung mỗi lần lấy mẫu (giây) — dùng cho calibrate/diag
@@ -71,7 +75,7 @@ ENCODER_SAMPLE_TIME = 0.2    # Thời gian đếm xung mỗi lần lấy mẫu (
 # Nút khởi động:   1 chân (START_BUTTON_PIN)
 # Siêu âm HC-SR04: 2 chân (TRIG, ECHO)
 # MCP3008 SPI:     4 chân (CE0, MISO, MOSI, SCLK) — line sensor + IR pallet
-# Encoder bánh xe: 2 chân (ENCODER_LEFT_PIN, ENCODER_RIGHT_PIN) — MH Sensor Series
+# Encoder bánh xe: 2 chân (ENCODER_LEFT_PIN, ENCODER_RIGHT_PIN) — JGA25-370 (kênh C1)
 # Camera:          CSI-2 (không dùng GPIO)
 # ----------------------------------------------------------
 # TỔNG:           18 chân GPIO đang dùng — BTC đã bỏ giới hạn số cổng I/O, có thể mở rộng
@@ -90,9 +94,21 @@ ENCODER_SAMPLE_TIME = 0.2    # Thời gian đếm xung mỗi lần lấy mẫu (
 # ĐỘNG CƠ - TỐC ĐỘ & PWM
 # ============================================================
 PWM_FREQUENCY = 100          # Hz
-SPEED_DEFAULT = 82           # Duty cycle % mặc định (0-100) — fast-profile, CHƯA calibrate thật
+# ⚠️ TOÀN BỘ số dưới đây ĐÃ MẤT HIỆU LỰC sau khi đổi sang JGA25-370 + bánh 65mm
+# (chúng được đặt cho motor giảm tốc cũ). PHẢI đo lại trước khi chạy thật —
+# xem quy trình trong tests/DEBUG_DONG_CO.md.
+#
+# BRING-UP: SPEED_DEFAULT đang để MỨC AN TOÀN 50 cho lần chạy đầu với motor mới
+# (giá trị cũ của motor cũ là 82). Quy trình tăng dần:
+#   1) Chạy 50 → bám line ổn định, không vọt qua giao lộ?
+#   2) Tăng từng nấc +10, mỗi nấc chạy lại test bám line + đếm giao lộ.
+#   3) Dừng ở mức cao nhất mà vẫn KHÔNG trượt giao lộ, rồi tinh chỉnh LINE_KP/KD.
+# Tăng tốc mà không chỉnh PD → robot lắc/văng khỏi line hoặc bỏ sót giao lộ.
+SPEED_DEFAULT = 50           # Duty cycle % (0-100) — mức bring-up an toàn (cũ: 82)
 SPEED_SLOW = 40              # Tốc độ chậm (căn chỉnh, đặt hàng)
-SPEED_TURN = 62              # Tốc độ khi xoay — fast-profile, CHƯA calibrate thật
+SPEED_TURN = 62              # Tốc độ khi xoay — CHƯA đo lại cho JGA25-370.
+                             # ⚠️ CHỐT giá trị này TRƯỚC khi calibrate TURN_TIME:
+                             # đổi SPEED_TURN sau đó sẽ làm TURN_TIME sai trở lại.
 PWM_COMPENSATION = 0.95      # Bù bánh PHẢI khi TIẾN (< 1.0 nếu phải nhanh hơn)
 PWM_COMPENSATION_REV = 0.95  # Bù bánh PHẢI khi LÙI (lệch khi lùi thường khác lúc tiến)
 PWM_COMPENSATION_LEFT = 1.00      # Bù bánh TRÁI khi TIẾN (< 1.0 nếu TRÁI nhanh hơn)
@@ -175,6 +191,14 @@ CENTER_WEIGHT_SIGMA = 0.85
 # của nó, nên loại trừ riêng thay vì áp chung với Samsung/Foxconn/Amkor.
 NO_CENTER_WEIGHT_LABELS = ("hana_micron",)
 
+# Ngưỡng inlier tối thiểu để ORB (vision/shape_match.py) coi là nhận diện được —
+# mặc định trong shape_match.py là 10, HẠ xuống theo số liệu thật đo trên Pi: decal
+# Foxconn (lưới chấm lặp lại — hoạ tiết khó cho ORB hơn 3 kiện kia) chỉ đạt ~7 inlier
+# dù đúng kiện, trong khi 3 kiện SAI cao nhất chỉ ~3 inlier cùng điều kiện đó — vẫn
+# còn biên an toàn >2 lần. Nếu sau này thấy báo nhận nhầm (đặc biệt lúc KHÔNG có
+# kiện hàng nào trong khung), tăng lại giá trị này.
+SHAPE_MIN_INLIERS = 6
+
 # Dải màu HSV cho từng kiện hàng (OpenCV: H=0-179, S=0-255, V=0-255)
 # Mỗi label có danh sách [(lower, upper), ...] — nhiều dải nếu màu wrap qua 0
 # Calibrate thật bằng tools/calibrate_vision.py trên Pi (phông nền trắng chắn
@@ -228,8 +252,9 @@ EXIT_START_ALIGN_TIME = 0.4  # Giây bám line ngắn sau khi chạm line (căn 
 # ============================================================
 MATCH_DURATION = 240         # Tổng thời gian trận đấu (giây)
 SAFETY_MARGIN = 10           # Dừng lại trước khi hết giờ (giây)
-TURN_TIME = 0.5              # Thời gian xoay 90° (giây) — fast-profile, PHẢI đo lại thật
-                              # sau khi đổi SPEED_TURN (test_motion option 10) — ưu tiên #1
+TURN_TIME = 0.5              # Thời gian xoay 90° (giây) — ⚠️ MẤT HIỆU LỰC sau khi đổi
+                              # sang JGA25-370 + bánh 65mm. PHẢI đo lại bằng
+                              # test_motion option 10 — ƯU TIÊN #1 trước mọi thứ khác.
 # File lưu mốc bắt đầu trận: nếu robot lỗi (exception) → thoát mã 1 → systemd restart
 # → đọc lại file này để chạy NỐT thời gian còn lại (không reset 240s). Xoá khi xong sạch.
 # Ở /tmp nên tự mất sau reboot (trận cũ không "ám" trận mới).
