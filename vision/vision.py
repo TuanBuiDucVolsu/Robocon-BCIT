@@ -192,14 +192,19 @@ class Vision:
     # Kết hợp ORB + HSV
     # ----------------------------------------------------------
 
-    def _classify_frame(self, frame) -> tuple[str | None, float]:
+    def _classify_frame(self, frame) -> tuple[str | None, float, bool]:
         """Nhận diện 1 frame: ORB trước (nếu đã có ảnh mẫu), rơi về HSV màu nếu ORB
-        không đủ tự tin hoặc chưa có ảnh mẫu (xem shape_match.MIN_INLIERS)."""
+        không đủ tự tin hoặc chưa có ảnh mẫu (xem shape_match.MIN_INLIERS).
+        Trả về (label, confidence, from_orb). from_orb=True nghĩa là ORB đã TỰ quyết
+        định đủ tự tin (MIN_INLIERS + MARGIN_RATIO trong ShapeMatcher.classify) — caller
+        nên chấp nhận ngay, KHÔNG so confidence quy đổi với CONFIDENCE_THRESHOLD nữa
+        (ngưỡng đó chỉ có ý nghĩa với thang % pixel của HSV, không phải thang ORB)."""
         if self._shape_matcher.ready:
             label, confidence = self._classify_by_shape(frame)
             if label is not None:
-                return label, confidence
-        return self._classify_by_color(frame)
+                return label, confidence, True
+        label, confidence = self._classify_by_color(frame)
+        return label, confidence, False
 
     # ----------------------------------------------------------
     # API chính
@@ -229,16 +234,16 @@ class Vision:
                 time.sleep(config.SCAN_RETRY_DELAY)
                 continue
 
-            label, confidence = self._classify_frame(frame)
-            logger.info("Lần %d: label=%s, confidence=%.1f%%",
-                        attempt, label, confidence * 100)
+            label, confidence, from_orb = self._classify_frame(frame)
+            logger.info("Lần %d: label=%s, confidence=%.1f%% (nguồn=%s)",
+                        attempt, label, confidence * 100, "ORB" if from_orb else "HSV")
+
+            if from_orb or confidence >= config.CONFIDENCE_THRESHOLD:
+                return label, confidence
 
             if confidence > best_conf:
                 best_label = label
                 best_conf = confidence
-
-            if confidence >= config.CONFIDENCE_THRESHOLD:
-                return label, confidence
 
             logger.warning("Confidence thấp (%.2f < %.2f), thử lại...",
                            confidence, config.CONFIDENCE_THRESHOLD)
@@ -262,6 +267,7 @@ class Vision:
 
         best_left, best_right = None, None
         best_conf_left, best_conf_right = 0.0, 0.0
+        best_ok_left, best_ok_right = False, False
 
         for attempt in range(1, config.MAX_SCAN_RETRIES + 1):
             frame = self._capture_frame()
@@ -274,27 +280,32 @@ class Vision:
             frame_left = frame[:, :mid]
             frame_right = frame[:, mid:]
 
-            label_l, conf_l = self._classify_frame(frame_left)
-            label_r, conf_r = self._classify_frame(frame_right)
-            logger.info("Lần %d: trái=%s (%.1f%%), phải=%s (%.1f%%)",
-                        attempt, label_l, conf_l * 100, label_r, conf_r * 100)
+            label_l, conf_l, from_orb_l = self._classify_frame(frame_left)
+            label_r, conf_r, from_orb_r = self._classify_frame(frame_right)
+            logger.info("Lần %d: trái=%s (%.1f%%, %s), phải=%s (%.1f%%, %s)",
+                        attempt, label_l, conf_l * 100, "ORB" if from_orb_l else "HSV",
+                        label_r, conf_r * 100, "ORB" if from_orb_r else "HSV")
+
+            # ORB đã tự quyết định đủ tự tin — không so confidence quy đổi với
+            # CONFIDENCE_THRESHOLD nữa (chỉ có ý nghĩa với % pixel của HSV).
+            ok_l = from_orb_l or conf_l >= config.CONFIDENCE_THRESHOLD
+            ok_r = from_orb_r or conf_r >= config.CONFIDENCE_THRESHOLD
 
             if conf_l > best_conf_left:
-                best_left, best_conf_left = label_l, conf_l
+                best_left, best_conf_left, best_ok_left = label_l, conf_l, ok_l
             if conf_r > best_conf_right:
-                best_right, best_conf_right = label_r, conf_r
+                best_right, best_conf_right, best_ok_right = label_r, conf_r, ok_r
 
-            if (conf_l >= config.CONFIDENCE_THRESHOLD and
-                    conf_r >= config.CONFIDENCE_THRESHOLD):
+            if ok_l and ok_r:
                 return label_l, label_r
 
             time.sleep(config.SCAN_RETRY_DELAY)
 
         logger.info("Kết quả tốt nhất: trái=%s (%.1f%%), phải=%s (%.1f%%)",
                      best_left, best_conf_left * 100, best_right, best_conf_right * 100)
-        
-        left = best_left if best_conf_left >= config.CONFIDENCE_THRESHOLD else None
-        right = best_right if best_conf_right >= config.CONFIDENCE_THRESHOLD else None
+
+        left = best_left if best_ok_left else None
+        right = best_right if best_ok_right else None
         return left, right
 
     def get_factory_name(self, label: str) -> str | None:

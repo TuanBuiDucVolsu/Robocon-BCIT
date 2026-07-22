@@ -273,7 +273,8 @@ def create_app() -> Flask:
 
         try:
             import cv2
-            _, jpeg = cv2.imencode(".jpg", frame)
+            bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            _, jpeg = cv2.imencode(".jpg", bgr)
             return Response(jpeg.tobytes(), mimetype="image/jpeg")
         except ImportError:
             return jsonify({"ok": False, "error": "OpenCV không khả dụng"}), 500

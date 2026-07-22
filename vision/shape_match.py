@@ -43,6 +43,10 @@ MIN_MATCHES_FOR_HOMOGRAPHY = 8
 # Số inlier RANSAC tối thiểu mới coi là nhận diện được kiện đó (đủ tự tin, không phải
 # trùng hợp vài keypoint lẻ tẻ từ nền).
 MIN_INLIERS = getattr(config, "SHAPE_MIN_INLIERS", 10)
+# Kiện thắng phải có inlier >= MARGIN_RATIO lần kiện đứng thứ 2 mới được chấp nhận —
+# chặn trường hợp bệ trống/nền vẫn cho 1-2 nhãn gần chạm MIN_INLIERS nhưng sát nút
+# nhau (không có cách biệt rõ ràng như khi thật sự cầm đúng kiện hàng).
+MARGIN_RATIO = getattr(config, "SHAPE_MARGIN_RATIO", 1.8)
 RANSAC_REPROJ_THRESHOLD = 5.0
 # Quy đổi số inlier -> "confidence" 0-1 CHỈ để hiển thị (web debug UI, log) thống nhất
 # định dạng % với đường màu HSV — quyết định nhận diện thật vẫn dựa vào MIN_INLIERS thô,
@@ -132,7 +136,14 @@ class ShapeMatcher:
 
     def classify(self, frame_bgr) -> tuple[str | None, int]:
         """So khớp 1 ảnh (đã cắt ROI) với các ảnh mẫu.
-        Trả về (label, số_inlier) hoặc (None, số_inlier_cao_nhất) nếu không đủ tự tin."""
+        Trả về (label, số_inlier) hoặc (None, số_inlier_cao_nhất) nếu không đủ tự tin.
+
+        Cần cả 2 điều kiện: (1) vượt MIN_INLIERS tuyệt đối, VÀ (2) cách biệt rõ với
+        kiện đứng thứ 2 (>= MARGIN_RATIO lần). Chỉ riêng ngưỡng tuyệt đối không đủ —
+        đo thật trên Pi thấy khi bệ TRỐNG (không có kiện hàng nào), nền vẫn có thể
+        cho 1 nhãn gần chạm ngưỡng trong khi nhãn thứ 2 sát nút ngay phía sau (vd 4
+        so với 3) — dễ báo nhầm nếu ánh sáng đổi nhẹ đẩy qua ngưỡng. Kiện hàng thật
+        luôn cách biệt rõ hơn hẳn (vd 7 so với 3)."""
         if not self.ready:
             return None, 0
 
@@ -141,13 +152,15 @@ class ShapeMatcher:
         if des is None or len(kp) < 2:
             return None, 0
 
-        best_label, best_score = None, 0
+        scores = {}
         for label, (tkp, tdes) in self._templates.items():
             good = self._good_matches(des, tdes)
-            score = self._inlier_count(kp, tkp, good)
-            if score > best_score:
-                best_label, best_score = label, score
+            scores[label] = self._inlier_count(kp, tkp, good)
 
-        if best_score >= MIN_INLIERS:
+        ranked = sorted(scores.items(), key=lambda kv: -kv[1])
+        best_label, best_score = ranked[0]
+        second_score = ranked[1][1] if len(ranked) > 1 else 0
+
+        if best_score >= MIN_INLIERS and best_score >= MARGIN_RATIO * max(second_score, 1):
             return best_label, best_score
         return None, best_score
