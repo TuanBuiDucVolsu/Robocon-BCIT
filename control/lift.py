@@ -343,8 +343,25 @@ class Lift:
         self._left_dropped = False
         self._right_dropped = False
 
+    def home_to_floor(self, duration: float | None = None):
+        """Ép hạ CẢ 2 càng chạm đáy cơ khí. KHÔNG có limit switch nên không có
+        cách nào ĐO được đã chạm đáy thật — chỉ có thể chạy hạ liên tục lâu hơn
+        hẳn thời gian tối đa cần thiết (config.LIFT_HOME_DURATION) để chắc chắn
+        chạm đáy dù trước đó lift đang ở tầng nào / _current_level có đúng hay
+        không. Khác go_to_level(0): hàm đó TIN _current_level (không làm gì nếu
+        đã là 0), không xác minh vị trí thật — dùng home_to_floor() khi vị trí
+        thật sự không chắc (đầu trận, sau lỗi/mất điện)."""
+        duration = duration if duration is not None else config.LIFT_HOME_DURATION
+        logger.info("Home: hạ cả 2 càng liên tục %.1fs để ép chạm đáy cơ khí", duration)
+        self._left_en.on(); self._left_up.off(); self._left_down.on()
+        self._right_up.off(); self._right_down.on()
+        time.sleep(duration)
+        self._stop_all()
+        self._current_level = 0
+        logger.info("Home xong — đã khai báo lại vị trí = SÀN")
+
     def reset(self):
-        self.go_to_level(0)
+        self.home_to_floor()
         self._left_dropped = False
         self._right_dropped = False
 

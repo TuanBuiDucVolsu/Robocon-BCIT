@@ -121,6 +121,13 @@ LIFT_TIME_FLOOR = 0.0        # Thời gian hạ xuống mặt sàn (gốc 0)
 LIFT_TIME_SHELF_1 = 0.150      # Thời gian nâng lên tầng 1 kệ (cơ sở)
 LIFT_TIME_SHELF_2 = 1.5      # Thời gian nâng lên tầng 2 kệ (cơ sở)
 
+# Không có limit switch ở đáy — Lift.home_to_floor() (gọi trong reset(), đầu mỗi
+# trận) hạ liên tục khoảng thời gian CỐ ĐỊNH này để ép chạm đáy cơ khí, bất kể vị
+# trí thật trước đó là gì. Phải LỚN HƠN LIFT_TIME_SHELF_2 (thời gian nâng cao nhất)
+# để đảm bảo chạm đáy dù đang ở tầng 2. Motor/gearbox nhỏ chịu được vài giây bị
+# chặn cứng (stall) không sao — đừng để quá lâu (nóng máy, tốn giây trong 240s trận).
+LIFT_HOME_DURATION = 3.0
+
 # Bù sai lệch khi NÂNG (giây thêm/bớt — dương=chạy lâu hơn, âm=dừng sớm hơn)
 LIFT_LEFT_EXTRA  = -0.050    # Bù cẩu TRÁI khi nâng
 LIFT_RIGHT_EXTRA = 0.0       # Bù cẩu PHẢI khi nâng

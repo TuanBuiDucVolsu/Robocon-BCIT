@@ -218,6 +218,8 @@ def test_calibrate_lift(lift: Lift):
     print("  Nâng: t1+/t1- = tầng1  t2+/t2- = tầng2  l+/l- = bù trái nâng  r+/r- = bù phải nâng")
     print("  Hạ:   ll+/ll- = bù trái hạ  rl+/rl- = bù phải hạ")
     print("  Di chuyển: up1/up2/dn   Khai báo vị trí: set0/set1/set2   Đo thực: find1/find2")
+    print("  home  = KHÔNG có limit switch → hạ CẢ 2 càng liên tục "
+          f"{config.LIFT_HOME_DURATION}s (ép chạm đáy cơ khí, dùng khi vị trí đang không chắc/lệch)")
     print("  s = lưu & thoát\n")
 
     level_names = {0: "SÀN", 1: "TẦNG 1", 2: "TẦNG 2"}
@@ -274,9 +276,23 @@ def test_calibrate_lift(lift: Lift):
         elif cmd in ("find1", "find2"):
             target = 1 if cmd == "find1" else 2
             _find_level_by_hand(lift, target)
+        elif cmd == "home":
+            _home_to_floor(lift)
         else:
             print("  Lệnh không hợp lệ.")
-            print("  t1+/t1-/t2+/t2-  l+/l-  r+/r-  up1/up2/dn  set0/set1/set2  find1/find2  s")
+            print("  t1+/t1-/t2+/t2-  l+/l-  r+/r-  up1/up2/dn  set0/set1/set2  find1/find2  home  s")
+
+
+def _home_to_floor(lift: Lift):
+    """Xác nhận an toàn rồi gọi Lift.home_to_floor() thật (dùng chung logic với
+    reset() ở đầu mỗi trận — xem control/lift.py)."""
+    print(f"\n  [HOME] Hạ CẢ 2 càng liên tục {config.LIFT_HOME_DURATION}s để ép chạm đáy cơ khí...")
+    confirm = input("  ⚠️ Đảm bảo phía dưới KHÔNG có vật cản/kẹt. Tiếp tục? (y/N): ").strip().lower()
+    if confirm != "y":
+        print("  Đã huỷ.")
+        return
+    lift.home_to_floor()
+    print(f"  Đã hạ hết cỡ ({config.LIFT_HOME_DURATION}s) — khai báo lại vị trí = SÀN (tầng 0).")
 
 
 def _find_level_by_hand(lift: Lift, target_level: int):
