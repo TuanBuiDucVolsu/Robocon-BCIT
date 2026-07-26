@@ -118,8 +118,8 @@ PWM_COMPENSATION_LEFT_REV = 1.00  # Bù bánh TRÁI khi LÙI
 # CƠ CẤU NÂNG - THỜI GIAN (giây)
 # ============================================================
 LIFT_TIME_FLOOR = 0.0        # Thời gian hạ xuống mặt sàn (gốc 0)
-LIFT_TIME_SHELF_1 = 0.150      # Thời gian nâng lên tầng 1 kệ (cơ sở)
-LIFT_TIME_SHELF_2 = 1.5      # Thời gian nâng lên tầng 2 kệ (cơ sở)
+LIFT_TIME_SHELF_1 = 1.2      # Thời gian nâng lên tầng 1 kệ (cơ sở)
+LIFT_TIME_SHELF_2 = 3.9      # Thời gian nâng lên tầng 2 kệ (cơ sở)
 
 # Không có limit switch ở đáy — Lift.home_to_floor() (gọi trong reset(), đầu mỗi
 # trận) hạ liên tục khoảng thời gian CỐ ĐỊNH này để ép chạm đáy cơ khí, bất kể vị
@@ -129,8 +129,8 @@ LIFT_TIME_SHELF_2 = 1.5      # Thời gian nâng lên tầng 2 kệ (cơ sở)
 LIFT_HOME_DURATION = 3.0
 
 # Bù sai lệch khi NÂNG (giây thêm/bớt — dương=chạy lâu hơn, âm=dừng sớm hơn)
-LIFT_LEFT_EXTRA  = -0.050    # Bù cẩu TRÁI khi nâng
-LIFT_RIGHT_EXTRA = 0.0       # Bù cẩu PHẢI khi nâng
+LIFT_LEFT_EXTRA  = -0.450    # Bù cẩu TRÁI khi nâng
+LIFT_RIGHT_EXTRA = -0.300       # Bù cẩu PHẢI khi nâng
 
 # Bù riêng khi HẠ (nếu 1 bên khó hạ do ma sát cơ khí → tăng giá trị bên đó)
 LIFT_LEFT_LOWER_EXTRA  = 0.300  # Bù cẩu TRÁI khi hạ
@@ -144,7 +144,7 @@ PICKUP_VERIFY_DELAY = 0.2    # Thời gian chờ sau nâng trước khi kiểm t
 # LINE FOLLOWING (QTR-8A analog qua MCP3008)
 # ============================================================
 LINE_SENSOR_COUNT = 6        # Dùng 6 mắt (CH0-CH5), bỏ 2 mắt ngoài cùng
-LINE_THRESHOLD = 500         # Ngưỡng analog: < 500 = trên line (đen), >= 500 = ngoài line (trắng)
+LINE_THRESHOLD = 400         # Ngưỡng analog: < 500 = trên line (đen), >= 500 = ngoài line (trắng)
 # ⚠️ POLARITY QTR-8A: code giả định "line đen = giá trị THẤP".
 # Nhiều module QTR-8A lại đọc bề mặt ĐEN ra giá trị CAO (ngược lại).
 # Calibrate: chạy `python3 -m tools.calibrate_line` (hoặc xem ADC trong web debug),
@@ -155,7 +155,7 @@ LINE_BLACK_IS_HIGH = True
 LINE_WEIGHTS = [-2.5, -1.5, -0.5, 0.5, 1.5, 2.5]
 LINE_KP = 16.0               # Hệ số P (PD control) — fast-profile, CHƯA calibrate thật
 LINE_KD = 6.5                # Hệ số D — fast-profile, CHƯA calibrate thật
-INTERSECTION_THRESHOLD = 5   # Số mắt phát hiện line đồng thời để nhận là giao lộ (5/6)
+INTERSECTION_THRESHOLD = 4   # Số mắt phát hiện line đồng thời để nhận là giao lộ (5/6)
 
 # ============================================================
 # CAMERA & NHẬN DIỆN MÀU HSV

@@ -20,6 +20,14 @@ vậy tool KHÔNG dùng crop tỉ lệ cố định — chụp 1 ảnh NỀN TR�
 rồi với mỗi kiện, so sánh khác biệt với nền để tự động tìm đúng vùng có kiện
 hàng và crop sát vùng đó, bất kể kiện hàng to/nhỏ trong khung.
 
+Vùng tự phát hiện là CẢ hộp + pallet (4 kiện dùng chung 1 kiểu hộp/pallet giống
+hệt nhau, chỉ khác decal dán trước mặt) — nếu dùng nguyên vùng đó làm ảnh mẫu,
+ORB dễ bắt nhầm keypoint từ cạnh hộp/khe pallet (giống nhau ở mọi kiện) thay vì
+decal, gây nhận nhầm giữa các kiện (đã xảy ra thật, xem CLAUDE.md). Nên sau khi
+phát hiện, tool THU HẸP THÊM vào giữa (INNER_CROP_*) để chỉ giữ vùng decal. Tỉ
+lệ cắt hiện tại là ước lượng — mở ảnh mẫu đã lưu ra xem còn dính cạnh hộp/pallet
+không, chỉnh lại INNER_CROP_TOP/BOTTOM/SIDES nếu cần.
+
 Lưu ảnh mẫu: vision/templates/{label}.png (grayscale).
 
 Chạy trên Pi (đã cắm camera CSI):
@@ -65,6 +73,21 @@ FALLBACK_MARGIN = 0.32
 # báo ngay lúc chụp thay vì để phát hiện sau khi xem ảnh.
 MAX_ITEM_AREA_RATIO = 0.5
 
+# _detect_item_bbox tách được CẢ kiện hàng (hộp giấy + pallet), không chỉ riêng
+# mặt decal — 4 kiện dùng CHUNG 1 kiểu hộp + pallet (giống hệt nhau về hình dạng,
+# chỉ khác decal dán trước mặt), nên ORB dễ bắt nhầm keypoint từ cạnh hộp/khe
+# pallet (giống nhau ở mọi kiện) thay vì tập trung vào decal — gây nhận nhầm giữa
+# các kiện (đã xảy ra thật, xem CLAUDE.md). Thu hẹp thêm vào giữa bbox đã phát
+# hiện để loại bớt viền hộp/pallet, giữ lại đúng vùng decal. Cắt TRÊN/DƯỚI nhiều
+# hơn TRÁI/PHẢI vì mép hộp hở (trên) và pallet (dưới) thường là phần thừa theo
+# chiều dọc; decal thường chiếm gần hết chiều ngang mặt hộp.
+# Giảm nhẹ tay hơn dự tính ban đầu (0.12/0.22/0.08) — thử thực tế cho thấy cắt
+# quá tay làm MẤT LUÔN phần decal cần so khớp (inlier tụt hẳn, từ ~49 xuống ~8),
+# hại nhiều hơn lợi so với việc dính chút viền hộp/pallet.
+INNER_CROP_TOP = 0.06
+INNER_CROP_BOTTOM = 0.10
+INNER_CROP_SIDES = 0.04
+
 
 def _prompt(msg: str):
     try:
@@ -87,6 +110,17 @@ def _lock_camera_settings(vision: Vision) -> bool:
         print(f"  ⚠️ Không khoá được AE/AWB ({e}) — camera có thể tự đổi sáng giữa")
         print("     các lần chụp, dễ làm sai vùng phát hiện.")
         return False
+
+
+def _shrink_to_decal(bbox):
+    """Thu hẹp bbox (kiện hàng đầy đủ: hộp + pallet) vào giữa, loại bớt viền hộp/
+    pallet — xem INNER_CROP_* để hiểu tỉ lệ cắt mỗi cạnh."""
+    x, y, w, h = bbox
+    left = int(w * INNER_CROP_SIDES)
+    right = int(w * INNER_CROP_SIDES)
+    top = int(h * INNER_CROP_TOP)
+    bottom = int(h * INNER_CROP_BOTTOM)
+    return x + left, y + top, w - left - right, h - top - bottom
 
 
 def _fallback_crop(frame):
@@ -182,7 +216,6 @@ def main():
         bbox = _detect_item_bbox(frame, frame_bg)
         if bbox is not None:
             x, y, w, h = bbox
-            roi = frame[y:y + h, x:x + w]
             fh, fw = frame.shape[:2]
             area_ratio = (w * h) / (fw * fh)
             print(f"    Tự phát hiện vùng kiện hàng: {w}x{h} tại ({x},{y}) "
@@ -192,6 +225,11 @@ def main():
                 print("       ngờ dính nhầm nền (camera xê dịch so với lúc chụp nền ở Bước 0,")
                 print("       hoặc ánh sáng đổi giữa 2 lần chụp). Nên chụp lại kiện này:")
                 print(f"       `python3 -m tools.capture_templates {label}`")
+
+            # Thu hẹp vào giữa — bbox trên là cả hộp+pallet, chỉ giữ lại vùng decal
+            dx, dy, dw, dh = _shrink_to_decal((x, y, w, h))
+            print(f"    Thu hẹp về vùng decal: {dw}x{dh} tại ({dx},{dy})")
+            roi = frame[dy:dy + dh, dx:dx + dw]
         else:
             roi = _fallback_crop(frame)
             print("    ⚠️ Không tách được vùng khác biệt rõ ràng với nền — dùng crop mặc định")

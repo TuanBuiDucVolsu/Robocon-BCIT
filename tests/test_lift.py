@@ -30,12 +30,12 @@ def test_shelf_levels(lift: Lift):
     lift.go_to_level(1)
     time.sleep(2)
 
-    print("[TEST] Nâng tiếp lên tầng 2...")
-    lift.go_to_level(2)
+    print("[TEST] Hạ về mặt sàn...")
+    lift.go_to_level(0)
     time.sleep(2)
 
-    print("[TEST] Hạ về tầng 1...")
-    lift.go_to_level(1)
+    print("[TEST] Nâng lên tầng 2...")
+    lift.go_to_level(2)
     time.sleep(2)
 
     print("[TEST] Hạ về mặt sàn...")
@@ -120,7 +120,7 @@ def test_dropoff_same_factory(lift: Lift):
 
 def test_left_only(lift: Lift):
     """Test cẩu TRÁI độc lập — cẩu phải không chạy."""
-    dur = 1.5
+    dur = 4
     print(f"\n[TEST] CẨU TRÁI độc lập (ENA={config.ENA_CAU_T}, IN1={config.IN1_CAU_T}, IN2={config.IN2_CAU_T})")
 
     input("  Nhấn Enter → NÂNG trái...")
@@ -129,16 +129,16 @@ def test_left_only(lift: Lift):
     lift._left_en.off(); lift._left_up.off()
     time.sleep(0.5)
 
-    input("  Nhấn Enter → HẠ trái...")
-    lift._left_en.on(); lift._left_up.off(); lift._left_down.on()
-    time.sleep(dur)
-    lift._left_en.off(); lift._left_down.off()
-    print("  Xong cẩu trái.")
+    # input("  Nhấn Enter → HẠ trái...")
+    # lift._left_en.on(); lift._left_up.off(); lift._left_down.on()
+    # time.sleep(dur)
+    # lift._left_en.off(); lift._left_down.off()
+    # print("  Xong cẩu trái.")
 
 
 def test_right_only(lift: Lift):
     """Test cẩu PHẢI độc lập — cẩu trái không chạy."""
-    dur = 1.5
+    dur = 2
     print(f"\n[TEST] CẨU PHẢI độc lập (IN3={config.IN3_CAU_P}, IN4={config.IN4_CAU_P})")
 
     input("  Nhấn Enter → NÂNG phải...")
@@ -147,11 +147,11 @@ def test_right_only(lift: Lift):
     lift._right_up.off()
     time.sleep(0.5)
 
-    input("  Nhấn Enter → HẠ phải...")
-    lift._right_up.off(); lift._right_down.on()
-    time.sleep(dur)
-    lift._right_down.off()
-    print("  Xong cẩu phải.")
+    # input("  Nhấn Enter → HẠ phải...")
+    # lift._right_up.off(); lift._right_down.on()
+    # time.sleep(dur)
+    # lift._right_down.off()
+    # print("  Xong cẩu phải.")
 
 
 def test_mcp3008_all(lift: Lift):

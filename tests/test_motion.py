@@ -80,13 +80,35 @@ def test_line_sensor_raw(m: Motion):
         print("\n  Dừng calibrate.")
 
 
-def test_exit_start_zone(m: Motion):
-    print("\n[TEST] Thoát ô start — exit_start_zone()")
-    print("  Đặt robot trong ô start, quay mặt SANG TRÁI (9h, về Kệ 3).")
-    input("  Nhấn Enter để bắt đầu...")
-    success = m.exit_start_zone()
-    values = m.read_line_sensor()
-    print(f"  Kết quả: {'OK' if success else 'THẤT BẠI'} — sensor={values} active={sum(values)}")
+def test_forward_find_and_follow(m: Motion):
+    print(f"\n[TEST] Tiến thẳng 2 giây (speed={config.SPEED_DEFAULT})...")
+    m.forward(config.SPEED_DEFAULT)
+    time.sleep(1.5)
+
+    print(f"  Tìm line (tối đa {config.EXIT_START_TIMEOUT}s)...")
+    start = time.time()
+    found = False
+    while time.time() - start < config.EXIT_START_TIMEOUT:
+        values = m.read_line_sensor()
+        if sum(values) > 0:
+            found = True
+            break
+        time.sleep(0.01)
+    m.stop()
+
+    if not found:
+        print("  Không tìm thấy line!")
+        return
+
+    print("  Đã thấy line — bám line tối đa 5s (hoặc đến khi gặp giao lộ)...")
+    start = time.time()
+    while time.time() - start < 5:
+        at_intersection, _ = m.follow_line()
+        if at_intersection:
+            print("  -> Phát hiện giao lộ! Dừng.")
+            break
+        time.sleep(0.01)
+    m.stop()
 
 
 def test_line_follow(m: Motion):
@@ -322,7 +344,7 @@ def main():
         "3": ("Các mức tốc độ", test_speed_levels),
         "4": ("Đọc cảm biến dò line (digital)", test_line_sensor),
         "5": ("Calibrate QTR-8A (raw ADC)", test_line_sensor_raw),
-        "6": ("Thoát ô start (exit_start_zone)", test_exit_start_zone),
+        "6": ("Tiến thẳng tìm line + bám line 5s/giao lộ", test_forward_find_and_follow),
         "7": ("Bám line (chạy thực tế)", test_line_follow),
         "8": ("Cảm biến siêu âm (đo khoảng cách)", test_distance_sensor),
         "9": ("Tiếp cận + lùi khỏi kệ", test_approach_shelf),
