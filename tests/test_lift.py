@@ -67,35 +67,58 @@ def test_pickup_shelf2(lift: Lift):
 
 
 def test_drop_single_side(lift: Lift):
-    """Luồng NV1: thả 1 càng → nâng lại → thả càng còn lại → stow."""
+    """Luồng NV1: thả 1 càng → nâng lại → thả càng còn lại → gập càng.
+
+    ⚠️ Làm y hệt main.py: LUÔN nâng lại / gập càng, KỂ CẢ khi IR không xác nhận.
+    Lý do: càng còn nằm dưới sàn mà robot lùi và chạy tiếp thì cạ sàn/vướng kệ.
+    Nếu test chỉ nâng khi IR OK thì nhánh "IR fail" không bao giờ được kiểm.
+    """
     print("\n[TEST] Drop từng càng (dropoff_left/right + raise_after_drop + stow_forks)")
     print("  Cần robot đang mang 2 kiện (sau pickup).")
     side = input("  Thả càng nào trước? (left/right) [left]: ").strip().lower() or "left"
-
-    if side == "left":
-        dropped = lift.dropoff_left()
-    else:
-        dropped = lift.dropoff_right()
-    print(f"  dropoff_{side}: {'THÀNH CÔNG' if dropped else 'THẤT BẠI / IR lỗi'}")
-
-    if dropped:
-        lift.raise_after_drop(side)
-        print(f"  raise_after_drop({side}) — OK")
-
-    other = "right" if side == "left" else "left"
-    ans = input(f"  Tiếp tục thả càng {other}? (y/N): ").strip().lower()
-    if ans != "y":
+    if side not in ("left", "right"):
+        print("  Lựa chọn không hợp lệ.")
         return
 
-    if other == "left":
-        dropped2 = lift.dropoff_left()
-    else:
-        dropped2 = lift.dropoff_right()
+    dropped = lift.dropoff_left() if side == "left" else lift.dropoff_right()
+    print(f"  dropoff_{side}: {'THÀNH CÔNG' if dropped else 'THẤT BẠI / IR lỗi'}")
+
+    lift.raise_after_drop(side)
+    print(f"  raise_after_drop({side}) — đã nâng lại (main.py luôn nâng dù IR "
+          f"{'OK' if dropped else 'FAIL'})")
+    if not dropped:
+        print("  ⚠ main.py sẽ KHÔNG cộng điểm kiện này — packages_delivered chỉ tăng khi IR xác nhận")
+
+    other = "right" if side == "left" else "left"
+    if input(f"  Tiếp tục thả càng {other}? (y/N): ").strip().lower() != "y":
+        return
+
+    dropped2 = lift.dropoff_left() if other == "left" else lift.dropoff_right()
     print(f"  dropoff_{other}: {'THÀNH CÔNG' if dropped2 else 'THẤT BẠI'}")
 
-    if dropped2:
-        lift.stow_forks(other)
-        print(f"  stow_forks({other}) — cả 2 càng về sàn")
+    lift.stow_forks(other)
+    print(f"  stow_forks({other}) — cả 2 càng về sàn, sẵn sàng di chuyển")
+
+
+def test_home_to_floor(lift: Lift):
+    """home_to_floor() — chạy ở ĐẦU MỖI TRẬN (Lift.reset), phải hạ hết cỡ."""
+    print(f"\n[TEST] home_to_floor — hạ cả 2 càng liên tục {config.LIFT_HOME_DURATION}s")
+    print("  Đây là thao tác đầu mỗi trận: ép càng chạm đáy cơ khí vì KHÔNG có limit switch.")
+    print(f"  ⚠ Phải > LIFT_TIME_SHELF_2 ({config.LIFT_TIME_SHELF_2}s), nếu không thì đang ở")
+    print("    tầng 2 sẽ không hạ hết và vị trí bị khai sai.")
+    ok = "ĐẠT" if config.LIFT_HOME_DURATION > config.LIFT_TIME_SHELF_2 else "❌ KHÔNG ĐẠT"
+    print(f"  Kiểm hằng số: {config.LIFT_HOME_DURATION} > {config.LIFT_TIME_SHELF_2} → {ok}")
+
+    print("\n  CÁCH TEST ĐÚNG: nâng lên TẦNG 2 trước, rồi home — càng phải chạm đáy hẳn.")
+    if input("  Nâng lên tầng 2 trước khi home? (y/N): ").strip().lower() == "y":
+        lift.go_to_level(2)
+        time.sleep(1)
+
+    if input("  ⚠ Đảm bảo dưới càng KHÔNG có vật cản. Chạy home? (y/N): ").strip().lower() != "y":
+        print("  Đã huỷ.")
+        return
+    lift.home_to_floor()
+    print("  Kiểm bằng mắt: CẢ 2 càng đã chạm đáy chưa? Còn hở = tăng LIFT_HOME_DURATION.")
 
 
 def test_pickup_nv2(lift: Lift):
@@ -118,40 +141,92 @@ def test_dropoff_same_factory(lift: Lift):
     print(f"  Kết quả: {'ĐÃ HẠ (IR OK)' if ok else 'THẤT BẠI / IR vẫn thấy pallet'}")
 
 
+def _ask_level(prompt: str = "  Tầng mấy? (1/2) [1]: ") -> int | None:
+    raw = input(prompt).strip() or "1"
+    if raw not in ("1", "2"):
+        print("  Chỉ nhận 1 hoặc 2.")
+        return None
+    return int(raw)
+
+
+def _single_fork_cycle(lift: Lift, side: str, level: int):
+    """Nâng rồi hạ MỘT càng, dùng ĐÚNG thời gian đã bù như lúc thi đấu.
+
+    Không bật/tắt thẳng chân GPIO mà đi qua _move_duration() + _raise_/_lower_ của
+    Lift — nhờ vậy cái quan sát được ở đây chính là cái sẽ xảy ra trong trận (gồm cả
+    phần bù LIFT_*_EXTRA riêng của càng đó). Bật GPIO thô với thời gian tự đặt thì
+    chỉ kiểm được dây, không kiểm được calibrate.
+    """
+    up = lift._move_duration(side, 0, level, raising=True)
+    down = lift._move_duration(side, level, 0, raising=False)
+    label = "TRÁI" if side == "left" else "PHẢI"
+    print(f"\n  Càng {label} — sàn ↔ tầng {level}: nâng {up:.3f}s / hạ {down:.3f}s")
+
+    input(f"  Nhấn Enter → NÂNG càng {label}...")
+    (lift._raise_left if side == "left" else lift._raise_right)(up)
+    print(f"  ✅ Đã nâng ({up:.3f}s)")
+
+    input(f"  Quan sát độ cao rồi nhấn Enter → HẠ càng {label}...")
+    (lift._lower_left if side == "left" else lift._lower_right)(down)
+    print(f"  ✅ Đã hạ ({down:.3f}s)")
+
+
 def test_left_only(lift: Lift):
-    """Test cẩu TRÁI độc lập — cẩu phải không chạy."""
-    dur = 4
-    print(f"\n[TEST] CẨU TRÁI độc lập (ENA={config.ENA_CAU_T}, IN1={config.IN1_CAU_T}, IN2={config.IN2_CAU_T})")
-
-    input("  Nhấn Enter → NÂNG trái...")
-    lift._left_en.on(); lift._left_up.on(); lift._left_down.off()
-    time.sleep(dur)
-    lift._left_en.off(); lift._left_up.off()
-    time.sleep(0.5)
-
-    # input("  Nhấn Enter → HẠ trái...")
-    # lift._left_en.on(); lift._left_up.off(); lift._left_down.on()
-    # time.sleep(dur)
-    # lift._left_en.off(); lift._left_down.off()
-    # print("  Xong cẩu trái.")
+    """Nâng/hạ RIÊNG càng trái — càng phải đứng yên."""
+    print(f"\n[TEST] Càng TRÁI riêng (ENA={config.ENA_CAU_T}, "
+          f"IN1={config.IN1_CAU_T}, IN2={config.IN2_CAU_T})")
+    print("  ⚠ Giả định càng TRÁI đang ở SÀN. Càng phải sẽ KHÔNG chạy.")
+    level = _ask_level()
+    if level is not None:
+        _single_fork_cycle(lift, "left", level)
 
 
 def test_right_only(lift: Lift):
-    """Test cẩu PHẢI độc lập — cẩu trái không chạy."""
-    dur = 2
-    print(f"\n[TEST] CẨU PHẢI độc lập (IN3={config.IN3_CAU_P}, IN4={config.IN4_CAU_P})")
+    """Nâng/hạ RIÊNG càng phải — càng trái đứng yên."""
+    print(f"\n[TEST] Càng PHẢI riêng (IN3={config.IN3_CAU_P}, IN4={config.IN4_CAU_P})")
+    print("  ⚠ Giả định càng PHẢI đang ở SÀN. Càng trái sẽ KHÔNG chạy.")
+    level = _ask_level()
+    if level is not None:
+        _single_fork_cycle(lift, "right", level)
 
-    input("  Nhấn Enter → NÂNG phải...")
-    lift._right_up.on(); lift._right_down.off()
-    time.sleep(dur)
-    lift._right_up.off()
-    time.sleep(0.5)
 
-    # input("  Nhấn Enter → HẠ phải...")
-    # lift._right_up.off(); lift._right_down.on()
-    # time.sleep(dur)
-    # lift._right_down.off()
-    # print("  Xong cẩu phải.")
+def test_compare_forks(lift: Lift):
+    """Nâng lần lượt từng càng lên CÙNG tầng rồi so độ cao bằng mắt.
+
+    Đây là cách chốt LIFT_LEFT_EXTRA / LIFT_RIGHT_EXTRA: nâng cả 2 càng cùng lúc thì
+    khó thấy bên nào cao hơn; nâng riêng từng bên rồi GIỮ NGUYÊN mới so được.
+    """
+    print("\n[TEST] SO SÁNH 2 CÀNG — nâng riêng từng bên lên cùng tầng")
+    print("  ⚠ Cả 2 càng phải đang ở SÀN trước khi bắt đầu.")
+    level = _ask_level()
+    if level is None:
+        return
+
+    up_l = lift._move_duration("left", 0, level, raising=True)
+    up_r = lift._move_duration("right", 0, level, raising=True)
+    print(f"\n  Nâng lên tầng {level}: trái {up_l:.3f}s | phải {up_r:.3f}s  "
+          f"(chênh {abs(up_l - up_r):.3f}s)")
+    print(f"  Do LIFT_LEFT_EXTRA={config.LIFT_LEFT_EXTRA:+.3f} vs "
+          f"LIFT_RIGHT_EXTRA={config.LIFT_RIGHT_EXTRA:+.3f}")
+
+    input("\n  Nhấn Enter → nâng càng TRÁI...")
+    lift._raise_left(up_l)
+    input("  Nhấn Enter → nâng càng PHẢI (giữ nguyên càng trái để so)...")
+    lift._raise_right(up_r)
+
+    print("\n  👀 SO ĐỘ CAO 2 CÀNG NGAY BÂY GIỜ:")
+    print("     - Càng TRÁI cao hơn  → giảm LIFT_LEFT_EXTRA")
+    print("     - Càng PHẢI cao hơn  → giảm LIFT_RIGHT_EXTRA")
+    print("     - Bằng nhau          → đã chuẩn")
+    print("     Chỉnh nhanh ở menu d (calibrate): phím l+/l- và r+/r-")
+
+    input("\n  Nhấn Enter → hạ CẢ 2 càng về sàn...")
+    down_l = lift._move_duration("left", level, 0, raising=False)
+    down_r = lift._move_duration("right", level, 0, raising=False)
+    lift._lower_left(down_l)
+    lift._lower_right(down_r)
+    lift._current_level = 0
+    print(f"  ✅ Đã hạ về sàn (trái {down_l:.3f}s, phải {down_r:.3f}s)")
 
 
 def test_mcp3008_all(lift: Lift):
@@ -341,9 +416,11 @@ def main():
         "6": ("Pickup NV2 (require_both=False)", test_pickup_nv2),
         "7": ("dropoff() 2 kiện cùng NM", test_dropoff_same_factory),
         "8": ("IR real-time (Ctrl+C để thoát)", test_ir_live),
+        "9": ("home_to_floor (chạy đầu mỗi trận)", test_home_to_floor),
         "a": ("Scan tất cả 8 channel MCP3008", test_mcp3008_all),
-        "b": ("Cẩu TRÁI độc lập (nâng/hạ)", test_left_only),
-        "c": ("Cẩu PHẢI độc lập (nâng/hạ)", test_right_only),
+        "b": ("Càng TRÁI riêng — nâng + hạ", test_left_only),
+        "c": ("Càng PHẢI riêng — nâng + hạ", test_right_only),
+        "e": ("So sánh 2 càng cùng tầng (chốt bù lệch)", test_compare_forks),
         "d": ("Calibrate độ cao + bù lệch (lưu config)", test_calibrate_lift),
         "0": ("Chạy tất cả", None),
     }
@@ -352,12 +429,12 @@ def main():
     for key, (name, _) in tests.items():
         print(f"  {key}. {name}")
 
-    choice = input("\nNhập số (0-8, a/b/c/d): ").strip()
+    choice = input("\nNhập số (0-9, a/b/c/d/e): ").strip()
 
     try:
         if choice == "0":
             for key, (name, func) in tests.items():
-                if func and key not in ("5", "6", "7", "8", "b", "c"):
+                if func and key not in ("5", "6", "7", "8", "9", "b", "c", "e"):
                     func(lift)
         elif choice in tests and tests[choice][1]:
             tests[choice][1](lift)

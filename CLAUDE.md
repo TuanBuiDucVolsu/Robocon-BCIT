@@ -44,28 +44,31 @@ Thi đấu dự kiến **ngày 08-09/08/2026** tại phường Bắc Giang, tỉ
 
 ## Bố trí sa bàn (phía xanh) — QUAN TRỌNG
 
+Chỉ vẽ line THẬT SỰ có trên bản in (đã đo bằng quét pixel — xem docs/SA_BAN.md mục 3):
+
 ```
-    Col0 (kệ/trái)   Col1 (giữa)    Col2 (nhà máy/phải)
-      │                  │               │
-  R4 [Kệ1]──────────────┼──[Samsung]─────┤   Kệ 1 thẳng Samsung
-      │                  │               │
-  R3  │                  │──[Hana M.]─────┤
-      │        ◉         │               │
-  R2 [Kệ2]──────────────┼──[Liên hợp]────┤   Kệ 2 thẳng Robocon / Liên hợp
-      │                  │               │
-  R1  │                  │──[Amkor]───────┤
-      │                  │               │
-  R0 [Kệ3]──line──┃GAP┃──line──[Foxconn]  ← Line R0 đứt tại ô start
-      │             ┃   ┃              │
-      │          ←■Start┃              │   Robot quay mặt 9h (về Kệ 3)
-      │             [Kệ4]             │   Kệ 4 THỤT XUỐNG dưới R0, bên phải Start
+      C0 (cột kệ)          C1 (cột giữa)        khu nhà máy
+        │                       │                    │
+  R4 [Kệ1]─────────────────────┼───────────────[Samsung]
+        │                       │
+  R3    │                       ├───────────────[Hana Micron]
+        │      ( vòng tròn      │
+  R2 [Kệ2]····  ROBOCON  ······┼───────────────[Liên hợp]   ← R2 ĐỨT ~560mm
+        │       line đứt )      │
+  R1    │                       ├───────────────[Amkor]
+        │                       │
+  R0 [Kệ3]────┈┈┈start┈┈┈──────┼───────────────[Foxconn]    ← R0 đứt ~245mm (ô start)
+                                │
+                             [Kệ4]   (kho hàng rời — NV2, dưới R0 trên cột C1)
 ```
 
-- Kệ 1-3: cạnh TRÁI, cách nhau 2 giao lộ (R4, R2, R0)
-- Kệ 4: bên PHẢI Start, thụt XUỐNG dưới R0, cạnh Foxconn (kho hàng rời — NV2)
+- **R1/R3 KHÔNG kéo tới cột kệ** → cột kệ chỉ có 3 giao lộ (R4/R2/R0), Kệ↔Kệ = **1 giao lộ**
+- **Line ngang dừng ở mép khu nhà máy** → giữa các nhà máy KHÔNG có line nối dọc,
+  đi nhà máy → nhà máy phải vòng về cột C1
+- **Kệ 4** nằm trên cột C1, ngay dưới R0 (bên phải ô start, cạnh Foxconn — kho hàng rời NV2)
 - Robot xuất phát: ô start trên R0, **quay mặt sang trái (9h)** về Kệ 3
 - `exit_start_zone()`: tiến thẳng chạm line R0 → căn giữa ngắn (nếu chạm giao lộ khi căn → dừng căn, **không** đếm giao lộ)
-- Sau đó `ROUTE_START_TO_SHELF_0` forward 1 giao lộ → Kệ 3
+- Sau đó `navigation.plan(START_POSE, "SHELF0")` = tiến 1 giao lộ + advance → Kệ 3
 - Thứ tự lấy kệ: Kệ 3 (R0, gần nhất) → Kệ 2 (R2) → Kệ 1 (R4)
 - 4 nhà máy xếp DỌC cạnh phải: Samsung(R4) → Hana(R3) → Amkor(R1) → Foxconn(R0)
 - Nhà máy liên hợp: giữa sân (R2), chung 2 đội
@@ -74,7 +77,9 @@ Thi đấu dự kiến **ngày 08-09/08/2026** tại phường Bắc Giang, tỉ
 
 ```
 main.py              — State machine: INIT → NAVIGATE → PICKUP → DELIVER → DROP → lặp 6 lượt → TASK2
-config.py            — GPIO, route commands, HSV color ranges, timing, SHELVES_TASK1
+navigation.py        — BẢN ĐỒ sa bàn (node giao lộ + cạnh line thật) + Dijkstra sinh
+                        route theo (vị trí, hướng). Thay toàn bộ bảng ROUTE_* tĩnh cũ
+config.py            — GPIO, HSV color ranges, timing, SHELVES_TASK1, chi phí tìm đường
 control/mcp3008_bus.py — Bus SPI dùng chung MCP3008 (lock)
 control/motion.py    — Di chuyển, bám line PD analog, siêu âm HC-SR04
 control/lift.py      — 2 càng độc lập: PalletSensors (SPI), require_both, _verify_released
@@ -102,6 +107,7 @@ tests/               — test_motion/lift/vision/smoke + test_logic (45 unit tes
 ## State machine (luồng chính)
 
 ```
+START (exit_start_zone) → DETECT_SIDE (tự dò nửa sân, ~2-4s)
 NAVIGATE_TO_SHELF → PICKUP_PAIR (approach + classify_pair + pickup + retreat)
   → DELIVER_FIRST → DROP_FIRST
   → [DELIVER_SECOND → DROP_SECOND]  (bỏ qua nếu cùng nhà máy)
@@ -110,12 +116,12 @@ NAVIGATE_TO_SHELF → PICKUP_PAIR (approach + classify_pair + pickup + retreat)
 ```
 
 - **Không còn state SCAN_PAIR riêng** — quét camera nằm trong PICKUP_PAIR, sau `_approach_shelf()`
-- **`_last_delivered_label`**: route DELIVER_SECOND, NV2, và điểm xuất phát `get_return_route()`
-- **`get_return_route(factory, target_shelf)`**: quay về đúng hàng kệ (R0/R2/R4) trước pickup tầng 2
-- **`_plan_delivery()`**: so sánh route cost = shelf→NM1 + BETWEEN + **return về kệ** (`_return_cost`)
-- **`_between_route(a,b)`**: tra `ROUTE_BETWEEN_FACTORIES`; fallback chiều `(b,a)` nếu thiếu key
+- **`self.pose = (vị trí, hướng)`** — nguồn sự thật duy nhất về robot đang ở đâu. Mọi
+  state gọi `_goto(terminal)`; route được TÍNH ra, không tra bảng.
+- **`_plan_delivery()`**: so sánh `_delivery_cost(a,b)` = pose→NM1 + NM1→NM2 + NM2→kệ kế tiếp
 - **`_retry_or_skip_tier()`**: scan/nâng/**navigate/approach** fail → retry MAX_TIER_RETRIES lần trước khi bỏ tầng
-- **`_run_route()` / `_approach_shelf()` / `_retreat_from_shelf()`**: wrapper kiểm tra kết quả navigation & siêu âm
+- **`_goto()` / `_approach_shelf()` / `_approach_for_drop()` / `_retreat_from_shelf()`**:
+  wrapper kiểm tra kết quả navigation & siêu âm
 
 ### Xử lý lỗi navigation / tiếp cận
 
@@ -123,28 +129,105 @@ NAVIGATE_TO_SHELF → PICKUP_PAIR (approach + classify_pair + pickup + retreat)
 |-----------|---------|
 | `execute_route()` / `navigate_intersections()` fail (mất line, timeout) | Trả `False`; log lỗi |
 | `exit_start_zone()` fail (START) | Retry `MAX_TIER_RETRIES + 1` lần tại chỗ; hết retry → `DONE` |
+| Dò nửa sân fail (không tới được giao lộ / cảm biến lỗi) | Giữ `config.BOARD_MIRRORED`, chạy tiếp |
 | Navigate đến kệ fail | `_retry_or_skip_tier("navigate")` → **NAVIGATE_TO_SHELF** |
 | `approach_shelf()` timeout ở PICKUP | `_retry_or_skip_tier("approach")` |
-| Navigate DELIVER fail | Log cảnh báo, **vẫn thử hạ** (tiết kiệm thời gian) |
-| Navigate RETURN fail | Log cảnh báo, vẫn `_advance_position()` |
+| Navigate DELIVER fail | Log ERROR, cập nhật pose = đích, **vẫn thử hạ** (tiết kiệm thời gian) |
+| Tiếp cận điểm THẢ fail | `_approach_for_drop()` thử lại 1 lần rồi mới đành thả tại chỗ |
+| Navigate RETURN fail | Log ERROR, vẫn `_advance_position()` |
 | Navigate NV2 fail | Chuyển `DONE` (bỏ NV2) |
 | Không có HC-SR04 | `approach_shelf()` / `retreat_from_shelf()` → `False` (không tiến mù) |
-| Route rỗng | Log warning, coi là fail |
+| Siêu âm mất echo khi tiếp cận | Dừng sau `APPROACH_BLIND_TIMEOUT` (không chạy mù ra khỏi sa bàn) |
+| Route rỗng | **Thành công** — robot đã ở đích (vd lấy tầng 2 cùng kệ) |
 
-## Route quay về kho (`get_return_route`)
+## Điều hướng (`navigation.py`)
+
+Bản đồ khai báo MỘT chỗ; route tính bằng Dijkstra trên trạng thái `(vị trí, hướng)`.
 
 ```python
-get_return_route(from_factory, target_shelf)
-  = ROUTE_FACTORY_TO_SHELF[factory]     # nhà máy → cột kệ cùng hàng
-  + _vertical_on_shelf_column(from, to) # dọc cột kệ nếu khác hàng
+route, pose_moi = navigation.plan(robot.pose, "F_samsung")
+cost            = navigation.route_cost(pose, goal)     # so sánh thứ tự giao
 ```
 
-- `FACTORY_BOARD_ROW`: samsung=R4, hana=R3, amkor=R1, foxconn=R0
-- `SHELF_BOARD_ROW`: Kệ3=0→R0, Kệ2=1→R2, Kệ1=2→R4
-- **Xuống hàng** (R4→R0): `right → forward N → left`
-- **Lên hàng** (R0→R4): `left → forward N → right`
-- `target_shelf` = `_next_pickup_shelf()` **trước** `_advance_position()`
-- Tầng 2 cùng kệ: sau return robot đã ở đúng hàng → `NAVIGATE_TO_SHELF` tại chỗ
+- **Node giao lộ**: `C0R0/C0R2/C0R4` (cột kệ — CHỈ 3 giao lộ vì R1/R3 không kéo tới
+  cột kệ) và `C1R0..C1R4` (cột giữa — đủ 5 hàng).
+- **Điểm cuối (terminal)**: kệ, khu nhà máy, Kệ 4 — là CUỐI đường line, không phải
+  giao lộ. Vào bằng lệnh `("advance",)` (bám line tới hết line), ra bằng `forward 1`.
+- **Cạnh bị cấm**: `C0R2 ↔ C1R2` — hàng R2 đứt ~560mm ở vòng tròn ROBOCON.
+- **Cạnh bị phạt**: `C0R0 ↔ C1R0` (+`EDGE_COST_START_GAP`) — đứt ~245mm ở ô xuất phát.
+- Xem/kiểm tra: `python3 -m tools.show_routes`; test mô phỏng trong `tests/test_logic.py`.
+
+### ⚠️ Nửa sân — THỨ TỰ NHÀ MÁY BỊ ĐẢO (`config.FACTORY_AT_START_ROW`)
+
+Sa bàn chia đôi bởi **bức tường** giữa sân (`docs/Sa bàn đầy đủ.png`). Hai nửa là bản
+**quay 180°** của nhau (mascot đội đỏ vẽ lộn ngược) → **chiều trái/phải GIỐNG NHAU**.
+
+Nhưng cụm nhà máy in trên **tường** thì không quay theo — hai đội nhìn chung một tấm
+panel. Nên trong hệ quy chiếu của chính robot, **thứ tự nhà máy theo hàng bị ĐẢO**:
+
+| Trong hệ quy chiếu robot | Đội góc dưới-trái | Đội góc trên-phải |
+|---|---|---|
+| `FACTORY_AT_START_ROW` | `"foxconn"` | `"samsung"` |
+| Cùng hàng ô xuất phát (R0) | Foxconn | Samsung |
+| R1 | Amkor | Hana Micron |
+| R2 (liên hợp) | Liên hợp | Liên hợp |
+| R3 | Hana Micron | Amkor |
+| R4 (xa nhất) | Samsung | Foxconn |
+
+**Robot KHÔNG tự dò được cái này** — qua cảm biến line hai nửa giống hệt nhau; nhà máy
+nào ở hàng nào chỉ người mới đọc được. **Đặt sai = giao Samsung vào Foxconn, IR vẫn
+báo thả OK nên log không hề báo lỗi — mất sạch điểm.** Đây là thao tác duy nhất trong
+hệ thống mà sai thì không có tín hiệu báo lỗi nào.
+
+**→ Chọn bằng CÔNG TẮC GẠT trên GPIO 12** (`control/board_switch.py`), không sửa file:
+
+| | |
+|---|---|
+| Đấu dây | chân giữa → GND, một cực → GPIO 12, cực kia để trống |
+| Nối GND (LOW) | `config.BOARD_SIDE_SWITCH_CLOSED` (mặc định `"samsung"`) |
+| Thả nổi (HIGH) | nửa còn lại (`"foxconn"`) |
+| Đọc lúc nào | khi khởi tạo, trước khi chờ nút, và **ngay sau khi bấm nút** (chốt) |
+| Không đọc được | rơi về `config.FACTORY_AT_START_ROW`, log ghi rõ nguồn |
+| Kiểm đấu dây + nhãn | `python3 -m tools.check_board_side` (gạt qua lại, giá trị đổi ngay) |
+| Kiểm trước khi vào sân | web debug `/api/board_side` |
+
+Lý do dùng công tắc thay vì hằng số: trạng thái **nhìn thấy được bằng mắt, không cần
+cấp nguồn**. Dán nhãn 2 bên, bốc thăm xong gạt một cái, cả đội liếc là kiểm chéo được.
+
+`main._apply_board_side()` in một khối cảnh báo 6 dòng mỗi lần đọc — không thể bỏ sót
+trong log. `navigation.set_factory_order(label)` đổi được giữa lúc chạy.
+
+### Chiều trái/phải — robot tự dò (state `DETECT_SIDE`)
+
+Theo bản in thì cả 2 nửa cùng chiều (`BOARD_MIRRORED=False`) vì phép quay 180° bảo
+toàn tay thuận. Robot vẫn tự kiểm chứng để phòng bản in sai. Đầu trận, sau
+`exit_start_zone()`, state
+`DETECT_SIDE` đi tới giao lộ Kệ 3 (`navigation.PROBE_NODE`) rồi
+`Motion.probe_side_branch("right")`: xoay phải 90°, tiến `PROBE_TRAVEL_TIME` giây ra
+khỏi vùng 2 line cắt nhau, đọc cảm biến, lùi về và xoay lại.
+
+| Kết quả dò | Nghĩa | Hành động |
+|---|---|---|
+| **CÓ** nhánh line bên phải | chiều chuẩn (đúng bản in) | giữ bản đồ |
+| **KHÔNG** có | chiều ngược | `set_mirrored(True)`, nạp lại bản đồ |
+| Cảm biến lỗi (`None`) | không kết luận | giữ `config.BOARD_MIRRORED` làm dự phòng |
+
+Việc dò này **chỉ kiểm chiều trái/phải**, KHÔNG biết được thứ tự nhà máy.
+
+Dò được vì đường line dọc cột kệ **chỉ chạy về một phía** từ Kệ 3 (lên R2/R4), phía
+kia là mép sa bàn. Tốn ~2-4s đầu trận. Phải tiến ra khỏi giao lộ mới đọc được: ngay
+tại điểm giao, line cắt ngang nằm dọc thanh cảm biến nên xoay kiểu gì cũng thấy đen.
+
+- `config.BOARD_AUTO_DETECT` — tắt thì dùng thẳng `config.BOARD_MIRRORED`
+- `navigation.set_board(mirrored=…, factory_at_start_row=…)` dựng lại CHÍNH BẢN ĐỒ,
+  không đảo từng lệnh → tìm đường, `apply()`, log hướng tự đúng theo
+- `main.py` in `navigation.board_summary()` lúc khởi động và sau khi dò
+- Kiểm tra tay: `tests/test_motion.py` option **13**
+
+> ⚠️ **Không viết route bằng tay nữa.** Bảng `ROUTE_*` cũ trong config đã bị xoá: mỗi
+> bảng ngầm giả định một hướng robot khác nhau và ngầm giả định robot luôn xuất phát
+> từ đúng một kệ → 9/12 tuyến kệ→nhà máy và toàn bộ tuyến quay về kho đi sai chỗ.
+> Sai bản đồ thì sửa `NODES`/`EDGES`/`TERMINALS`, không sửa route lẻ.
 
 ## Motion — điều khiển động cơ & tiếp cận
 
@@ -153,19 +236,30 @@ get_return_route(from_factory, target_shelf)
   retreat êm, không giật pallet; xoay cân tâm → calibrate `TURN_TIME` chính xác hơn.
 - **`approach_shelf()` 2 pha**: nhanh (`APPROACH_FAST_SPEED`) khi > `APPROACH_SLOW_DISTANCE`,
   chậm (`APPROACH_SLOW_SPEED`) khi gần → dừng chính xác ở `APPROACH_DISTANCE` (4cm).
+  **Chặn chạy mù**: nếu sau `APPROACH_BLIND_TIMEOUT` chưa lần nào thấy vật trong
+  `APPROACH_DETECT_DISTANCE` → dừng + trả `False` (trước đây chạy hết 5s ở 60% tốc độ
+  = lao ra khỏi sa bàn / sang sân đối phương khi mất echo).
+- **`advance_to_end()`**: bám line tới HẾT line — dùng cho đoạn cuối vào kệ / khu nhà
+  máy / Kệ 4 (những chỗ đó không phải giao lộ nên không đếm bằng `forward` được).
+- **Vượt khoảng đứt**: mất line thì trôi thẳng `LINE_GAP_COAST_TIME` giây rồi mới quét
+  tìm lại — sa bàn có khoảng đứt thật 245mm ở ô xuất phát.
 - **Siêu âm median**: `approach_shelf` / `retreat_from_shelf` dùng `get_distance(samples=3)`
   (median) chống nhiễu HC-SR04 → tránh dừng sai gây retry tầng.
 - **Polarity QTR-8A**: `LineSensor.read_raw()` chuẩn hoá để **0.0 = trên line** bất kể
   loại cảm biến. Cờ `config.LINE_BLACK_IS_HIGH` (hiện đặt True) tự đảo tín hiệu tại
   nguồn nếu QTR đọc đen ra giá trị cao → không phải sửa logic phía dưới. Chốt cờ +
   `LINE_THRESHOLD` bằng `python3 -m tools.calibrate_line` (chạy trên Pi).
-- **Số giao lộ các `ROUTE_*`**: ✅ đã đối chiếu file in sa bàn chuẩn (docs/SA_BAN.md).
+- **Bù PWM**: `follow_line()` dùng ĐÚNG cùng `PWM_COMPENSATION`/`PWM_COMPENSATION_LEFT`
+  như `forward()` — nếu lệch nhau thì đi thẳng và bám line sẽ khác nhau sau calibrate.
+- **Bản đồ line**: đã đo lại bằng quét pixel file in chuẩn (docs/SA_BAN.md mục 3).
 
 ## Test
 
 | Script | Mục đích |
 |--------|----------|
-| `tests/test_logic.py` | 45 unit test — PC, không GPIO (logic + polarity + phân loại màu + reset + resume) |
+| `tests/test_logic.py` | 52 unit test — PC, không GPIO (bản đồ + mô phỏng route tới đúng chỗ + polarity + phân loại màu + reset + resume) |
+| `tests/test_match_sim.py` | Mô phỏng TRỌN trận với phần cứng giả lập: 12/12 kiện, lỗi phần cứng, mất line giữa route — kiểm vị trí main.py tin tưởng có khớp vị trí thật không |
+| `tools/show_routes.py` | In toàn bộ route sinh ra để đối chiếu tay trên sa bàn |
 | `tests/test_motion.py` | 12 option (1-12) + `d` chẩn đoán — motor, line, route, exit start |
 | `tests/test_lift.py` | 8 option (1-8) + `a-d` calibrate/độc lập — nâng/hạ, IR, drop từng càng, NV2 |
 | `tests/test_vision.py` | 7 option — camera, HSV, classify_pair |
@@ -188,21 +282,18 @@ Scenario calibrate quan trọng: **Kệ3 T1 → giao foxconn → samsung → ret
 
 **main.py:** `_drop_single_side()` gọi dropoff + raise_after_drop; `packages_delivered` chỉ tăng khi IR xác nhận drop thành công.
 
-## Điều hướng (Navigation)
+## Lệnh route
 
-Dùng route commands: `("forward", N)`, `("left",)`, `("right",)`.
-`execute_route(route) → bool` — `False` nếu route rỗng hoặc `navigate_intersections()` không tìm đủ giao lộ.
-Các route định nghĩa trong `config.py`:
-- `ROUTE_START_TO_SHELF_0` — sau exit start (đã chạm line) → forward 1 giao lộ → Kệ 3
-- `ROUTE_BETWEEN_SHELVES` — Kệ → kệ tiếp (tiến 2 giao lộ)
-- `ROUTE_SHELF_TO_FACTORY[label]` — Kệ → nhà máy (quay phải 2 lần + đi ngang + rẽ nếu cần)
-- `ROUTE_FACTORY_TO_SHELF[label]` — Đoạn cơ bản: nhà máy → cột kệ (cùng hàng NM)
-- `get_return_route(factory, target_shelf)` — Ghép base + đoạn dọc đúng hàng kệ đích
-- `ROUTE_BETWEEN_FACTORIES[(a,b)]` — Giữa 2 nhà máy (12 cặp 2 chiều; `_between_route` fallback)
-- `ROUTE_FACTORY_TO_LOOSE[label]` — Nhà máy → Kệ 4 (thụt dưới R0)
-- `ROUTE_LOOSE_TO_JOINT` — Kệ 4 → nhà máy liên hợp (R2)
+`execute_route(route) → bool`. Lệnh hợp lệ:
 
-Kệ thẳng hàng nhà máy → Samsung/Foxconn chỉ cần đi ngang (không rẽ lên/xuống).
+| Lệnh | Ý nghĩa |
+|------|---------|
+| `("forward", N)` | Bám line qua **N giao lộ** (`navigate_intersections`) |
+| `("left",)` / `("right",)` | Xoay 90° tại chỗ (`TURN_TIME`) |
+| `("advance",)` | Bám line tới **HẾT line** — vào kệ / khu nhà máy / Kệ 4 |
+| route rỗng `[]` | Đã ở đích → trả `True`, không chạy motor |
+
+Route do `navigation.plan(pose, goal)` sinh — xem mục "Điều hướng (`navigation.py`)".
 
 ## Phần cứng
 
@@ -220,8 +311,9 @@ Kệ thẳng hàng nhà máy → Samsung/Foxconn chỉ cần đi ngang (không r
   tốc độ 2 bánh, dùng cho `test_motion.py` option e/f (không tham gia bám line
   thời gian thực, vẫn dùng `PWM_COMPENSATION` open-loop)
 - Nút khởi động (GPIO 16)
+- Công tắc gạt chọn nửa sân (GPIO 12) — quyết định thứ tự nhà máy, dán nhãn 2 bên
 - L298N x2 + XH-M401 hạ áp
-- Tổng: **18 GPIO đang dùng** (không còn bị giới hạn số cổng — có thể mở rộng thêm), **4/12 động cơ** — ĐẠT
+- Tổng: **19 GPIO đang dùng** (không còn bị giới hạn số cổng — có thể mở rộng thêm), **4/12 động cơ** — ĐẠT
 
 ## Nhận diện kiện hàng
 
@@ -241,9 +333,12 @@ Phân tích màu HSV (OpenCV), không cần model AI.
 
 ## Quy tắc quan trọng
 
-- Số giao lộ trong route là ƯỚC LƯỢNG — đội phải đo thực tế trên sa bàn
+- Bản đồ line trong `navigation.py` đo từ file in chuẩn — vẫn phải **đếm lại tay trên
+  sa bàn thật** trước khi chạy (in bằng `python3 -m tools.show_routes`)
 - `TURN_TIME = 0.5s` (fast-profile, CHƯA calibrate thật) cần đo lại trên robot thật
-- `LIFT_TIME_SHELF_1/2` cần calibrate riêng cho từng càng
+- `LIFT_TIME_SHELF_1/2` cần calibrate riêng cho từng càng; `LIFT_*_EXTRA` là bù theo
+  **vị trí tuyệt đối** (thời gian từ sàn lên tầng n), không phải bù mỗi lần chạy
+- `LIFT_HOME_DURATION` phải **> `LIFT_TIME_SHELF_2`**, nếu không home không chạm đáy
 - **3 chế độ chạy** (`main()`):
   - `ROBOT_LOOP=1` (`scripts/practice.sh`) → **luyện tập lặp**: `run_practice_loop()` chạy
     state machine → `_reset_for_new_run()` → chờ nút → lặp; KHÔNG dọn phần cứng giữa lượt;

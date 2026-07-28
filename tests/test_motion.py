@@ -166,28 +166,34 @@ def test_turn_90(m: Motion):
 
 
 def test_execute_route(m: Motion):
-    print("\n[TEST] execute_route — điều hướng theo route config")
-    print("  Route có sẵn:")
-    routes = {
-        "1": ("START → Kệ 3", config.ROUTE_START_TO_SHELF_0),
-        "2": ("Giữa các kệ", config.ROUTE_BETWEEN_SHELVES),
-        "3": ("Kệ → Samsung", config.ROUTE_SHELF_TO_FACTORY.get("samsung", [])),
-        "4": ("Kệ 4 → Liên hợp (NV2)", config.ROUTE_LOOSE_TO_JOINT),
+    import navigation as nav
+
+    print("\n[TEST] execute_route — route do navigation.plan() TÍNH RA")
+    cases = {
+        "1": ("Ô xuất phát → Kệ 3", nav.START_POSE, "SHELF0"),
+        "2": ("Kệ 3 → Kệ 2", nav.pose_at("SHELF0"), "SHELF1"),
+        "3": ("Kệ 3 → Foxconn (cùng hàng R0)", nav.pose_at("SHELF0"), "F_foxconn"),
+        "4": ("Kệ 3 → Samsung (khác hàng, vòng cột kệ)", nav.pose_at("SHELF0"), "F_samsung"),
+        "5": ("Kệ 2 → Foxconn (né đoạn đứt R2)", nav.pose_at("SHELF1"), "F_foxconn"),
+        "6": ("Foxconn → Kệ 3 (quay về kho)", nav.pose_at("F_foxconn"), "SHELF0"),
+        "7": ("Foxconn → Samsung (giữa 2 nhà máy)", nav.pose_at("F_foxconn"), "F_samsung"),
+        "8": ("Foxconn → Kệ 4 → Liên hợp (NV2)", nav.pose_at("F_foxconn"), "LOOSE"),
     }
-    for k, (name, _) in routes.items():
-        print(f"    {k}. {name}")
-    sub = input("  Chọn route (1-4): ").strip()
-    if sub not in routes:
+    for k, (name, src, dst) in cases.items():
+        route, _ = nav.plan(src, dst)
+        print(f"    {k}. {name}\n       {nav.route_to_text(route)}")
+    sub = input(f"  Chọn route (1-{len(cases)}): ").strip()
+    if sub not in cases:
         print("  Lựa chọn không hợp lệ.")
         return
-    name, route = routes[sub]
-    if not route:
-        print("  Route rỗng!")
-        return
+    name, src, dst = cases[sub]
+    route, new_pose = nav.plan(src, dst)
     print(f"  Route {name}: {route}")
-    input("  Đặt robot đúng vị trí xuất phát route. Nhấn Enter...")
+    print(f"  Đặt robot tại: {nav.describe(src)}")
+    input("  Nhấn Enter để chạy...")
     ok = m.execute_route(route)
     print(f"  Kết quả: {'THÀNH CÔNG' if ok else 'THẤT BẠI — mất line / timeout giao lộ'}")
+    print(f"  Vị trí kỳ vọng sau route: {nav.describe(new_pose)}")
 
 
 def test_spi_line_and_ir(m: Motion):
@@ -331,6 +337,53 @@ def test_calibrate_pwm_by_encoder(m: Motion):
             print("  Đã lưu.")
 
 
+def test_cross_line_gap(m: Motion):
+    """Vượt khoảng ĐỨT của line ở ô xuất phát — calibrate LINE_GAP_COAST_TIME.
+
+    Sa bàn có 1 chỗ line đứt thật mà robot BẮT BUỘC đi qua: hàng R0 tại ô xuất phát
+    (~245mm). Mất line thì robot giữ lái và trôi thẳng LINE_GAP_COAST_TIME giây rồi
+    mới coi là lạc và quét tìm lại. Đặt quá ngắn = quay ngang giữa khoảng đứt.
+    """
+    print(f"\n[TEST] Vượt khoảng đứt line (LINE_GAP_COAST_TIME={config.LINE_GAP_COAST_TIME}s)")
+    print("  Đặt robot trên hàng R0 phía KỆ, quay mặt về phía nhà máy (hướng ô xuất phát).")
+    print("  Robot sẽ bám line qua khoảng đứt ô xuất phát tới giao lộ cột giữa.")
+    input("  Nhấn Enter để chạy...")
+
+    t0 = time.time()
+    ok = m.navigate_intersections(1)
+    print(f"  Kết quả: {'✅ qua được' if ok else '❌ mất line'} sau {time.time()-t0:.1f}s")
+    if not ok:
+        print(f"  → Tăng LINE_GAP_COAST_TIME (đang {config.LINE_GAP_COAST_TIME}s) hoặc giảm tốc độ.")
+    else:
+        print("  → Nếu robot có lúc quay ngang giữa khoảng trống thì vẫn nên tăng thêm.")
+
+
+def test_probe_board_side(m: Motion):
+    """Dò nửa sân: đứng TẠI giao lộ Kệ 3, xoay phải thử xem có nhánh line không."""
+    import navigation as nav
+
+    print("\n[TEST] Tự dò NỬA SÂN (dùng đầu mỗi trận)")
+    print("  Đặt robot ĐÚNG TẠI giao lộ Kệ 3 (chỗ line dọc cột kệ gặp line ngang R0),")
+    print("  quay mặt về phía KỆ — y như lúc thi đấu sau khi thoát ô xuất phát.")
+    print(f"  Robot sẽ xoay phải 90°, tiến {config.PROBE_TRAVEL_TIME}s, đọc line, rồi lùi lại và xoay về.")
+    input("  Nhấn Enter để dò...")
+
+    found = m.probe_side_branch("right")
+    if found is None:
+        print("  ❌ Không kết luận được — cảm biến line lỗi.")
+        return
+    mirrored = not found
+    print(f"  Kết quả: {'CÓ' if found else 'KHÔNG có'} nhánh line bên phải")
+    print(f"  → Đang ở nửa {'GƯƠNG' if mirrored else 'CHUẨN'} "
+          f"(BOARD_MIRRORED nên = {mirrored})")
+    print(f"  config.BOARD_MIRRORED hiện tại = {config.BOARD_MIRRORED}"
+          f"{'  ⚠ KHÁC kết quả dò' if bool(config.BOARD_MIRRORED) != mirrored else '  ✅ khớp'}")
+    print("  (Khi thi đấu robot tự dò và tự nạp lại bản đồ — cờ trong config chỉ là dự phòng.)")
+    nav.set_mirrored(mirrored)
+    route, _ = nav.plan((nav.PROBE_NODE, nav.TOWARD_SHELVES), "SHELF0")
+    print(f"  Route tiếp theo vào Kệ 3: {nav.route_to_text(route)}")
+
+
 def main():
     print("=" * 50)
     print("TEST MODULE ĐỘNG CƠ DI CHUYỂN")
@@ -351,6 +404,8 @@ def main():
         "10": ("Xoay 90° (calibrate TURN_TIME)", test_turn_90),
         "11": ("execute_route (route config)", test_execute_route),
         "12": ("Shared SPI: line + IR cùng lúc", test_spi_line_and_ir),
+        "13": ("Tự dò NỬA SÂN tại giao lộ Kệ 3", test_probe_board_side),
+        "14": ("Vượt khoảng đứt line ô xuất phát", test_cross_line_gap),
         "d": ("Chẩn đoán motor từng bánh riêng", test_motor_diagnosis),
         "e": ("Đọc xung encoder real-time (Ctrl+C để thoát)", test_encoder_live),
         "f": ("Calibrate PWM_COMPENSATION bằng encoder (lưu config)", test_calibrate_pwm_by_encoder),
@@ -361,12 +416,12 @@ def main():
     for key, (name, _) in tests.items():
         print(f"  {key}. {name}")
 
-    choice = input("\nNhập số (0-12, d-f): ").strip()
+    choice = input("\nNhập số (0-14, d-f): ").strip()
 
     try:
         if choice == "0":
             for key, (name, func) in tests.items():
-                if func and key not in ("5", "10", "11", "12", "e"):
+                if func and key not in ("5", "10", "11", "12", "13", "14", "e"):
                     func(m)
         elif choice in tests and tests[choice][1]:
             tests[choice][1](m)

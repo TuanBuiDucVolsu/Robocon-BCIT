@@ -219,6 +219,43 @@ def test_classify_pair(vision: Vision):
         print("  ❌ Không nhận diện được cặp kiện")
 
 
+def test_left_right_mapping(vision: Vision):
+    """Ảnh TRÁI/PHẢI có khớp càng TRÁI/PHẢI của robot không?
+
+    Đây là lỗi IM LẶNG: nếu camera lắp lật hoặc gương thì classify_pair vẫn trả về
+    2 nhãn hợp lệ, log vẫn báo OK, nhưng cả 2 kiện đi nhầm nhà máy. Không có cảm
+    biến nào phát hiện được — chỉ kiểm bằng cách đặt 2 kiện KHÁC NHAU đã biết trước.
+    """
+    print("\n[TEST] Kiểm ánh xạ TRÁI/PHẢI của ảnh với càng robot")
+    print("  Đặt 2 kiện KHÁC LOẠI lên tầng kệ, ghi nhớ bên nào là bên nào.")
+    print("  (Bên trái = phía càng TRÁI của robot khi robot nhìn vào kệ)")
+
+    expect_l = input("  Kiện thật bên TRÁI là gì? (samsung/foxconn/amkor/hana_micron): ").strip().lower()
+    expect_r = input("  Kiện thật bên PHẢI là gì? : ").strip().lower()
+    valid = set(config.LABEL_TO_FACTORY)
+    if expect_l not in valid or expect_r not in valid:
+        print(f"  Tên không hợp lệ. Hợp lệ: {', '.join(sorted(valid))}")
+        return
+    if expect_l == expect_r:
+        print("  ⚠ Phải dùng 2 kiện KHÁC LOẠI thì mới phát hiện được lật trái/phải.")
+        return
+
+    input("  Đặt robot đúng vị trí quét rồi nhấn Enter...")
+    label_l, label_r = vision.classify_pair()
+    print(f"\n  Robot đọc được : trái={label_l}  phải={label_r}")
+    print(f"  Thực tế        : trái={expect_l}  phải={expect_r}")
+
+    if label_l is None or label_r is None:
+        print("  ❌ Không nhận đủ 2 kiện — sửa nhận diện trước rồi test lại phần này")
+    elif label_l == expect_l and label_r == expect_r:
+        print("  ✅ ĐÚNG — ảnh trái/phải khớp càng trái/phải")
+    elif label_l == expect_r and label_r == expect_l:
+        print("  ❌ BỊ LẬT TRÁI/PHẢI! Cả 2 kiện sẽ đi nhầm nhà máy mà log vẫn báo OK.")
+        print("     → Kiểm lại hướng lắp camera, hoặc đảo 2 nửa ảnh trong classify_pair().")
+    else:
+        print("  ❌ Nhận diện SAI nhãn (chưa kết luận được lật hay không) — calibrate lại trước")
+
+
 def test_classify_pair_repeat(vision: Vision):
     print("\n[TEST] classify_pair liên tục 5 lần (độ ổn định cặp)...")
     for i in range(5):
@@ -248,6 +285,7 @@ def main():
         "7": ("classify_pair liên tục 5 lần", test_classify_pair_repeat),
         "8": ("Kiểm tra thứ tự kênh BGR/RGB (chạy TRƯỚC khi tinh chỉnh màu)", test_color_order),
         "9": ("So khớp ORB với ảnh mẫu (chẩn đoán template)", test_shape_analysis),
+        "l": ("Kiểm ánh xạ TRÁI/PHẢI ảnh ↔ càng robot", test_left_right_mapping),
         "0": ("Chạy tất cả", None),
     }
 
@@ -255,12 +293,12 @@ def main():
     for key, (name, _) in tests.items():
         print(f"  {key}. {name}")
 
-    choice = input("\nNhập số (0-9): ").strip()
+    choice = input("\nNhập số (0-9, l): ").strip()
 
     try:
         if choice == "0":
             for key, (name, func) in tests.items():
-                if func:
+                if func and key != "l":     # 'l' cần nhập tay tên kiện — chạy riêng
                     func(vision)
         elif choice in tests and tests[choice][1]:
             tests[choice][1](vision)

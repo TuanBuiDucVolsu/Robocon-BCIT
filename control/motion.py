@@ -41,6 +41,11 @@ class LineSensor:
     def _threshold_norm() -> float:
         return config.LINE_THRESHOLD / 1023.0
 
+    @property
+    def last_read_ok(self) -> bool:
+        """Lần đọc gần nhất có hợp lệ không (SPI/ADC lỗi → False)."""
+        return self.available and self._bus.last_read_ok
+
     def read_raw(self) -> list[float]:
         """Đọc giá trị analog 0.0-1.0, chuẩn hoá sao cho 0.0 = đen/line, 1.0 = trắng/nền.
 
@@ -130,6 +135,13 @@ class Motion:
 
         self._line_sensor = LineSensor(self._mcp_bus)
         self._last_error = 0.0
+        # Hàm kiểm "có phải bỏ dở việc đang làm không" — các vòng lặp dài (bám line,
+        # tiếp cận, advance) poll hàm này để dừng NGAY khi trọng tài cho reset giữa
+        # trận. Không có nó thì phải chờ hết timeout (tới 15s) mới phản ứng được.
+        self.abort_check = None
+        # Các bước của route gần nhất đã chạy XONG (dùng để tính lại vị trí khi route
+        # chạy dở — xem execute_route / navigation.apply)
+        self.last_route_progress: list = []
 
         # Encoder tốc độ bánh xe (JGA25-370 kênh C1) — đo lệch tốc độ 2 bánh
         self._encoder_left = WheelEncoder(config.ENCODER_LEFT_PIN)
@@ -154,6 +166,19 @@ class Motion:
     @staticmethod
     def _pct(speed: float) -> float:
         return max(0.0, min(1.0, speed / 100.0))
+
+    def _aborted(self) -> bool:
+        """True nếu caller yêu cầu bỏ dở (reset giữa trận)."""
+        if self.abort_check is None:
+            return False
+        try:
+            if self.abort_check():
+                self.stop()
+                logger.warning("Bỏ dở thao tác đang chạy theo yêu cầu (reset)")
+                return True
+        except Exception as e:
+            logger.warning("Lỗi abort_check: %s", e)
+        return False
 
     # ----------------------------------------------------------
     # Đo khoảng cách
@@ -239,8 +264,8 @@ class Motion:
 
         Robot đặt quay mặt sang trái (9h, về Kệ 3):
         1. Tiến thẳng cho đến khi chạm line ngang R0
-        2. Bám line ngắn để căn giữa (không đếm giao lộ — để ROUTE_START làm)
-        Giao lộ được đếm trong ROUTE_START_TO_SHELF_0, tránh đếm kép.
+        2. Bám line ngắn để căn giữa — KHÔNG đếm giao lộ ở đây
+        Giao lộ do route của navigation.plan() đếm, tránh đếm kép.
         """
         logger.info("Thoát ô start — tiến thẳng tìm line R0 (speed=%d%%)", speed)
         start = time.time()
@@ -248,6 +273,8 @@ class Motion:
 
         found = False
         while time.time() - start < timeout:
+            if self._aborted():
+                return False
             values = self.read_line_sensor()
             if sum(values) > 0:
                 self.stop()
@@ -277,6 +304,67 @@ class Motion:
         return True
 
     # ----------------------------------------------------------
+    # Dò nhánh line bên cạnh (xác định nửa sân)
+    # ----------------------------------------------------------
+
+    def probe_side_branch(self, direction: str = "right") -> bool | None:
+        """
+        Đang đứng TẠI một giao lộ: xoay 90° về phía `direction`, tiến ra khỏi giao lộ
+        một đoạn ngắn để xem phía đó CÓ đường line đi tiếp không, rồi lùi lại và xoay
+        về đúng tư thế cũ.
+
+        Trả True = có line, False = không có, None = không kết luận được (cảm biến lỗi).
+
+        VÌ SAO PHẢI TIẾN RA: ngay tại giao lộ thì đường line cắt ngang nằm dọc theo
+        thanh cảm biến nên MỌI mắt đều thấy đen dù xoay kiểu gì — đọc ở đó không phân
+        biệt được gì. Chỉ khi ra khỏi vùng giao nhau mới biết phía đó có line hay không.
+        """
+        if not self._line_sensor.available:
+            logger.error("Không có cảm biến line — không dò được nhánh")
+            return None
+
+        logger.info("Dò nhánh line phía %s...", "PHẢI" if direction == "right" else "TRÁI")
+        if direction == "right":
+            self.turn_right_90()
+        else:
+            self.turn_left_90()
+
+        # Tiến ra khỏi vùng 2 line cắt nhau
+        self.forward(config.PROBE_SPEED)
+        time.sleep(config.PROBE_TRAVEL_TIME)
+        self.stop()
+        time.sleep(0.1)
+
+        # Lấy nhiều mẫu, chỉ cần một lần thấy line là đủ kết luận "có nhánh"
+        found = False
+        ok_any = False
+        deadline = time.time() + config.PROBE_SAMPLE_TIME
+        while time.time() < deadline:
+            raw = self.read_line_sensor_raw()
+            if self._line_sensor.last_read_ok:
+                ok_any = True
+                if sum(LineSensor.digital_from_raw(raw)) > 0:
+                    found = True
+                    break
+            time.sleep(0.02)
+
+        # Lùi về đúng chỗ cũ rồi xoay trả lại tư thế ban đầu
+        self.backward(config.PROBE_SPEED)
+        time.sleep(config.PROBE_TRAVEL_TIME)
+        self.stop()
+        if direction == "right":
+            self.turn_left_90()
+        else:
+            self.turn_right_90()
+
+        if not ok_any:
+            logger.error("Dò nhánh: cảm biến line lỗi suốt — không kết luận")
+            return None
+        logger.info("Dò nhánh phía %s: %s line",
+                    direction, "CÓ" if found else "KHÔNG có")
+        return found
+
+    # ----------------------------------------------------------
     # Xoay 90° và điều hướng route
     # ----------------------------------------------------------
 
@@ -293,23 +381,95 @@ class Motion:
         self.stop()
 
     def execute_route(self, route: list) -> bool:
+        """Chạy route do navigation.plan() sinh ra.
+
+        Lệnh hợp lệ: ("forward", N) | ("left",) | ("right",) | ("advance",).
+        Route RỖNG = không có gì để đi (robot đã ở đích) → coi là thành công; caller
+        tự quyết định có gọi hay không.
+        """
+        # Ghi lại các bước ĐÃ hoàn thành để caller biết robot dừng ở đâu khi route
+        # chạy dở (xem navigation.apply). Không có cái này thì sau một lần mất line,
+        # mọi tính toán vị trí phía sau đều sai mà không ai biết.
+        self.last_route_progress = []
+
         if not route:
-            logger.warning("Route rỗng — không có bước điều hướng")
-            return False
+            logger.info("Route rỗng — robot đã ở đích, không cần di chuyển")
+            return True
 
         for step in route:
             action = step[0]
             if action == "forward":
-                count = step[1]
-                if count > 0 and not self.navigate_intersections(count):
-                    return False
+                # Đi từng giao lộ một để biết chính xác đã qua được mấy cái
+                for _ in range(max(0, step[1])):
+                    if not self.navigate_intersections(1):
+                        return False
+                    self.last_route_progress.append(("forward", 1))
             elif action == "left":
                 self.turn_left_90()
+                self.last_route_progress.append(step)
             elif action == "right":
                 self.turn_right_90()
+                self.last_route_progress.append(step)
+            elif action == "advance":
+                if not self.advance_to_end():
+                    return False
+                self.last_route_progress.append(step)
             else:
-                logger.warning("Lệnh route không hợp lệ: %s", step)
+                logger.error("Lệnh route không hợp lệ: %s — dừng route", step)
+                self.stop()
+                return False
         return True
+
+    def advance_to_end(self, base_speed: float = config.ADVANCE_SPEED,
+                       timeout: float = config.ADVANCE_TIMEOUT) -> bool:
+        """
+        Bám line tới ĐIỂM CUỐI của line (vào kệ / khu nhà máy / Kệ 4).
+
+        Khác navigate_intersections(): những chỗ này KHÔNG phải giao lộ — line chỉ
+        đơn giản là hết, nên không đếm được. Dừng khi:
+          1. Mất line liên tục config.LINE_END_CONFIRM_TIME giây → đã hết line, hoặc
+          2. Siêu âm thấy mục tiêu ở gần (≤ APPROACH_SLOW_DISTANCE) → để
+             approach_shelf() canh nốt đoạn cuối cho chính xác, hoặc
+          3. Gặp giao lộ (bản đồ sai / robot đi lố) → dừng và báo thất bại.
+        """
+        logger.info("Bám line tới hết line (advance, speed=%d%%)", base_speed)
+        # Lệnh advance luôn bắt đầu khi robot đang ĐỨNG TRÊN giao lộ (vừa dừng ở
+        # giao lộ cuối của forward, hoặc vừa xoay tại giao lộ). Không thoát ra trước
+        # thì follow_line() nhận ngay chính giao lộ đó và báo "đi lố".
+        self._escape_intersection(base_speed)
+        start = time.time()
+        lost_since = None
+
+        while time.time() - start < timeout:
+            if self._aborted():
+                return False
+            dist = self.get_distance()
+            if 0 <= dist <= config.APPROACH_SLOW_DISTANCE:
+                self.stop()
+                logger.info("Advance: đã tới gần mục tiêu (%.1fcm)", dist)
+                return True
+
+            at_intersection, values = self.follow_line(base_speed)
+            if at_intersection:
+                self.stop()
+                logger.warning("Advance: gặp giao lộ — bản đồ hoặc vị trí không khớp")
+                return False
+
+            if sum(values) == 0:
+                if lost_since is None:
+                    lost_since = time.time()
+                elif time.time() - lost_since >= config.LINE_END_CONFIRM_TIME:
+                    self.stop()
+                    logger.info("Advance: đã hết line — dừng tại điểm cuối")
+                    return True
+            else:
+                lost_since = None
+
+            time.sleep(0.01)
+
+        self.stop()
+        logger.warning("Advance: timeout sau %.1fs", timeout)
+        return False
 
     # ----------------------------------------------------------
     # Tiếp cận kệ / lùi ra
@@ -329,8 +489,11 @@ class Motion:
                     target_cm, config.APPROACH_FAST_SPEED,
                     config.APPROACH_SLOW_SPEED, config.APPROACH_SLOW_DISTANCE)
         start = time.time()
+        target_seen = False
 
         while time.time() - start < config.APPROACH_TIMEOUT:
+            if self._aborted():
+                return False
             dist = self.get_distance(samples=3)  # median chống nhiễu HC-SR04
             if dist < 0:
                 # Lỗi đọc mẫu này — KHÔNG hiểu nhầm thành "đã tới", thử lại
@@ -340,6 +503,20 @@ class Motion:
                 self.stop()
                 logger.info("Đã đến vị trí kệ — khoảng cách %.1fcm", dist)
                 return True
+
+            if dist <= config.APPROACH_DETECT_DISTANCE:
+                target_seen = True
+            elif not target_seen and time.time() - start > config.APPROACH_BLIND_TIMEOUT:
+                # Chạy mù quá lâu mà chưa lần nào thấy mục tiêu trong tầm → DỪNG.
+                # Không được chạy tiếp hết APPROACH_TIMEOUT: ở tốc độ này robot sẽ
+                # lao ra khỏi sa bàn hoặc sang sân đối phương (bị reset −10 điểm).
+                self.stop()
+                logger.error("Tiếp cận: chạy mù %.1fs mà không thấy mục tiêu trong %.0fcm "
+                             "(đo được %.1fcm) — dừng an toàn",
+                             config.APPROACH_BLIND_TIMEOUT,
+                             config.APPROACH_DETECT_DISTANCE, dist)
+                return False
+
             # Pha xa: nhanh; pha gần: chậm để dừng chính xác, không đâm kệ
             speed = (config.APPROACH_SLOW_SPEED
                      if dist <= config.APPROACH_SLOW_DISTANCE
@@ -362,6 +539,8 @@ class Motion:
         self.backward(speed)
 
         while time.time() - start < config.APPROACH_TIMEOUT:
+            if self._aborted():
+                return False
             dist = self.get_distance(samples=3)  # median chống nhiễu HC-SR04
             if dist < 0:
                 # Lỗi đọc mẫu này — KHÔNG hiểu nhầm thành "đã lùi đủ", thử lại
@@ -430,7 +609,9 @@ class Motion:
 
         self._left_rev.off()
         self._right_rev.off()
-        self._left_fwd.value = self._pct(left_speed)
+        # Bù lệch tốc độ 2 bánh — phải dùng ĐÚNG cùng hệ số như forward(), nếu không
+        # robot đi thẳng và robot bám line sẽ lệch nhau sau khi calibrate.
+        self._left_fwd.value = self._pct(left_speed * config.PWM_COMPENSATION_LEFT)
         self._right_fwd.value = self._pct(right_speed * config.PWM_COMPENSATION)
 
         return False, values
@@ -438,25 +619,33 @@ class Motion:
     def follow_line_until_intersection(self, base_speed: float = config.SPEED_DEFAULT,
                                        timeout: float = 15.0) -> bool:
         start = time.time()
-        lost_count = 0
+        lost_since = None
 
         while time.time() - start < timeout:
+            if self._aborted():
+                return False
             at_intersection, values = self.follow_line(base_speed)
             if at_intersection:
                 return True
 
             if sum(values) == 0:
-                lost_count += 1
-                if lost_count > 50:
-                    logger.warning("Mất line! Quét tìm lại...")
+                # Mất line: có thể là khoảng ĐỨT thật của sa bàn (ô xuất phát trên
+                # hàng R0 ~245mm) chứ không phải lạc. Giữ nguyên lái và trôi thẳng
+                # trong LINE_GAP_COAST_TIME giây trước khi kết luận là lạc — quét
+                # tìm lại quá sớm sẽ làm robot quay ngang giữa khoảng đứt.
+                if lost_since is None:
+                    lost_since = time.time()
+                elif time.time() - lost_since > config.LINE_GAP_COAST_TIME:
+                    logger.warning("Mất line quá %.1fs (dài hơn khoảng đứt đã biết)! Quét tìm lại...",
+                                   config.LINE_GAP_COAST_TIME)
                     if self._recover_line():
-                        lost_count = 0
+                        lost_since = None
                     else:
                         self.stop()
                         logger.error("Không tìm lại được line!")
                         return False
             else:
-                lost_count = 0
+                lost_since = None
 
             time.sleep(0.01)
 
@@ -494,6 +683,8 @@ class Motion:
             return True
 
         for i in range(count):
+            if self._aborted():
+                return False
             logger.info("Đi đến giao lộ %d/%d", i + 1, count)
             self._escape_intersection(base_speed)
             if not self.follow_line_until_intersection(base_speed):

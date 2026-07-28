@@ -272,6 +272,36 @@ GPIO 16 ──── [ NÚT BẤM ] ──── GND
 
 ---
 
+## 6b. Công tắc gạt CHỌN NỬA SÂN (GPIO 12)
+
+```
+Công tắc gạt 2 vị trí (SPST/SPDT đều được)
+
+     chân giữa (common) ──────→ GND
+     một cực            ──────→ GPIO 12
+     cực còn lại        ──────→ để trống
+
+- Gạt về phía nối GPIO 12 = chân xuống GND (LOW) → nửa SAMSUNG
+- Gạt về phía kia = thả nổi, pull-up trong Pi giữ HIGH → nửa FOXCONN
+  (đổi ý nghĩa 2 phía bằng config.BOARD_SIDE_SWITCH_CLOSED, không phải đảo dây)
+```
+
+**DÁN NHÃN 2 BÊN CÔNG TẮC** — đây là lý do tồn tại của nó. Sa bàn chia đôi bởi tường
+giữa sân, hai nửa quay 180° nên mọi đường line giống hệt, robot KHÔNG tự dò được cụm
+nhà máy nào nằm cùng hàng ô xuất phát. Đặt sai thì robot giao Samsung vào Foxconn:
+chạy vẫn mượt, IR vẫn xác nhận thả thành công, log vẫn sạch — chỉ là điểm bằng 0.
+Công tắc cho trạng thái **nhìn thấy được bằng mắt, không cần cấp nguồn**.
+
+Kiểm đấu dây + nhãn (gạt qua lại, giá trị phải đổi ngay):
+
+```bash
+python3 -m tools.check_board_side
+```
+
+Bốc thăm xong → gạt công tắc → cả đội liếc kiểm chéo → xong. Không sửa file ở sân.
+
+---
+
 ## 7. Camera CSI
 
 ```

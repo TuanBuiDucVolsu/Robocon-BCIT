@@ -1,178 +1,230 @@
 # Hướng dẫn chạy test
 
-Thư mục `tests/` có 2 nhóm test:
+| Nhóm | File | Chạy ở đâu | Cần phần cứng |
+|------|------|-----------|---------------|
+| **Tự động** | `test_units.py`, `test_logic.py`, `test_match_sim.py` | PC hoặc Pi | ❌ |
+| **Phần cứng** (menu tương tác) | `test_motion.py`, `test_lift.py`, `test_vision.py` | Pi | ✅ |
+| **Smoke tích hợp** | `test_smoke.py` | Pi + **sa bàn thật** | ✅ |
+| **Diễn tập thi đấu** | [DIEN_TAP.md](DIEN_TAP.md) | Pi + sa bàn + đồng hồ | ✅ |
 
-| Nhóm | File | Chạy ở đâu | Cần phần cứng? |
-|------|------|-----------|----------------|
-| **Unit test** (logic) | `test_logic.py` | PC hoặc Pi | ❌ Không |
-| **Test phần cứng** (tương tác) | `test_motion.py`, `test_lift.py`, `test_vision.py` | Raspberry Pi 4 | ✅ Có |
-| **Smoke tích hợp** | `test_smoke.py` | Pi + **sa bàn thật** | ✅ Có |
+> File này kiểm **từng phần chạy đúng không**. [DIEN_TAP.md](DIEN_TAP.md) kiểm **có ăn
+> được điểm trong 240 giây thật không** — gồm ngân sách thời gian, kịch bản xếp kiện
+> xấu nhất, diễn tập reset/sự cố, pin tụt, ánh sáng sân.
 
-> Tất cả lệnh chạy từ **thư mục gốc repo** (`/home/mbw12345/Robocon-BCIT`), không phải trong `tests/`.
+> Chạy từ **thư mục gốc repo**, không phải trong `tests/`.
 
 ---
 
-## A. Unit test — `test_logic.py` (chạy trên PC, không cần GPIO)
-
-Kiểm tra logic route, cost, polarity cảm biến, phân loại màu, reset luyện tập, plan delivery… bằng mock. **45 test.**
+## A. Test tự động (PC, không cần GPIO)
 
 ```bash
-cd /home/mbw12345/Robocon-BCIT
-
-# Chạy toàn bộ unit test (gọn)
-python3 -m unittest discover -s tests -q
-
-# Chạy chi tiết từng test
+python3 -m pytest tests/ -q          # tất cả — 124 test + 100 subtest
 python3 -m unittest tests.test_logic -v
-
-# Chạy 1 nhóm test cụ thể
-python3 -m unittest tests.test_logic.TestLineSensorPolarity -v
-python3 -m unittest tests.test_logic.TestReturnRoute -v
-python3 -m unittest tests.test_logic.TestVisionColorClassify -v   # phân loại màu HSV
+python3 -m unittest tests.test_match_sim -v
 ```
 
-Kết quả mong đợi: dòng cuối in `OK`. Nếu có `FAILED (...)` → đọc traceback để sửa.
+Kết quả mong đợi: `124 passed`. Cảnh báo `PinFactoryFallback` là **bình thường** trên PC.
 
-> Các cảnh báo `PinFactoryFallback` / log `[WARNING]` là **bình thường** trên PC (không có GPIO) — test vẫn pass.
+### `test_units.py` — logic thuần từng module
+
+Khoá lại các hàm nhỏ mà **sai thì mất điểm nhưng không báo lỗi**:
+
+| Nhóm | Kiểm gì |
+|---|---|
+| `TestLiftTiming` | Bù lệch càng theo vị trí tuyệt đối; regression: 0→1→2 không cộng dồn bù, nâng lại sau khi thả đúng bằng lúc nâng lên |
+| `TestPalletSensors` | Ngưỡng IR; đọc lỗi trả `None` chứ không phải `False` |
+| `TestVerifyReleased` | Quyết định `packages_delivered` có tăng không — SPI lỗi ≠ đã thả |
+| `TestShapeMatcherDecision` | ORB cần CẢ ngưỡng tuyệt đối VÀ cách biệt với kiện thứ nhì |
+| `TestClassifyPair` | Gộp 2 nửa ảnh, retry, ORB bỏ qua ngưỡng HSV |
+| `TestLineError` | Dấu sai số trái/phải, mất line giữ lỗi cũ, analog mượt hơn digital |
+
+### `test_logic.py` — logic điều hướng & state machine
+
+| Nhóm | Kiểm gì |
+|---|---|
+| `TestBoardMap` | Bản đồ khớp sa bàn in: cột kệ chỉ 3 giao lộ, R2 bị cấm, nhà máy đều ở cột giữa |
+| `TestRouteReachesDestination` | **Mô phỏng lại từng route sinh ra** — 12 tuyến kệ→NM, 12 tuyến NM→kệ, 12 cặp NM, NV2, đều phải tới đúng chỗ đúng hướng |
+| `TestMirroredHalf` | Nửa gương = ảnh gương chính xác của nửa chuẩn |
+| `TestFactoryOrderPerHalf` | Thứ tự nhà máy đảo giữa 2 nửa; liên hợp luôn ở giữa |
+| `TestBoardSideSwitch` | Công tắc gạt: ánh xạ 2 vị trí, đổi được qua config, đọc lỗi trả `None` |
+| `TestApplyBoardSide` | Công tắc **thắng** config; hỏng thì rơi về config |
+| `TestDetectSide` | Dò chiều trái/phải: thấy line/không/lỗi cảm biến/tắt tính năng |
+| `TestMidMatchReset` | Reset giữa trận: về ô xuất phát, GIỮ tiến độ, không cộng giờ |
+| `TestMotionAbort` | Motion bỏ dở ngay khi có yêu cầu reset (không chờ timeout) |
+| `TestGotoHelper` | Route chạy dở → vị trí tính từ bước ĐÃ hoàn thành |
+| `TestLineSensorPolarity` | `LINE_BLACK_IS_HIGH`; đọc lỗi không được thành "trên line" giả |
+| `TestPlanDelivery` | Chọn thứ tự giao rẻ hơn |
+| `TestMatchResume` | Lưu/đọc/xoá mốc trận để chạy nốt sau lỗi |
+| `TestVisionColorClassify` | Ưu tiên màu chromatic hơn Amkor xám |
+
+### `test_match_sim.py` — mô phỏng TRỌN trận
+
+Chạy thật state machine của `main.py` với phần cứng giả lập, đồng thời mô phỏng robot
+đi trên bản đồ. **So vị trí main.py tin tưởng với vị trí mô phỏng sau MỖI state** — lệch
+một lần là fail.
+
+| Kịch bản | Kiểm gì |
+|---|---|
+| Chạy sạch (20 seed) | Giao đủ 12/12 kiện |
+| 15% thao tác phần cứng lỗi | Vẫn kết thúc, không kẹt vòng lặp |
+| 20% route mất line giữa chừng | Vị trí vẫn khớp thực tế |
+| Nửa sân thứ tự nhà máy đảo | Vẫn 12/12 |
+| Cấu hình chiều sai + probe đúng | Tự nạp lại bản đồ, vẫn 12/12 |
+| **Reset giữa trận** | Về ô xuất phát, chạy tiếp, không lấy lại kiện đã lấy |
 
 ---
 
-## B. Chuẩn bị trước khi test phần cứng (trên Pi)
+## B. Chuẩn bị trước khi test phần cứng
 
 ```bash
-# 1. SSH vào Pi (xem docs/SETUP_PI.md nếu chưa cài)
 ssh pi@<hostname>
-
-# 2. Vào repo + bật virtualenv (nếu đã tạo theo SETUP_PI.md)
-cd ~/Robocon-BCIT
-source ~/robot_env/bin/activate
-
-# 3. Đảm bảo đã bật SPI + Camera (raspi-config) và cấp nguồn động cơ
+cd ~/Robocon-BCIT && source ~/robot_env/bin/activate
+sudo systemctl stop robot        # tránh tranh chấp GPIO
 ```
 
-> ⚠️ **An toàn:** kê robot lên đế (bánh không chạm đất) khi test động cơ lần đầu, tránh robot lao đi.
+> ⚠️ Kê robot lên đế (bánh không chạm đất) khi test động cơ lần đầu.
 
 ---
 
-## C. Test phần cứng tương tác — chọn theo menu
+## C. Test phần cứng — menu
 
-Mỗi file mở menu; nhập số rồi Enter. Với `test_motion`/`test_lift`/`test_vision`:
-**`0` = chạy tất cả**. `test_smoke` chỉ có `1`–`5` (không có `0`). Ctrl+C = thoát.
+`0` = chạy tất cả (bỏ qua các test cần nhập tay). Ctrl+C = thoát.
 
 ### `test_motion.py` — động cơ, dò line, điều hướng
-```bash
-python3 tests/test_motion.py
-```
-| # | Test | Dùng để |
-|---|------|---------|
-| 1 | Tiến/Lùi | Kiểm chiều quay động cơ |
-| 2 | Xoay trái/phải | Kiểm 2 bánh ngược chiều |
-| 3 | Các mức tốc độ | Xem PWM theo % |
-| 4 | Đọc cảm biến dò line (digital) | Kiểm 6 mắt ra 0/1 |
-| 5 | **Calibrate QTR-8A (raw ADC)** | Xem giá trị thô đen/trắng |
-| 6 | Thoát ô start | `exit_start_zone()` |
-| 7 | Bám line (chạy thực tế) | PD line-following |
-| 8 | Cảm biến siêu âm | Đo khoảng cách HC-SR04 |
-| 9 | Tiếp cận + lùi khỏi kệ | `approach_shelf` 2 pha |
-| 10 | **Xoay 90° (calibrate `TURN_TIME`)** | Chỉnh thời gian xoay |
-| 11 | `execute_route` (route config) | Chạy thử 1 route |
-| 12 | Shared SPI: line + IR cùng lúc | Kiểm bus dùng chung |
-| d | Chẩn đoán motor từng bánh riêng | Bánh nào ngược chiều |
-| e | Đọc xung encoder real-time (Ctrl+C thoát) | Kiểm dây/kênh encoder |
-| f | **Calibrate `PWM_COMPENSATION` bằng encoder** | Tự tính & lưu, đỡ dò tay |
 
-### `test_lift.py` — cơ cấu nâng forklift
-```bash
-python3 tests/test_lift.py
-```
+| # | Test | Dùng để |
+|---|---|---|
+| 1 | Tiến/Lùi | Chiều quay động cơ |
+| 2 | Xoay trái/phải | 2 bánh ngược chiều |
+| 3 | Các mức tốc độ | PWM theo % |
+| 4 | Đọc cảm biến line (digital) | 6 mắt ra 0/1 |
+| 5 | **Calibrate QTR-8A (raw ADC)** | Giá trị thô đen/trắng |
+| 6 | Thoát ô start | `exit_start_zone()` |
+| 7 | Bám line thực tế | PD line-following |
+| 8 | Cảm biến siêu âm | Đo khoảng cách |
+| 9 | Tiếp cận + lùi khỏi kệ | `approach_shelf` 2 pha |
+| 10 | **Xoay 90° — calibrate `TURN_TIME`** | ƯU TIÊN #1 |
+| 11 | `execute_route` — 8 tuyến mẫu | Route do `navigation.plan()` tính ra |
+| 12 | Shared SPI: line + IR | Bus dùng chung |
+| 13 | **Tự dò nửa sân** | `probe_side_branch` tại giao lộ Kệ 3 |
+| 14 | **Vượt khoảng đứt line** | Calibrate `LINE_GAP_COAST_TIME` |
+| d | Chẩn đoán motor từng bánh | Bánh nào ngược chiều |
+| e | Xung encoder real-time | Kiểm dây/kênh encoder |
+| f | **Calibrate `PWM_COMPENSATION`** | Tự tính & lưu |
+
+### `test_lift.py` — cơ cấu nâng
+
 | # | Test |
-|---|------|
+|---|---|
 | 1 | Nâng/Hạ cơ bản |
 | 2 | Các tầng kệ (1 và 2) |
 | 3 | Pickup/Dropoff tầng 1 |
 | 4 | Pickup/Dropoff tầng 2 |
-| 5 | Drop từng càng NV1 (left/right + stow) |
+| 5 | Thả từng càng NV1 (**luôn nâng lại/gập, giống main.py**) |
 | 6 | Pickup NV2 (`require_both=False`) |
 | 7 | `dropoff()` 2 kiện cùng nhà máy |
-| 8 | IR real-time (Ctrl+C để thoát) |
-| a | Scan tất cả 8 channel MCP3008 (tìm channel IR, calibrate `PALLET_THRESHOLD`) |
-| b | Cẩu TRÁI độc lập (nâng/hạ) |
-| c | Cẩu PHẢI độc lập (nâng/hạ) |
-| d | Calibrate độ cao + bù lệch (lưu `config.py`) |
+| 8 | IR real-time |
+| 9 | **`home_to_floor`** — chạy đầu mỗi trận, phải hạ hết cỡ từ tầng 2 |
+| a | Scan 8 channel MCP3008 (chốt `PALLET_THRESHOLD`) |
+| b | **Càng TRÁI riêng** — nâng + hạ (càng phải đứng yên) |
+| c | **Càng PHẢI riêng** — nâng + hạ (càng trái đứng yên) |
+| e | **So sánh 2 càng cùng tầng** — nâng riêng từng bên rồi giữ nguyên để so độ cao |
+| d | **Calibrate độ cao + bù lệch** (lưu `config.py`) |
 
-### `test_vision.py` — camera & nhận diện màu HSV
-```bash
-python3 tests/test_vision.py
-```
+> b/c/e dùng ĐÚNG thời gian đã bù (`_move_duration`) chứ không bật GPIO thô — nên cái
+> quan sát được chính là cái xảy ra trong trận. Trước đây b/c bật chân trực tiếp với
+> thời gian tự đặt và **phần hạ bị comment mất**, chỉ kiểm được dây chứ không kiểm
+> được calibrate.
+
+### `test_vision.py` — camera & nhận diện
+
 | # | Test |
-|---|------|
-| 1 | Chụp ảnh camera |
-| 2 | **Phân tích màu HSV (tinh chỉnh `COLOR_RANGES`)** |
-| 3 | Nhận diện 1 lần |
-| 4 | Nhận diện liên tục (5 lần) |
-| 5 | Đánh giá độ ổn định (10 lần) |
-| 6 | Nhận diện cặp 2 kiện (`classify_pair` — dùng trong NV1) |
+|---|---|
+| 1 | Chụp ảnh |
+| 2 | **Phân tích HSV** (tinh chỉnh `COLOR_RANGES`) |
+| 3-5 | Nhận diện 1 lần / 5 lần / độ ổn định 10 lần |
+| 6 | `classify_pair` — cặp 2 kiện (dùng trong NV1) |
 | 7 | `classify_pair` liên tục 5 lần |
+| 8 | **Thứ tự kênh BGR/RGB** — chạy TRƯỚC khi tinh chỉnh màu |
+| 9 | So khớp ORB với ảnh mẫu (chẩn đoán template) |
+| l | **Ánh xạ TRÁI/PHẢI ảnh ↔ càng robot** — lỗi im lặng, phải kiểm bằng 2 kiện khác loại |
 
 ### `test_smoke.py` — tích hợp trên sa bàn thật
-```bash
-python3 tests/test_smoke.py
-```
-| # | Smoke |
-|---|-------|
-| 1 | Exit start + `ROUTE_START` → Kệ 3 |
-| 2 | Pickup 1 lượt (approach + classify_pair + nâng) |
-| 3 | Drop từng càng + raise_after_drop / stow |
-| 4 | NV2 pickup (`require_both=False`) |
-| 5 | Full rút gọn (1+2) |
+
+Dùng đúng `navigation.plan()` như thi đấu. Fail ở bước nào thì dừng ngay tại đó.
+
+| # | Smoke | Đi qua |
+|---|---|---|
+| 1 | Xuất phát → dò nửa sân → Kệ 3 | `exit_start_zone` + `DETECT_SIDE` + route |
+| 2 | Pickup 1 lượt | approach → `classify_pair` → nâng → lùi |
+| 3 | Thả từng càng + nâng lại/gập | Khớp đúng hành vi `main.py` |
+| 4 | NV2 pickup | `require_both=False` |
+| 5 | **★ MỘT LƯỢT ĐẦY ĐỦ** | pickup → giao NM1 → giao NM2 → quay về lấy tầng 2 |
+| 6 | Chặn chạy mù `approach_shelf` | Bỏ vật chắn ra, robot phải dừng sớm |
+| 7 | **NHIỆM VỤ 2 đầy đủ** | nhà máy → Kệ 4 → nhấc → liên hợp → thả |
+
+> **Smoke 5 là kịch bản quan trọng nhất.** Nó là chỗ duy nhất chạy đủ cả 3 loại tuyến
+> vừa viết lại (kệ→NM, NM→NM, NM→kệ) — cũng đúng là nhóm mà bảng route cũ sai 9/12.
 
 ---
 
-## D. Công cụ calibrate & debug cảm biến (ngoài menu test)
+## D. Công cụ ngoài menu test
 
 ```bash
-# Chốt LINE_BLACK_IS_HIGH + LINE_THRESHOLD cho QTR-8A
-python3 -m tools.calibrate_line
-
-# Chẩn đoán MCP3008 (chip + 8 channel + real-time che tay) qua gpiozero
-python3 tools/check_mcp3008.py
-
-# Đọc SPI THÔ (bỏ qua gpiozero) + loopback self-test — dùng khi đọc toàn 0/1023
-python3 -m tools.raw_spi_test
-python3 -m tools.raw_spi_test loopback
-
-# Cô lập lỗi "bánh xe chạy mãi sau stop()" — chạy 1 bánh → stop → giữ để đo VOM
-python3 -m tools.test_right_wheel
+python3 -m tools.show_routes         # in cả 40+ tuyến để đối chiếu tay trên sa bàn
+python3 -m tools.estimate_time       # ngân sách 240s: kịch bản xếp kiện xấu nhất/đẹp nhất
+python3 -m tools.check_board_side    # công tắc nửa sân + nút start (chống cắm tráo chân)
+python3 -m tools.calibrate_line      # chốt LINE_BLACK_IS_HIGH + LINE_THRESHOLD
+python3 -m tools.calibrate_vision    # chốt COLOR_RANGES
+python3 -m tools.capture_templates   # chụp ảnh mẫu ORB (nhận diện CHÍNH)
+python3 tools/check_mcp3008.py       # chẩn đoán MCP3008
+python3 -m tools.raw_spi_test        # đọc SPI thô khi nghi gpiozero
+python3 -m tools.test_right_wheel    # cô lập lỗi bánh chạy mãi sau stop()
 ```
 
-> **Cảm biến line đọc toàn 0 / toàn 1023, hoặc robot dò line ngược?**
-> → checklist: [DEBUG_CAM_BIEN_LINE.md](DEBUG_CAM_BIEN_LINE.md).
->
-> **Bánh xe chạy mãi không dừng / quay ngược / chạy lệch?**
-> → checklist: [DEBUG_DONG_CO.md](DEBUG_DONG_CO.md).
-
-Xem thêm: [../docs/SA_BAN.md](../docs/SA_BAN.md).
+> Line đọc toàn 0/1023 hoặc dò ngược → [DEBUG_CAM_BIEN_LINE.md](DEBUG_CAM_BIEN_LINE.md)
+> Bánh chạy mãi / ngược / lệch → [DEBUG_DONG_CO.md](DEBUG_DONG_CO.md)
 
 ---
 
-## E. Thứ tự khuyến nghị khi lên sân
+## E. Thứ tự khi lên sân
 
-1. `test_logic` (trên PC, trước khi mang đi) → đảm bảo logic xanh.
-2. `tools.calibrate_line` → chốt polarity + ngưỡng line.
-3. `test_motion` #5 #4 (cảm biến line) → #10 (`TURN_TIME`) → #7 (bám line) → #2 #3.
-4. `test_lift` #a (raw ADC — chốt `PALLET_THRESHOLD`) → #8 (IR live — xác nhận lại) → #1 #2 → #3..#7.
-5. `test_vision` #2 (HSV) → #6 (cặp kiện).
-6. `test_smoke` #1 → #2 → #3 → #5 → cuối cùng chạy full bằng **`bash scripts/practice.sh`**
-   (luyện tập lặp: xong 1 lượt tự reset, nhấn nút chạy lại, Ctrl+C thoát).
+**0. Trước khi đi:** `python3 -m pytest tests/ -q` trên PC → phải `124 passed`.
 
-> Các giá trị cần đo (TURN_TIME, LINE_KP/KD, LIFT_TIME_*, COLOR_RANGES…) cập nhật trong
-> [../config.py](../config.py). Số giao lộ các `ROUTE_*` đã verify từ file in chuẩn — không cần đếm lại.
+**1. Bản đồ — làm TRƯỚC, mọi thứ khác dựa lên nó**
+```bash
+python3 -m tools.show_routes
+```
+Cầm ra sa bàn **đếm tay từng đoạn**. Sai thì sửa `navigation.EDGES`, **không sửa route lẻ**.
+Bản đồ hiện tại suy ra từ ảnh in, **chưa đo thực địa**.
+
+**2. Nửa sân** — `tools.check_board_side` (3 bước, có bước chống cắm tráo chân), gạt công
+tắc theo kết quả bốc thăm, dán nhãn.
+
+**3. Cảm biến line** — `tools.calibrate_line` → `test_motion` #5 #4.
+
+**4. Động cơ** — `test_motion` #10 (`TURN_TIME`) → #f (`PWM_COMPENSATION`) → #7 → #14.
+
+**5. Nâng hạ** — `test_lift` #a → #8 → **#b #c (từng càng riêng)** → **#e (so 2 càng)**
+→ #d (calibrate, chỉnh `l+/l-` `r+/r-` cho tới khi #e thấy bằng nhau) → #9 → #1..#7.
+> ⚠️ Mô hình bù lệch đã đổi sang **vị trí tuyệt đối** — số cũ của tầng 2 không còn đúng.
+
+**6. Nhận diện** — `test_vision` #8 (BGR) → `tools.capture_templates` → #9 (ORB) → #2 (HSV
+dự phòng) → #6 → **#l (ánh xạ trái/phải)**.
+
+**7. Tích hợp** — `test_smoke` #1 → #6 → #2 → #3 → **#5 (một lượt đầy đủ)** → #7 (NV2).
+
+**8. Chạy trọn trận** — `bash scripts/practice.sh` (lặp, nhấn nút mỗi lượt, Ctrl+C thoát).
+
+**9. Diễn tập thi đấu** — [DIEN_TAP.md](DIEN_TAP.md): ngân sách thời gian, kịch bản kiện
+xấu nhất, reset, sự cố, pin, ánh sáng. **Đây mới là bước quyết định có ăn được điểm không.**
+
+---
 
 ## F. Lưu ý
 
-- Nếu một test phần cứng báo lỗi SPI/GPIO "đang bận", chạy lại — các test tự gọi
-  `reset_mcp3008_bus()` khi thoát; hoặc reboot Pi.
-- Đừng chạy test phần cứng khi `main.py`/systemd service đang chạy (tranh chấp GPIO):
-  `sudo systemctl stop robot` trước khi test.
-- Chế độ thi đấu (`ROBOT_COMPETE=1` trong `scripts/start.sh`) bỏ qua web debug — xem
-  [../docs/SETUP_PI.md](../docs/SETUP_PI.md).
+- Lỗi SPI/GPIO "đang bận" → chạy lại (test tự gọi `reset_mcp3008_bus()` khi thoát) hoặc reboot.
+- Đừng test khi `main.py`/systemd đang chạy: `sudo systemctl stop robot`.
+- Giá trị calibrate cập nhật trong [../config.py](../config.py).
+- Số giao lộ **KHÔNG còn khai báo trong config** — nằm ở bản đồ `navigation.py`,
+  xem [../docs/SA_BAN.md](../docs/SA_BAN.md).

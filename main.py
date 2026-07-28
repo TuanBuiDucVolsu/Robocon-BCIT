@@ -26,7 +26,9 @@ except Exception:
         Button = MagicMock
 
 import config
+import navigation
 from control import Motion, Lift
+from control.board_switch import BoardSideSwitch
 from control.mcp3008_bus import get_mcp3008_bus, reset_mcp3008_bus
 from vision import Vision
 
@@ -52,6 +54,7 @@ logger = logging.getLogger("main")
 class State(enum.Enum):
     INIT = "INIT"
     START = "START"
+    DETECT_SIDE = "DETECT_SIDE"
     NAVIGATE_TO_SHELF = "NAVIGATE_TO_SHELF"
     PICKUP_PAIR = "PICKUP_PAIR"
     DELIVER_FIRST = "DELIVER_FIRST"
@@ -86,7 +89,14 @@ class Robot:
         self.current_tier = 1             # Tầng kệ hiện tại (1 = dưới, 2 = trên)
         self.match_start_time = 0.0
         self._tier_retries = 0            # Số lần đã thử lại tầng kệ hiện tại
-        self._start_route_done = False    # Đã chạy THÀNH CÔNG route START → Kệ 3 chưa
+
+        # Đo thời gian từng chặng — để biết 240s đang tiêu vào đâu
+        self._phase_times: dict[str, float] = {}
+        self._phase_counts: dict[str, int] = {}
+
+        # Vị trí + hướng hiện tại trên bản đồ (navigation.py). Mọi route được TÍNH
+        # từ trạng thái này, không còn tra bảng route tĩnh.
+        self.pose = navigation.START_POSE
 
         # 2 kiện đang mang trên càng
         self.carried_labels: list[str | None] = [None, None]
@@ -103,12 +113,91 @@ class Robot:
         # Nút khởi động
         self._start_button = Button(config.START_BUTTON_PIN, pull_up=True, bounce_time=0.1)
 
+        # Công tắc gạt chọn nửa sân (quyết định thứ tự nhà máy trên tường)
+        self._side_switch = BoardSideSwitch()
+        self._apply_board_side()
+
+        # Reset giữa trận (luật cho 5 lần, mỗi lần −10 điểm): đội viên đặt tay robot
+        # về ô xuất phát rồi BẤM NÚT. Motion poll cờ này để bỏ dở việc đang làm ngay,
+        # không phải chờ hết timeout.
+        self._reset_requested = False
+        self._reset_count = 0
+        self.motion.abort_check = lambda: self._reset_requested
+
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
 
+        logger.info(navigation.board_summary())
         logger.info("Robot đã sẵn sàng. Nhấn nút khởi động để bắt đầu.")
         logger.info("Chế độ: nâng 2 kiện/lượt — %d lượt cho %d kiện",
                      config.PICKUPS_TASK1, config.TOTAL_PACKAGES_TASK1)
+
+    # ----------------------------------------------------------
+    # Nửa sân
+    # ----------------------------------------------------------
+
+    def _apply_board_side(self) -> str:
+        """Đọc công tắc gạt → nạp đúng thứ tự nhà máy cho nửa sân đang thi đấu.
+
+        Công tắc THẮNG config: ở sân chỉ cần gạt, không phải sửa file. Không đọc được
+        công tắc (chưa lắp / đứt dây) → rơi về config.FACTORY_AT_START_ROW và ghi log
+        rõ, vì đây là thứ đặt sai thì KHÔNG có tín hiệu báo lỗi nào khác.
+        """
+        side = self._side_switch.read()
+        source = "CÔNG TẮC GẠT (GPIO %s)" % self._side_switch.pin
+        if side is None:
+            side = getattr(config, "FACTORY_AT_START_ROW", "foxconn")
+            source = ("config.FACTORY_AT_START_ROW — KHÔNG đọc được công tắc"
+                      if self._side_switch.pin is not None
+                      else "config.FACTORY_AT_START_ROW (chưa lắp công tắc)")
+
+        if side != navigation.FACTORY_AT_START_ROW:
+            navigation.set_factory_order(side)
+
+        logger.warning("=" * 60)
+        logger.warning("  NỬA SÂN: nhà máy CÙNG HÀNG ô xuất phát = %s", side.upper())
+        logger.warning("  Nguồn: %s", source)
+        logger.warning("  KIỂM LẠI BẰNG MẮT: đứng ở ô xuất phát nhìn sang tường")
+        logger.warning("  giữa sân — cụm nhà máy cùng hàng phải đúng là %s.", side.upper())
+        logger.warning("  Sai = giao nhầm nhà máy, log vẫn báo thành công.")
+        logger.warning("=" * 60)
+        return side
+
+    # ----------------------------------------------------------
+    # Reset giữa trận
+    # ----------------------------------------------------------
+
+    def _on_reset_button(self):
+        """Nút được bấm TRONG lúc đang chạy → trọng tài cho reset."""
+        self._reset_requested = True
+        self.motion.stop()
+        logger.warning("NÚT ĐƯỢC BẤM GIỮA TRẬN → yêu cầu RESET")
+
+    def _handle_reset(self) -> State:
+        """Robot vừa được đặt tay về ô xuất phát — chạy tiếp từ đó.
+
+        GIỮ NGUYÊN tiến độ (packages_delivered, current_shelf, current_tier) vì kiện
+        đã giao vẫn được tính điểm và kiện đã lấy khỏi kệ thì không còn ở đó nữa.
+        CHỈ đặt lại VỊ TRÍ. Đồng hồ trận vẫn chạy tiếp — reset không được cộng giờ.
+        """
+        self._reset_requested = False
+        self._reset_count += 1
+        self.motion.stop()
+
+        logger.warning("=" * 60)
+        logger.warning("  RESET lần %d — robot đã được đặt về ô xuất phát", self._reset_count)
+        logger.warning("  Tiến độ giữ nguyên: %d/%d kiện, tiếp theo kệ %d tầng %d",
+                       self.packages_delivered, config.TOTAL_PACKAGES_TASK1,
+                       self.current_shelf, self.current_tier)
+        logger.warning("  Còn %.0fs. Luật: tối đa 5 lần reset, mỗi lần −10 điểm.",
+                       self.time_remaining())
+        logger.warning("=" * 60)
+
+        # Càng có thể đang mang kiện dở — hạ hết về sàn cho an toàn khi xuất phát lại
+        self.lift.reset()
+        self._clear_carry_state()
+        self.pose = navigation.START_POSE
+        return State.START
 
     def _signal_handler(self, sig, frame):
         logger.warning("Nhận tín hiệu dừng (signal %s)", sig)
@@ -131,20 +220,56 @@ class Robot:
     def is_time_safe(self) -> bool:
         return self.time_remaining() > config.SAFETY_MARGIN
 
-    def _run_route(self, route: list, context: str) -> bool:
+    def _goto(self, goal: str, context: str) -> bool:
+        """Tính route từ trạng thái hiện tại đến `goal` rồi chạy. Cập nhật self.pose.
+
+        Route chạy DỞ (mất line / timeout giao lộ) → vị trí mới tính từ các bước đã
+        thật sự hoàn thành (`motion.last_route_progress`), KHÔNG đoán bừa là đã tới
+        đích. Nhờ vậy lần thử lại của `_retry_or_skip_tier("navigate")` mới có ý
+        nghĩa: robot chạy lại đúng phần đường còn thiếu thay vì tưởng đã tới nơi.
+        """
+        route, new_pose = navigation.plan(self.pose, goal)
+        if route is None:
+            logger.error("Không có đường từ %s tới %s — %s",
+                         navigation.describe(self.pose), goal, context)
+            return False
+
         if not route:
-            logger.warning("Route rỗng — %s", context)
-            return False
-        if not self.motion.execute_route(route):
-            logger.error("Navigation thất bại — %s", context)
-            return False
-        return True
+            logger.info("Đã ở %s rồi — không cần di chuyển (%s)", goal, context)
+            self.pose = new_pose
+            return True
+
+        logger.info("Đi %s → %s: %s",
+                    navigation.describe(self.pose), goal, navigation.route_to_text(route))
+        ok = self.motion.execute_route(route)
+        if ok:
+            self.pose = new_pose
+        else:
+            done = list(getattr(self.motion, "last_route_progress", None) or [])
+            total = sum(c[1] if c[0] == "forward" else 1 for c in route)
+            self.pose = navigation.apply(self.pose, done)
+            logger.error("Navigation thất bại — %s. Chạy được %d/%d bước, "
+                         "vị trí ước tính: %s",
+                         context, len(done), total, navigation.describe(self.pose))
+        return ok
 
     def _approach_shelf(self, context: str) -> bool:
         if not self.motion.approach_shelf():
-            logger.warning("Tiếp cận kệ thất bại (timeout) — %s", context)
+            logger.warning("Tiếp cận thất bại — %s", context)
             return False
         return True
+
+    def _approach_for_drop(self, context: str) -> bool:
+        """Tiếp cận điểm thả hàng, thử lại 1 lần trước khi đành thả tại chỗ."""
+        if self._approach_shelf(context):
+            return True
+        logger.warning("Thử tiếp cận lại điểm thả — %s", context)
+        if self._approach_shelf(context + " (lần 2)"):
+            return True
+        logger.error("KHÔNG tiếp cận được điểm thả — %s. Vẫn thả tại chỗ "
+                     "(mang đi tiếp thì mất luôn cả lượt), kiểm tra lại siêu âm/bản đồ.",
+                     context)
+        return False
 
     def _retreat_from_shelf(self, context: str):
         if not self.motion.retreat_from_shelf():
@@ -154,29 +279,18 @@ class Robot:
     # Tính toán route tối ưu
     # ----------------------------------------------------------
 
-    @staticmethod
-    def _route_cost(route: list) -> int:
-        """Chi phí route: forward = số giao lộ, turn = ROUTE_TURN_COST."""
-        cost = 0
-        for step in route:
-            if step[0] == "forward":
-                cost += step[1]
-            elif step[0] in ("left", "right"):
-                cost += config.ROUTE_TURN_COST
+    def _delivery_cost(self, first: str, second: str) -> int:
+        """Tổng chi phí: vị trí hiện tại → NM1 → NM2 → quay về kệ pickup tiếp theo."""
+        term1 = navigation.FACTORY_TERMINAL.get(first)
+        term2 = navigation.FACTORY_TERMINAL.get(second)
+        if term1 is None or term2 is None:
+            return 10 ** 6
+        cost = navigation.route_cost(self.pose, term1)
+        cost += navigation.route_cost(navigation.pose_at(term1), term2)
+        shelf_terminal = navigation.SHELF_TERMINAL.get(self._next_pickup_shelf())
+        if shelf_terminal is not None:
+            cost += navigation.route_cost(navigation.pose_at(term2), shelf_terminal)
         return cost
-
-    @staticmethod
-    def _between_route(from_label: str, to_label: str) -> list:
-        direct = config.ROUTE_BETWEEN_FACTORIES.get((from_label, to_label))
-        if direct is not None:
-            return direct
-        return config.ROUTE_BETWEEN_FACTORIES.get((to_label, from_label), [])
-
-    def _return_cost(self, last_factory_label: str) -> int:
-        """Chi phí quay về kệ pickup tiếp theo sau khi giao kiện cuối."""
-        target = self.current_shelf if self.current_tier == 1 else self.current_shelf + 1
-        route = config.get_return_route(last_factory_label, target)
-        return self._route_cost(route)
 
     def _plan_delivery(self, label_left: str, label_right: str):
         """
@@ -189,18 +303,8 @@ class Robot:
             logger.info("2 kiện cùng loại (%s) — giao 1 điểm duy nhất", label_left)
             return
 
-        route_left = config.ROUTE_SHELF_TO_FACTORY.get(label_left, [])
-        route_right = config.ROUTE_SHELF_TO_FACTORY.get(label_right, [])
-        cost_left_first = (
-            self._route_cost(route_left)
-            + self._route_cost(self._between_route(label_left, label_right))
-            + self._return_cost(label_right)
-        )
-        cost_right_first = (
-            self._route_cost(route_right)
-            + self._route_cost(self._between_route(label_right, label_left))
-            + self._return_cost(label_left)
-        )
+        cost_left_first = self._delivery_cost(label_left, label_right)
+        cost_right_first = self._delivery_cost(label_right, label_left)
 
         if cost_left_first <= cost_right_first:
             self.delivery_queue = [label_left, label_right]
@@ -216,9 +320,27 @@ class Robot:
     # ----------------------------------------------------------
 
     def _handle_init(self) -> State:
-        logger.info("Trạng thái: INIT — chờ nút khởi động...")
+        logger.info("Trạng thái: INIT — hạ càng về sàn rồi chờ nút khởi động...")
+        # Home càng TRƯỚC khi chờ nút: thao tác này mất LIFT_HOME_DURATION giây, làm
+        # sau khi bấm nút là ăn thẳng vào 240s của trận.
+        self.lift.reset()
+        # Đọc công tắc nửa sân LÚC NÀY để đội còn nhìn log mà gạt lại nếu sai
+        self._apply_board_side()
+
+        # Gỡ callback reset khi đang chờ nút, nếu không lần bấm để KHỞI ĐỘNG sẽ bị
+        # hiểu thành yêu cầu reset.
+        self._start_button.when_pressed = None
+        self._reset_requested = False
+
         self._start_button.wait_for_press()
         logger.info("Nút khởi động đã được nhấn!")
+        # Đọc lại NGAY SAU khi bấm — giá trị chốt cuối cùng, phòng trường hợp vừa
+        # gạt lại công tắc trong lúc chờ.
+        self._apply_board_side()
+
+        # Từ đây, bấm nút = yêu cầu RESET giữa trận
+        self._reset_requested = False
+        self._start_button.when_pressed = self._on_reset_button
         if self._resume_epoch is not None:
             # Khôi phục sau lỗi: dùng lại đồng hồ gốc → chạy nốt thời gian còn lại
             self.match_start_time = self._resume_epoch
@@ -262,20 +384,63 @@ class Robot:
 
     def _handle_start(self) -> State:
         logger.info("Trạng thái: START — bắt đầu trận đấu (240s)")
-        self.lift.reset()
 
-        # Thoát ô start → tìm line R0 → căn giữa (giao lộ do ROUTE_START đếm)
+        # Thoát ô start → tìm line R0 → căn giữa (KHÔNG đếm giao lộ; bộ tìm đường lo)
         # Thử lại như các lỗi navigation khác — 1 lần glitch cảm biến ngay lúc
         # xuất phát không nên khiến cả trận kết thúc ngay lập tức.
         max_attempts = config.MAX_TIER_RETRIES + 1
         for attempt in range(1, max_attempts + 1):
             if self.motion.exit_start_zone():
-                return State.NAVIGATE_TO_SHELF
+                self.pose = navigation.START_POSE
+                return State.DETECT_SIDE
             logger.warning("Thoát ô start thất bại — thử lại (lần %d/%d)",
                            attempt, max_attempts)
 
         logger.error("Không thoát được ô start sau %d lần thử — dừng!", max_attempts)
         return State.DONE
+
+    def _handle_detect_side(self) -> State:
+        """
+        Xác định robot đang ở NỬA SÂN nào, rồi nạp đúng bản đồ.
+
+        Sa bàn chia đôi bởi tường giữa sân; nửa của đội có thể là ảnh gương của nửa
+        kia — khi đó mọi lệnh xoay phải đảo chiều. Thay vì bắt người nhớ đặt cờ
+        config.BOARD_MIRRORED trước mỗi trận (quên là hỏng cả trận), robot tự dò:
+
+        Đi tới giao lộ Kệ 3 rồi xoay thử sang PHẢI — đường line dọc cột kệ chỉ chạy
+        về MỘT phía (lên Kệ 2/Kệ 1), phía kia là mép sa bàn:
+            thấy line  → cột kệ ở bên phải  → nửa CHUẨN
+            không thấy → cột kệ ở bên trái  → nửa GƯƠNG
+        """
+        if not getattr(config, "BOARD_AUTO_DETECT", False):
+            logger.info("Tự dò nửa sân đang TẮT — dùng config.BOARD_MIRRORED=%s",
+                        navigation.MIRRORED)
+            return State.NAVIGATE_TO_SHELF
+
+        if not self._goto(navigation.PROBE_NODE, "tới giao lộ Kệ 3 để dò nửa sân"):
+            logger.error("Không tới được giao lộ dò — giữ nguyên bản đồ theo "
+                         "config.BOARD_MIRRORED=%s", navigation.MIRRORED)
+            return State.NAVIGATE_TO_SHELF
+
+        found = self.motion.probe_side_branch("right")
+        if found is None:
+            logger.error("Dò nửa sân THẤT BẠI (cảm biến line) — giữ nguyên bản đồ "
+                         "theo config.BOARD_MIRRORED=%s", navigation.MIRRORED)
+        else:
+            mirrored = not found
+            if mirrored != navigation.MIRRORED:
+                navigation.set_mirrored(mirrored)
+                logger.warning("TỰ DÒ: đang ở nửa %s — ĐÃ NẠP LẠI bản đồ",
+                               "GƯƠNG" if mirrored else "CHUẨN")
+            else:
+                logger.info("TỰ DÒ: đang ở nửa %s — khớp cấu hình sẵn có",
+                            "GƯƠNG" if mirrored else "CHUẨN")
+            logger.info(navigation.board_summary())
+
+        # Robot đang đứng tại giao lộ dò, quay mặt về phía kệ. Đặt lại pose theo bản
+        # đồ MỚI (nhãn hướng đổi khi lật gương, dù tư thế vật lý không đổi).
+        self.pose = (navigation.PROBE_NODE, navigation.TOWARD_SHELVES)
+        return State.NAVIGATE_TO_SHELF
 
     def _handle_navigate_to_shelf(self) -> State:
         """Di chuyển đến giá kệ hiện tại."""
@@ -286,21 +451,11 @@ class Robot:
         logger.info("Di chuyển đến kệ %d, tầng %d...",
                      self.current_shelf, self.current_tier)
 
-        if not self._start_route_done:
-            # Chưa từng tới được Kệ 3: exit_start_zone() đã chạm line R0 → forward 1
-            # giao lộ đến Kệ 3. Chỉ đánh dấu xong khi CHẠY THÀNH CÔNG — nếu route này
-            # thất bại và bị bỏ qua tầng (tier tăng lên 2 nhưng vẫn ở kệ 0), lần sau
-            # vẫn phải thử lại route này thay vì nhầm là "đã ở kệ, chỉ cần pass".
-            if not self._run_route(config.ROUTE_START_TO_SHELF_0, "START → Kệ 3"):
-                return self._retry_or_skip_tier("navigate")
-            self._start_route_done = True
-        elif self.current_tier == 2:
-            # Tầng 2 cùng kệ → không cần di chuyển, chỉ quay lại tiếp cận
-            pass
-        else:
-            # Sang kệ tiếp → di chuyển giữa các kệ
-            if not self._run_route(config.ROUTE_BETWEEN_SHELVES, "giữa các kệ"):
-                return self._retry_or_skip_tier("navigate")
+        # Bộ tìm đường tự lo mọi trường hợp: từ ô xuất phát, từ kệ khác, hoặc đã
+        # đứng sẵn tại kệ (lấy tầng 2 → route rỗng, không di chuyển).
+        goal = navigation.SHELF_TERMINAL[self.current_shelf]
+        if not self._goto(goal, f"đến kệ {self.current_shelf} tầng {self.current_tier}"):
+            return self._retry_or_skip_tier("navigate")
 
         return State.PICKUP_PAIR
 
@@ -358,16 +513,20 @@ class Robot:
 
         label = self.delivery_queue[0]
         factory = self.vision.get_factory_name(label)
-        route = config.ROUTE_SHELF_TO_FACTORY.get(label, [])
+        goal = navigation.FACTORY_TERMINAL.get(label)
 
         logger.info("Giao kiện 1: %s → %s", label, factory)
+
+        if goal is None:
+            logger.error("Nhãn %s không có trên bản đồ — bỏ qua lượt giao này", label)
+            self.delivery_queue.clear()
+            return State.RETURN_TO_WAREHOUSE
 
         if not self.is_time_safe():
             logger.warning("Sắp hết giờ!")
             return State.DROP_FIRST
 
-        if not self._run_route(route, f"DELIVER → {label}"):
-            logger.warning("Navigation lệch — vẫn thử hạ hàng tại %s", factory)
+        self._goto(goal, f"DELIVER → {label}")
         return State.DROP_FIRST
 
     def _get_drop_side(self, label: str) -> str | None:
@@ -399,7 +558,7 @@ class Robot:
         logger.info("Trạng thái: DROP_FIRST — %s (%s)",
                      label, "cả 2 càng" if same_factory else self._get_drop_side(label))
 
-        self._approach_shelf(f"DROP_FIRST {label}")
+        self._approach_for_drop(f"DROP_FIRST {label}")
 
         if same_factory:
             if self.lift.dropoff():
@@ -438,26 +597,24 @@ class Robot:
             return State.RETURN_TO_WAREHOUSE
 
         label = self.delivery_queue[0]
-        prev_label = self._last_delivered_label
-        if prev_label is None:
-            logger.error("Không có nhà máy trước đó — dùng carried_labels fallback")
-            prev_label = (
-                self.carried_labels[0]
-                if self.carried_labels[0] != label
-                else self.carried_labels[1]
-            )
         factory = self.vision.get_factory_name(label)
+        goal = navigation.FACTORY_TERMINAL.get(label)
 
-        route = self._between_route(prev_label, label)
+        logger.info("Giao kiện 2: %s → %s (từ %s)",
+                    label, factory, navigation.describe(self.pose))
 
-        logger.info("Giao kiện 2: %s → %s (từ %s)", label, factory, prev_label)
+        if goal is None:
+            logger.error("Nhãn %s không có trên bản đồ — bỏ qua kiện 2", label)
+            self.delivery_queue.clear()
+            return State.RETURN_TO_WAREHOUSE
 
         if not self.is_time_safe():
             logger.warning("Sắp hết giờ!")
             return State.DROP_SECOND
 
-        if not self._run_route(route, f"DELIVER → {label} (từ {prev_label})"):
-            logger.warning("Navigation lệch — vẫn thử hạ hàng tại %s", factory)
+        # Bộ tìm đường tự lo đoạn nhà máy → nhà máy (phải vòng về cột giữa vì giữa
+        # các khu nhà máy không có line nối dọc).
+        self._goto(goal, f"DELIVER kiện 2 → {label}")
         return State.DROP_SECOND
 
     def _handle_drop_second(self) -> State:
@@ -471,7 +628,7 @@ class Robot:
         if side is None:
             logger.error("DROP_SECOND — bỏ qua drop, không xác định được càng")
         else:
-            self._approach_shelf(f"DROP_SECOND {label}")
+            self._approach_for_drop(f"DROP_SECOND {label}")
 
             dropped = False
             if side == "left":
@@ -507,15 +664,15 @@ class Robot:
         return self.current_shelf + 1
 
     def _handle_return_to_warehouse(self) -> State:
-        """Quay về kho đúng hàng kệ pickup tiếp theo, rồi chuyển tầng/kệ."""
+        """Quay về kho đúng kệ pickup tiếp theo, rồi chuyển tầng/kệ."""
         target_shelf = self._next_pickup_shelf()
-        factory = self._last_delivered_label
-        route = config.get_return_route(factory, target_shelf) if factory else []
-        logger.info("Quay về kho từ %s → kệ %d (hàng R%d)...",
-                     factory, target_shelf,
-                     config.SHELF_BOARD_ROW.get(target_shelf, -1))
-        if not self._run_route(route, f"RETURN {factory} → kệ {target_shelf}"):
-            logger.warning("Quay về kho có thể lệch vị trí")
+        goal = navigation.SHELF_TERMINAL.get(target_shelf)
+        if goal is None:
+            logger.info("Không còn kệ NV1 để quay về (kệ %d) — chuyển tiếp", target_shelf)
+        else:
+            logger.info("Quay về kho từ %s → kệ %d...",
+                        navigation.describe(self.pose), target_shelf)
+            self._goto(goal, f"RETURN → kệ {target_shelf}")
 
         self._advance_position()
         logger.info("Tiếp theo: kệ %d, tầng %d",
@@ -528,13 +685,12 @@ class Robot:
 
     def _handle_task2_navigate_to_loose(self) -> State:
         """Đi từ nhà máy cuối cùng đã giao → kho hàng rời (kệ 4, dưới trái)."""
-        logger.info("Nhiệm vụ 2: đi đến kho hàng rời (kệ 4)...")
+        logger.info("Nhiệm vụ 2: đi đến kho hàng rời (kệ 4) từ %s...",
+                    navigation.describe(self.pose))
         if not self.is_time_safe():
             return State.DONE
 
-        route = config.ROUTE_FACTORY_TO_LOOSE.get(self._last_delivered_label, [])
-        logger.info("Đi từ %s đến kệ 4...", self._last_delivered_label)
-        if not self._run_route(route, f"NV2 → kho rời từ {self._last_delivered_label}"):
+        if not self._goto(navigation.LOOSE_TERMINAL, "NV2 → kho hàng rời"):
             logger.error("Navigation NV2 thất bại — dừng")
             return State.DONE
         return State.TASK2_PICKUP
@@ -555,14 +711,14 @@ class Robot:
         logger.info("Nhiệm vụ 2: đi đến nhà máy liên hợp...")
         if not self.is_time_safe():
             return State.DONE
-        if not self._run_route(config.ROUTE_LOOSE_TO_JOINT, "NV2 → nhà máy liên hợp"):
+        if not self._goto(navigation.JOINT_TERMINAL, "NV2 → nhà máy liên hợp"):
             logger.error("Navigation NV2 thất bại — dừng")
             return State.DONE
         return State.TASK2_DROP
 
     def _handle_task2_drop(self) -> State:
         logger.info("Nhiệm vụ 2: đặt hàng tại nhà máy liên hợp...")
-        self._approach_shelf("TASK2_DROP")
+        self._approach_for_drop("TASK2_DROP")
         if self.lift.dropoff():
             logger.info("NHIỆM VỤ 2 HOÀN THÀNH!")
         else:
@@ -632,6 +788,7 @@ class Robot:
     STATE_HANDLERS = {
         State.INIT: "_handle_init",
         State.START: "_handle_start",
+        State.DETECT_SIDE: "_handle_detect_side",
         State.NAVIGATE_TO_SHELF: "_handle_navigate_to_shelf",
         State.PICKUP_PAIR: "_handle_pickup_pair",
         State.DELIVER_FIRST: "_handle_deliver_first",
@@ -655,7 +812,21 @@ class Robot:
                 break
 
             handler = getattr(self, handler_name)
+            phase = self.state.value
+            t0 = time.time()
             next_state = handler()
+            elapsed = time.time() - t0
+            # INIT gồm cả thời gian chờ nhấn nút (ngoài đồng hồ trận) → không tính
+            if self.state is not State.INIT:
+                self._phase_times[phase] = self._phase_times.get(phase, 0.0) + elapsed
+                self._phase_counts[phase] = self._phase_counts.get(phase, 0) + 1
+
+            # Trọng tài cho reset giữa trận → bỏ mọi thứ đang dở, về ô xuất phát.
+            # Kiểm TRƯỚC khi nhận next_state vì handler vừa rồi có thể đã fail do bị
+            # bỏ dở giữa chừng — kết quả của nó không còn ý nghĩa.
+            if self._reset_requested:
+                self.state = self._handle_reset()
+                continue
 
             logger.info("Chuyển trạng thái: %s -> %s", self.state.value, next_state.value)
             self.state = next_state
@@ -726,7 +897,11 @@ class Robot:
         self.current_tier = 1
         self.match_start_time = 0.0
         self._tier_retries = 0
-        self._start_route_done = False
+        self._phase_times = {}
+        self._phase_counts = {}
+        self._reset_requested = False
+        self._reset_count = 0
+        self.pose = navigation.START_POSE
         self.carried_labels = [None, None]
         self.delivery_queue = []
         self._last_delivered_label = None
@@ -735,10 +910,35 @@ class Robot:
         self.motion.stop()
         elapsed = self.elapsed() if self.match_start_time > 0 else 0
         logger.info("========== KẾT THÚC LƯỢT ==========")
-        logger.info("Thời gian: %.1f giây", elapsed)
+        logger.info("Thời gian: %.1f/%ds  (còn %.1fs)",
+                    elapsed, config.MATCH_DURATION, config.MATCH_DURATION - elapsed)
         logger.info("Kiện hàng đã giao: %d/%d (trong %d lượt nâng)",
                      self.packages_delivered, config.TOTAL_PACKAGES_TASK1,
                      self.pickup_count)
+        if self._reset_count:
+            logger.warning("Số lần RESET: %d (−%d điểm theo luật)",
+                           self._reset_count, self._reset_count * 10)
+        self._log_phase_breakdown(elapsed)
+
+    def _log_phase_breakdown(self, total: float):
+        """240s tiêu vào đâu — chặng nào ăn nhiều giây nhất thì tối ưu chặng đó.
+
+        Không có bảng này thì chỉ biết 'chạy không kịp' chứ không biết vì sao.
+        """
+        if not self._phase_times:
+            return
+        logger.info("--- Thời gian từng chặng ---")
+        for phase, secs in sorted(self._phase_times.items(), key=lambda kv: -kv[1]):
+            count = self._phase_counts.get(phase, 0)
+            pct = (secs / total * 100) if total > 0 else 0
+            logger.info("  %-24s %6.1fs  %4.1f%%  (%d lần, TB %.1fs)",
+                        phase, secs, pct, count, secs / max(count, 1))
+        measured = sum(self._phase_times.values())
+        logger.info("  %-24s %6.1fs", "TỔNG đo được", measured)
+        if self.packages_delivered:
+            logger.info("  Trung bình %.1fs/kiện — nhịp này giao đủ 12 kiện mất %.0fs",
+                        measured / self.packages_delivered,
+                        measured / self.packages_delivered * config.TOTAL_PACKAGES_TASK1)
 
     def _shutdown(self):
         """Dọn dẹp phần cứng MỘT lần khi thoát hẳn (thi đấu xong hoặc Ctrl+C)."""
@@ -748,6 +948,7 @@ class Robot:
         self.vision.cleanup()
         reset_mcp3008_bus()
         self._start_button.close()
+        self._side_switch.close()
 
 
 # ============================================================

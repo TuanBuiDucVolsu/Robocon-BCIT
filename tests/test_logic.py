@@ -16,6 +16,7 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import config
+import navigation as nav
 from control.motion import LineSensor, Motion
 from main import Robot, State
 
@@ -24,65 +25,491 @@ def _robot_stub() -> Robot:
     """Robot không khởi tạo phần cứng — chỉ test logic state."""
     robot = object.__new__(Robot)
     robot.delivery_queue = []
+    robot.pose = nav.START_POSE
+    robot.current_shelf = 0
+    robot.current_tier = 1
     return robot
 
 
+def _simulate(pose, route):
+    """Chạy route trên lưới → (vị trí mới, hướng mới).
+
+    ĐÂY là thứ bộ test cũ thiếu: test cũ chỉ so route với chính config nên không
+    bao giờ phát hiện được route đi sai chỗ. Hàm này mô phỏng vật lý: robot đi đâu,
+    quay hướng nào — độc lập với code sinh route.
+    """
+    place, heading = pose
+    for cmd in route:
+        if cmd[0] == "left":
+            heading = nav.turn_left(heading)
+        elif cmd[0] == "right":
+            heading = nav.turn_right(heading)
+        elif cmd[0] == "forward":
+            for _ in range(cmd[1]):
+                if place in nav.TERMINALS:
+                    node, term_heading, _ = nav.TERMINALS[place]
+                    assert heading == nav.opposite(term_heading), (
+                        f"Ra khỏi điểm cuối {place} sai hướng")
+                    place = node
+                    continue
+                step = nav.ADJACENCY[place].get(heading)
+                assert step is not None, (
+                    f"Không có line từ {place} theo hướng {nav.HEADING_NAMES[heading]}")
+                place = step[0]
+        elif cmd[0] == "advance":
+            terms = [t for t, (n, h, _) in nav.TERMINALS.items()
+                     if n == place and h == heading]
+            assert terms, f"Không có điểm cuối ở {place} theo hướng {heading}"
+            place = terms[0]
+        else:
+            raise AssertionError(f"Lệnh lạ: {cmd}")
+    return place, heading
+
+
+class TestBoardMap(unittest.TestCase):
+    """Bản đồ phải khớp sa bàn in thật (xem docs/SA_BAN.md)."""
+
+    def test_shelf_column_has_only_three_nodes(self):
+        col0 = [n for n, (c, _r) in nav.NODES.items() if c == 0]
+        self.assertEqual(len(col0), 3, "Cột kệ chỉ có giao lộ ở R4/R2/R0")
+
+    def test_r2_horizontal_is_blocked(self):
+        """Hàng R2 đứt bởi vòng tròn ROBOCON → không được có cạnh C0R2↔C1R2."""
+        self.assertNotIn(nav.EAST, nav.ADJACENCY["C0R2"])
+        self.assertNotIn(nav.WEST, nav.ADJACENCY["C1R2"])
+
+    def test_no_direct_line_between_factories(self):
+        """Các khu nhà máy không nối nhau bằng line — phải vòng về cột giữa."""
+        for term, (node, _h, _d) in nav.TERMINALS.items():
+            if term.startswith("F_"):
+                self.assertTrue(node.startswith("C1"))
+
+    def test_every_terminal_reachable_from_start(self):
+        for term in nav.TERMINALS:
+            if term == "START":
+                continue
+            route, _ = nav.plan(nav.START_POSE, term)
+            self.assertIsNotNone(route, f"Không tới được {term}")
+
+
+class TestRouteReachesDestination(unittest.TestCase):
+    """Mô phỏng lại route sinh ra: phải tới ĐÚNG chỗ, đúng hướng."""
+
+    def _check(self, src_pose, goal):
+        route, new_pose = nav.plan(src_pose, goal)
+        self.assertIsNotNone(route, f"{src_pose} → {goal}: không có đường")
+        end = _simulate(src_pose, route)
+        self.assertEqual(end[0], goal,
+                         f"{src_pose} → {goal}: dừng ở {end[0]} ({nav.route_to_text(route)})")
+        self.assertEqual(end, new_pose, "pose dự đoán khác pose mô phỏng")
+
+    def test_start_to_every_shelf(self):
+        for shelf in nav.SHELF_TERMINAL.values():
+            self._check(nav.START_POSE, shelf)
+
+    def test_every_shelf_to_every_factory(self):
+        """12 tổ hợp — đây chính là nhóm mà bảng route tĩnh cũ sai 9/12."""
+        for shelf in nav.SHELF_TERMINAL.values():
+            for factory in nav.FACTORY_TERMINAL.values():
+                self._check(nav.pose_at(shelf), factory)
+
+    def test_every_factory_to_every_shelf(self):
+        for factory in nav.FACTORY_TERMINAL.values():
+            for shelf in nav.SHELF_TERMINAL.values():
+                self._check(nav.pose_at(factory), shelf)
+
+    def test_between_all_factory_pairs(self):
+        terms = list(nav.FACTORY_TERMINAL.values())
+        for a in terms:
+            for b in terms:
+                if a != b:
+                    self._check(nav.pose_at(a), b)
+
+    def test_task2_chain(self):
+        for factory in nav.FACTORY_TERMINAL.values():
+            self._check(nav.pose_at(factory), nav.LOOSE_TERMINAL)
+        self._check(nav.pose_at(nav.LOOSE_TERMINAL), nav.JOINT_TERMINAL)
+
+    def test_same_place_gives_empty_route(self):
+        """Lấy tầng 2 cùng kệ → không phải di chuyển."""
+        route, pose = nav.plan(nav.pose_at("SHELF0"), "SHELF0")
+        self.assertEqual(route, [])
+        self.assertEqual(pose, nav.pose_at("SHELF0"))
+
+    def test_same_place_wrong_heading_still_turns(self):
+        """Regression: đã ở kệ nhưng đang quay MẶT RA NGOÀI (route trước hỏng ngay
+        sau lúc quay đầu) → phải quay lại vào kệ, không được trả route rỗng rồi
+        tưởng mình đang quay mặt vào kệ."""
+        route, pose = nav.plan(("SHELF0", nav.EAST), "SHELF0")
+        self.assertNotEqual(route, [])
+        self.assertEqual(pose, nav.pose_at("SHELF0"))
+        self.assertEqual(_simulate(("SHELF0", nav.EAST), route), nav.pose_at("SHELF0"))
+
+    def test_apply_partial_route(self):
+        """navigation.apply: vị trí sau khi chạy DỞ một route."""
+        start = nav.pose_at("SHELF0")
+        self.assertEqual(nav.apply(start, []), start)
+        self.assertEqual(nav.apply(start, [("right",), ("right",), ("forward", 1)]),
+                         ("C0R0", nav.EAST))
+
+    def test_apply_stops_at_invalid_step(self):
+        """Bước không có line → dừng lại ở trạng thái hợp lệ cuối, không nổ."""
+        # C0R2 không có line sang phải (hàng R2 đứt ở vòng tròn ROBOCON)
+        self.assertEqual(nav.apply(("C0R2", nav.EAST), [("forward", 3)]),
+                         ("C0R2", nav.EAST))
+
+    def test_shelf_to_shelf_is_one_intersection(self):
+        """Kệ↔kệ = 1 giao lộ (R1/R3 không cắt cột kệ), không phải 2."""
+        route, _ = nav.plan(nav.pose_at("SHELF0"), "SHELF1")
+        forwards = [c[1] for c in route if c[0] == "forward"]
+        # ra khỏi điểm cuối (1) + đi 1 giao lộ dọc cột kệ (1)
+        self.assertEqual(sum(forwards), 2, nav.route_to_text(route))
+
+    def test_route_leaving_terminal_starts_with_uturn(self):
+        """Rời kệ phải quay đầu 180° (2 lần xoay) rồi mới đi."""
+        route, _ = nav.plan(nav.pose_at("SHELF0"), "F_foxconn")
+        self.assertEqual(route[0][0], route[1][0])
+        self.assertIn(route[0][0], ("left", "right"))
+
+
+class TestMirroredHalf(unittest.TestCase):
+    """Sa bàn chia đôi bởi tường giữa sân. Nếu nửa của đội là ẢNH GƯƠNG của nửa
+    trong docs/sa_ban.png thì `config.BOARD_MIRRORED=True` phải đảo đúng chiều xoay
+    mà giữ nguyên số giao lộ."""
+
+    def setUp(self):
+        self._saved = nav.MIRRORED
+
+    def tearDown(self):
+        nav.set_mirrored(self._saved)
+
+    @staticmethod
+    def _swap(route):
+        flip = {"left": ("right",), "right": ("left",)}
+        return [flip.get(c[0], c) for c in route]
+
+    def _all_routes(self):
+        out = {}
+        places = list(nav.SHELF_TERMINAL.values()) + list(nav.FACTORY_TERMINAL.values())
+        for src in places:
+            for dst in places:
+                if src != dst:
+                    out[(src, dst)] = nav.plan(nav.pose_at(src), dst)[0]
+        return out
+
+    def test_mirrored_routes_are_turn_swapped(self):
+        nav.set_mirrored(False)
+        normal = self._all_routes()
+        nav.set_mirrored(True)
+        mirrored = self._all_routes()
+
+        self.assertEqual(len(normal), len(mirrored))
+        for key, route in normal.items():
+            self.assertEqual(self._swap(route), mirrored[key],
+                             f"{key}: nửa gương phải là ảnh gương của nửa chuẩn")
+
+    def test_mirrored_start_heading_flips(self):
+        nav.set_mirrored(True)
+        self.assertEqual(nav.START_POSE[1], nav.EAST)
+        self.assertEqual(nav.TOWARD_SHELVES, nav.EAST)
+        for term in nav.TERMINALS:
+            if term != "START":
+                self.assertIsNotNone(nav.plan(nav.START_POSE, term)[0])
+
+    def test_set_mirrored_is_reversible(self):
+        nav.set_mirrored(False)
+        before = nav.plan(nav.pose_at("SHELF0"), "F_samsung")[0]
+        nav.set_mirrored(True)
+        nav.set_mirrored(False)
+        self.assertEqual(nav.plan(nav.pose_at("SHELF0"), "F_samsung")[0], before)
+
+
+class TestFactoryOrderPerHalf(unittest.TestCase):
+    """Hai nửa sân là bản quay 180° của nhau NÊN chiều trái/phải giống nhau, nhưng
+    cụm nhà máy in trên tường không quay theo → thứ tự nhà máy theo hàng bị ĐẢO.
+    Đây mới là khác biệt thật giữa 2 nửa (xem docs/Sa bàn đầy đủ.png)."""
+
+    def setUp(self):
+        self._saved = nav.FACTORY_AT_START_ROW
+
+    def tearDown(self):
+        nav.set_factory_order(self._saved)
+
+    def _rows(self):
+        return {label: nav.TERMINALS[term][0]
+                for label, term in nav.FACTORY_TERMINAL.items()}
+
+    def test_order_is_reversed_between_halves(self):
+        nav.set_factory_order("foxconn")
+        blue = self._rows()
+        nav.set_factory_order("samsung")
+        red = self._rows()
+
+        self.assertEqual(blue["foxconn"], red["samsung"])
+        self.assertEqual(blue["samsung"], red["foxconn"])
+        self.assertEqual(blue["amkor"], red["hana_micron"])
+        self.assertEqual(blue["hana_micron"], red["amkor"])
+
+    def test_start_row_factory_matches_flag(self):
+        for side in nav.FACTORY_AT_START_ROW_CHOICES:
+            nav.set_factory_order(side)
+            # nhà máy cùng hàng ô xuất phát phải nằm ở node của hàng R0
+            start_node = nav.TERMINALS["START"][0]          # C0R0
+            row = start_node[-1]
+            self.assertEqual(nav.TERMINALS[nav.FACTORY_TERMINAL[side]][0], f"C1R{row}")
+
+    def test_joint_factory_stays_in_middle(self):
+        for side in nav.FACTORY_AT_START_ROW_CHOICES:
+            nav.set_factory_order(side)
+            self.assertEqual(nav.TERMINALS[nav.JOINT_TERMINAL][0], "C1R2",
+                             "nhà máy liên hợp ở giữa nên không đổi khi lật nửa sân")
+
+    def test_all_routes_valid_on_both_halves(self):
+        for side in nav.FACTORY_AT_START_ROW_CHOICES:
+            nav.set_factory_order(side)
+            for shelf in nav.SHELF_TERMINAL.values():
+                for factory in nav.FACTORY_TERMINAL.values():
+                    src = nav.pose_at(shelf)
+                    route, pose = nav.plan(src, factory)
+                    self.assertIsNotNone(route, f"{side}: {shelf}→{factory}")
+                    self.assertEqual(_simulate(src, route), pose,
+                                     f"{side}: {shelf}→{factory}")
+
+    def test_invalid_value_rejected(self):
+        with self.assertRaises(ValueError):
+            nav.set_factory_order("hana_micron")
+
+
+class TestBoardSideSwitch(unittest.TestCase):
+    """Công tắc gạt chọn nửa sân (control/board_switch.py)."""
+
+    def setUp(self):
+        from control.board_switch import BoardSideSwitch
+        self._cls = BoardSideSwitch
+        self._saved = getattr(config, "BOARD_SIDE_SWITCH_CLOSED", "samsung")
+
+    def tearDown(self):
+        config.BOARD_SIDE_SWITCH_CLOSED = self._saved
+
+    def _switch(self, pressed: bool):
+        sw = self._cls.__new__(self._cls)
+        closed = getattr(config, "BOARD_SIDE_SWITCH_CLOSED", "samsung")
+        sw.closed_side = closed
+        sw.open_side = "foxconn" if closed == "samsung" else "samsung"
+        sw.pin = 12
+        sw._button = MagicMock(is_pressed=pressed)
+        return sw
+
+    def test_no_pin_returns_none(self):
+        sw = self._cls(pin=None)
+        self.assertIsNone(sw.read())
+        self.assertFalse(sw.available)
+
+    def test_closed_is_gnd_side(self):
+        config.BOARD_SIDE_SWITCH_CLOSED = "samsung"
+        self.assertEqual(self._switch(pressed=True).read(), "samsung")
+        self.assertEqual(self._switch(pressed=False).read(), "foxconn")
+
+    def test_mapping_can_be_swapped_in_config(self):
+        """Đấu dây ngược thì đổi 1 hằng số, không phải đảo lại dây."""
+        config.BOARD_SIDE_SWITCH_CLOSED = "foxconn"
+        self.assertEqual(self._switch(pressed=True).read(), "foxconn")
+        self.assertEqual(self._switch(pressed=False).read(), "samsung")
+
+    def test_read_error_returns_none_not_a_guess(self):
+        sw = self._switch(pressed=False)
+        type(sw._button).is_pressed = property(
+            lambda self: (_ for _ in ()).throw(RuntimeError("GPIO lỗi")))
+        self.assertIsNone(sw.read(), "đọc lỗi phải trả None để caller rơi về config")
+
+
+class TestApplyBoardSide(unittest.TestCase):
+    """Robot._apply_board_side(): công tắc THẮNG config, và phải nạp lại bản đồ."""
+
+    def setUp(self):
+        self._saved_order = nav.FACTORY_AT_START_ROW
+        self._saved_cfg = getattr(config, "FACTORY_AT_START_ROW", "foxconn")
+        self.robot = _robot_stub()
+        self.robot._side_switch = MagicMock(pin=12)
+
+    def tearDown(self):
+        config.FACTORY_AT_START_ROW = self._saved_cfg
+        nav.set_factory_order(self._saved_order)
+
+    def test_switch_beats_config(self):
+        nav.set_factory_order("foxconn")
+        config.FACTORY_AT_START_ROW = "foxconn"
+        self.robot._side_switch.read.return_value = "samsung"
+
+        self.assertEqual(self.robot._apply_board_side(), "samsung")
+        self.assertEqual(nav.FACTORY_AT_START_ROW, "samsung")
+        # bản đồ phải đổi theo: Samsung về hàng ô xuất phát
+        self.assertEqual(nav.TERMINALS[nav.FACTORY_TERMINAL["samsung"]][0], "C1R0")
+
+    def test_falls_back_to_config_when_switch_unreadable(self):
+        nav.set_factory_order("foxconn")
+        config.FACTORY_AT_START_ROW = "samsung"
+        self.robot._side_switch.read.return_value = None
+
+        self.assertEqual(self.robot._apply_board_side(), "samsung")
+        self.assertEqual(nav.FACTORY_AT_START_ROW, "samsung")
+
+    def test_no_change_when_already_correct(self):
+        nav.set_factory_order("samsung")
+        self.robot._side_switch.read.return_value = "samsung"
+        self.assertEqual(self.robot._apply_board_side(), "samsung")
+        self.assertEqual(nav.FACTORY_AT_START_ROW, "samsung")
+
+
+class TestMidMatchReset(unittest.TestCase):
+    """Reset giữa trận — luật cho 5 lần, mỗi lần −10 điểm.
+
+    Đội viên đặt TAY robot về ô xuất phát rồi bấm nút. Robot phải chạy tiếp từ ô
+    xuất phát nhưng GIỮ NGUYÊN tiến độ: kiện đã giao vẫn được tính điểm, và kiện đã
+    lấy khỏi kệ thì không còn ở đó để lấy lại.
+    """
+
+    def setUp(self):
+        self.robot = _robot_stub()
+        self.robot.motion = MagicMock()
+        self.robot.lift = MagicMock()
+        self.robot.packages_delivered = 5
+        self.robot.pickup_count = 3
+        self.robot.current_shelf = 1
+        self.robot.current_tier = 2
+        self.robot.pose = nav.pose_at("F_samsung")
+        self.robot.carried_labels = ["samsung", "foxconn"]
+        self.robot.delivery_queue = ["foxconn"]
+        self.robot._reset_requested = True
+        self.robot._reset_count = 0
+        self.robot.match_start_time = time.time()
+
+    def test_reset_returns_to_start_and_keeps_progress(self):
+        state = self.robot._handle_reset()
+
+        self.assertEqual(state, State.START)
+        self.assertEqual(self.robot.pose, nav.START_POSE)
+        # tiến độ PHẢI giữ nguyên
+        self.assertEqual(self.robot.packages_delivered, 5)
+        self.assertEqual(self.robot.current_shelf, 1)
+        self.assertEqual(self.robot.current_tier, 2)
+        # càng phải được hạ về sàn và xoá kiện đang mang
+        self.robot.lift.reset.assert_called_once()
+        self.assertEqual(self.robot.carried_labels, [None, None])
+        self.assertEqual(self.robot.delivery_queue, [])
+
+    def test_reset_counted_and_flag_cleared(self):
+        self.robot._handle_reset()
+        self.assertEqual(self.robot._reset_count, 1)
+        self.assertFalse(self.robot._reset_requested,
+                         "không xoá cờ thì sẽ reset lặp vô hạn")
+
+    def test_reset_does_not_extend_match_clock(self):
+        before = self.robot.match_start_time
+        self.robot._handle_reset()
+        self.assertEqual(self.robot.match_start_time, before,
+                         "reset KHÔNG được cộng thêm giờ")
+
+    def test_button_during_match_requests_reset_and_stops(self):
+        self.robot._reset_requested = False
+        self.robot._on_reset_button()
+        self.assertTrue(self.robot._reset_requested)
+        self.robot.motion.stop.assert_called()
+
+
+class TestMotionAbort(unittest.TestCase):
+    """Motion phải bỏ dở NGAY khi có yêu cầu reset, không chờ hết timeout."""
+
+    def setUp(self):
+        self.motion = Motion()
+
+    def tearDown(self):
+        self.motion.abort_check = None
+
+    def test_no_abort_check_is_noop(self):
+        self.motion.abort_check = None
+        self.assertFalse(self.motion._aborted())
+
+    def test_abort_stops_motors(self):
+        self.motion.abort_check = lambda: True
+        self.assertTrue(self.motion._aborted())
+
+    def test_abort_check_exception_does_not_crash(self):
+        self.motion.abort_check = lambda: 1 / 0
+        self.assertFalse(self.motion._aborted())
+
+    def test_long_loops_return_false_when_aborted(self):
+        self.motion.abort_check = lambda: True
+        self.assertFalse(self.motion.follow_line_until_intersection(timeout=5))
+        self.assertFalse(self.motion.navigate_intersections(3))
+        self.assertFalse(self.motion.advance_to_end(timeout=5))
+        self.assertFalse(self.motion.exit_start_zone(timeout=5))
+
+
+class TestDetectSide(unittest.TestCase):
+    """State DETECT_SIDE: robot tự dò nửa sân bằng nhánh line ở giao lộ Kệ 3."""
+
+    def setUp(self):
+        self._saved_map = nav.MIRRORED
+        self._saved_flag = getattr(config, "BOARD_AUTO_DETECT", True)
+        nav.set_mirrored(False)
+        self.robot = _robot_stub()
+        self.robot.motion = MagicMock()
+        self.robot.motion.execute_route.return_value = True
+        self.robot.pose = nav.START_POSE
+
+    def tearDown(self):
+        config.BOARD_AUTO_DETECT = self._saved_flag
+        nav.set_mirrored(self._saved_map)
+
+    def test_line_found_keeps_standard_map(self):
+        config.BOARD_AUTO_DETECT = True
+        self.robot.motion.probe_side_branch.return_value = True
+        self.assertEqual(self.robot._handle_detect_side(), State.NAVIGATE_TO_SHELF)
+        self.assertFalse(nav.MIRRORED)
+        self.assertEqual(self.robot.pose, (nav.PROBE_NODE, nav.TOWARD_SHELVES))
+
+    def test_no_line_switches_to_mirrored_map(self):
+        """Không thấy nhánh line bên phải → đang ở nửa gương → nạp lại bản đồ."""
+        config.BOARD_AUTO_DETECT = True
+        self.robot.motion.probe_side_branch.return_value = False
+        self.assertEqual(self.robot._handle_detect_side(), State.NAVIGATE_TO_SHELF)
+        self.assertTrue(nav.MIRRORED)
+        self.assertEqual(self.robot.pose, (nav.PROBE_NODE, nav.TOWARD_SHELVES))
+        # bản đồ mới phải dùng được ngay
+        self.assertIsNotNone(nav.plan(self.robot.pose, "SHELF0")[0])
+
+    def test_sensor_error_keeps_configured_map(self):
+        config.BOARD_AUTO_DETECT = True
+        self.robot.motion.probe_side_branch.return_value = None
+        self.robot._handle_detect_side()
+        self.assertFalse(nav.MIRRORED, "dò lỗi thì giữ nguyên cấu hình, không đoán")
+
+    def test_disabled_skips_probe(self):
+        config.BOARD_AUTO_DETECT = False
+        self.robot._handle_detect_side()
+        self.robot.motion.probe_side_branch.assert_not_called()
+
+    def test_navigation_failure_does_not_flip_map(self):
+        """Không tới được giao lộ dò → không được dò bừa rồi lật bản đồ."""
+        config.BOARD_AUTO_DETECT = True
+        self.robot.motion.execute_route.return_value = False
+        self.robot.motion.last_route_progress = []
+        self.robot._handle_detect_side()
+        self.robot.motion.probe_side_branch.assert_not_called()
+        self.assertFalse(nav.MIRRORED)
+
+
 class TestRouteCost(unittest.TestCase):
-    def test_forward_steps(self):
-        self.assertEqual(Robot._route_cost([("forward", 3)]), 3)
-        self.assertEqual(Robot._route_cost([("forward", 1), ("forward", 2)]), 3)
+    def test_cost_is_positive_and_symmetric_ish(self):
+        c1 = nav.route_cost(nav.pose_at("SHELF0"), "F_foxconn")
+        c2 = nav.route_cost(nav.pose_at("SHELF0"), "F_samsung")
+        self.assertGreater(c1, 0)
+        self.assertGreater(c2, c1, "Kệ3 (R0) tới Samsung (R4) phải xa hơn tới Foxconn (R0)")
 
-    def test_turn_steps(self):
-        cost = Robot._route_cost([("right",), ("forward", 2), ("left",)])
-        self.assertEqual(cost, 2 * config.ROUTE_TURN_COST + 2)
-
-    def test_empty_route(self):
-        self.assertEqual(Robot._route_cost([]), 0)
-
-
-class TestBetweenRoute(unittest.TestCase):
-    def test_direct_key(self):
-        route = Robot._between_route("samsung", "foxconn")
-        self.assertEqual(route, config.ROUTE_BETWEEN_FACTORIES[("samsung", "foxconn")])
-
-    def test_both_directions_resolve(self):
-        """Mỗi chiều có route riêng trong config (không đối xứng)."""
-        fwd = Robot._between_route("samsung", "foxconn")
-        rev = Robot._between_route("foxconn", "samsung")
-        self.assertEqual(fwd, config.ROUTE_BETWEEN_FACTORIES[("samsung", "foxconn")])
-        self.assertEqual(rev, config.ROUTE_BETWEEN_FACTORIES[("foxconn", "samsung")])
-        self.assertTrue(len(fwd) > 0 and len(rev) > 0)
-
-    def test_unknown_pair_returns_empty(self):
-        self.assertEqual(Robot._between_route("unknown_a", "unknown_b"), [])
-
-    def test_reverse_fallback_when_direct_missing(self):
-        """Chiều ngược được dùng nếu thiếu key trực tiếp."""
-        saved = config.ROUTE_BETWEEN_FACTORIES.pop(("samsung", "foxconn"), None)
-        try:
-            route = Robot._between_route("samsung", "foxconn")
-            self.assertEqual(route, config.ROUTE_BETWEEN_FACTORIES[("foxconn", "samsung")])
-        finally:
-            if saved is not None:
-                config.ROUTE_BETWEEN_FACTORIES[("samsung", "foxconn")] = saved
-
-
-class TestReturnCost(unittest.TestCase):
-    def test_tier1_targets_same_shelf(self):
-        robot = _robot_stub()
-        robot.current_shelf = 0
-        robot.current_tier = 1
-        cost = robot._return_cost("foxconn")
-        route = config.get_return_route("foxconn", 0)
-        self.assertEqual(cost, Robot._route_cost(route))
-
-    def test_tier2_targets_next_shelf(self):
-        robot = _robot_stub()
-        robot.current_shelf = 0
-        robot.current_tier = 2
-        cost = robot._return_cost("foxconn")
-        route = config.get_return_route("foxconn", 1)
-        self.assertEqual(cost, Robot._route_cost(route))
+    def test_unreachable_goal_is_expensive(self):
+        with self.assertRaises(KeyError):
+            nav.route_cost(nav.START_POSE, "KHONG_TON_TAI")
 
 
 class TestPlanDelivery(unittest.TestCase):
@@ -91,28 +518,21 @@ class TestPlanDelivery(unittest.TestCase):
         robot._plan_delivery("samsung", "samsung")
         self.assertEqual(robot.delivery_queue, ["samsung"])
 
-    def test_different_labels_picks_shorter_route(self):
+    def test_different_labels_picks_cheaper_order(self):
         robot = _robot_stub()
-        robot.current_shelf = 0
-        robot.current_tier = 1
+        robot.pose = nav.pose_at("SHELF0")     # đang ở Kệ 3 (R0)
         robot._plan_delivery("samsung", "foxconn")
         self.assertEqual(len(robot.delivery_queue), 2)
         self.assertSetEqual(set(robot.delivery_queue), {"samsung", "foxconn"})
 
-        cost_a = (
-            Robot._route_cost(config.ROUTE_SHELF_TO_FACTORY["samsung"])
-            + Robot._route_cost(Robot._between_route("samsung", "foxconn"))
-            + robot._return_cost("foxconn")
-        )
-        cost_b = (
-            Robot._route_cost(config.ROUTE_SHELF_TO_FACTORY["foxconn"])
-            + Robot._route_cost(Robot._between_route("foxconn", "samsung"))
-            + robot._return_cost("samsung")
-        )
-        if cost_a <= cost_b:
-            self.assertEqual(robot.delivery_queue[0], "samsung")
-        else:
-            self.assertEqual(robot.delivery_queue[0], "foxconn")
+        cost_a = robot._delivery_cost("samsung", "foxconn")
+        cost_b = robot._delivery_cost("foxconn", "samsung")
+        expected = "samsung" if cost_a <= cost_b else "foxconn"
+        self.assertEqual(robot.delivery_queue[0], expected)
+
+    def test_unknown_label_not_crash(self):
+        robot = _robot_stub()
+        self.assertEqual(robot._delivery_cost("khong_ton_tai", "samsung"), 10 ** 6)
 
 
 class TestLineSensorDigital(unittest.TestCase):
@@ -170,8 +590,12 @@ class TestMotionRoute(unittest.TestCase):
     def setUp(self):
         self.motion = Motion()
 
-    def test_execute_route_empty_returns_false(self):
-        self.assertFalse(self.motion.execute_route([]))
+    def test_execute_route_empty_is_success(self):
+        """Route rỗng = đã ở đích (vd lấy tầng 2 cùng kệ), không phải lỗi."""
+        self.assertTrue(self.motion.execute_route([]))
+
+    def test_execute_route_rejects_unknown_command(self):
+        self.assertFalse(self.motion.execute_route([("bay_len",)]))
 
     def test_navigate_zero_returns_true(self):
         self.assertTrue(self.motion.navigate_intersections(0))
@@ -192,18 +616,41 @@ class TestMotionRoute(unittest.TestCase):
         mock_turn.assert_called_once()
 
 
-class TestRunRouteHelper(unittest.TestCase):
-    def test_empty_route_returns_false(self):
+class TestGotoHelper(unittest.TestCase):
+    def test_already_at_goal_skips_motion(self):
         robot = _robot_stub()
         robot.motion = MagicMock()
-        self.assertFalse(robot._run_route([], "test"))
+        robot.pose = nav.pose_at("SHELF0")
+        self.assertTrue(robot._goto("SHELF0", "test"))
         robot.motion.execute_route.assert_not_called()
 
-    def test_motion_fail_propagates(self):
+    def test_fail_at_first_step_keeps_pose(self):
+        """Route hỏng ngay bước đầu → vẫn ở chỗ cũ, để lần retry chạy lại cả route."""
         robot = _robot_stub()
+        robot.pose = nav.pose_at("SHELF0")
         robot.motion = MagicMock()
         robot.motion.execute_route.return_value = False
-        self.assertFalse(robot._run_route([("forward", 1)], "test"))
+        robot.motion.last_route_progress = []
+        self.assertFalse(robot._goto("F_foxconn", "test"))
+        self.assertEqual(robot.pose, nav.pose_at("SHELF0"))
+
+    def test_partial_progress_updates_pose(self):
+        """Chạy dở → vị trí tính theo các bước ĐÃ hoàn thành, không đoán là đã tới."""
+        robot = _robot_stub()
+        robot.pose = nav.pose_at("SHELF0")
+        robot.motion = MagicMock()
+        robot.motion.execute_route.return_value = False
+        # xoay 180° rồi đi được 1 giao lộ (ra tới node cột kệ) thì mất line
+        robot.motion.last_route_progress = [("right",), ("right",), ("forward", 1)]
+        self.assertFalse(robot._goto("F_foxconn", "test"))
+        self.assertEqual(robot.pose, ("C0R0", nav.EAST))
+
+    def test_success_updates_pose(self):
+        robot = _robot_stub()
+        robot.motion = MagicMock()
+        robot.motion.execute_route.return_value = True
+        self.assertTrue(robot._goto("SHELF2", "test"))
+        self.assertEqual(robot.pose, nav.pose_at("SHELF2"))
 
 
 class TestMcp3008ReadOk(unittest.TestCase):
@@ -240,42 +687,6 @@ class TestConfigCompeteMode(unittest.TestCase):
         self.assertEqual(result.stdout.strip(), "False")
 
 
-class TestVerticalOnShelfColumn(unittest.TestCase):
-    def test_same_row_empty(self):
-        self.assertEqual(config._vertical_on_shelf_column(0, 0), [])
-
-    def test_down_and_up_differ(self):
-        down = config._vertical_on_shelf_column(4, 0)
-        up = config._vertical_on_shelf_column(0, 4)
-        self.assertNotEqual(down, up)
-        self.assertEqual(down[0], ("right",))
-        self.assertEqual(up[0], ("left",))
-        self.assertEqual(down[1], ("forward", 4))
-        self.assertEqual(up[1], ("forward", 4))
-
-
-class TestReturnRoute(unittest.TestCase):
-    def test_samsung_to_kesh3_adds_vertical(self):
-        """Samsung (R4) → Kệ 3 (R0) phải có thêm đoạn dọc so với base."""
-        base = config.ROUTE_FACTORY_TO_SHELF["samsung"]
-        route = config.get_return_route("samsung", 0)
-        self.assertGreater(len(route), len(base))
-        self.assertEqual(route[:len(base)], base)
-
-    def test_foxconn_to_kesh3_same_row(self):
-        """Foxconn (R0) → Kệ 3 (R0) — không cần đoạn dọc thêm."""
-        route = config.get_return_route("foxconn", 0)
-        self.assertEqual(route, config.ROUTE_FACTORY_TO_SHELF["foxconn"])
-
-    def test_foxconn_to_kesh2_goes_up(self):
-        route = config.get_return_route("foxconn", 1)
-        self.assertIn(("forward", 2), route)
-
-    def test_unknown_factory_returns_base_only(self):
-        route = config.get_return_route("unknown", 0)
-        self.assertEqual(route, [])
-
-
 class TestNextPickupShelf(unittest.TestCase):
     def test_tier1_advances_to_same_shelf(self):
         robot = _robot_stub()
@@ -291,14 +702,20 @@ class TestNextPickupShelf(unittest.TestCase):
 
 
 class TestRouteConfigIntegrity(unittest.TestCase):
-    """Route trong config phải có cặp BETWEEN_FACTORIES đầy đủ khi cần."""
+    """Mọi nhãn nhận diện được đều phải có điểm giao trên bản đồ."""
 
-    def test_all_shelf_to_factory_labels_exist(self):
+    def test_all_labels_have_factory_terminal(self):
         for label in config.COLOR_RANGES:
-            self.assertIn(label, config.ROUTE_SHELF_TO_FACTORY)
+            self.assertIn(label, nav.FACTORY_TERMINAL)
+            self.assertIn(nav.FACTORY_TERMINAL[label], nav.TERMINALS)
 
-    def test_start_route_not_empty(self):
-        self.assertTrue(len(config.ROUTE_START_TO_SHELF_0) > 0)
+    def test_all_shelves_have_terminal(self):
+        for shelf in range(config.SHELVES_TASK1):
+            self.assertIn(shelf, nav.SHELF_TERMINAL)
+
+    def test_every_terminal_attaches_to_real_node(self):
+        for term, (node, _h, _d) in nav.TERMINALS.items():
+            self.assertIn(node, nav.NODES, f"{term} gắn vào node không tồn tại")
 
 
 class TestResetForNewRun(unittest.TestCase):
@@ -314,6 +731,7 @@ class TestResetForNewRun(unittest.TestCase):
         robot.current_tier = 2
         robot.match_start_time = 123.0
         robot._tier_retries = 1
+        robot.pose = nav.pose_at("F_amkor")
         robot.carried_labels = ["samsung", "foxconn"]
         robot.delivery_queue = ["amkor"]
         robot._last_delivered_label = "amkor"
@@ -327,6 +745,7 @@ class TestResetForNewRun(unittest.TestCase):
         self.assertEqual(robot.current_tier, 1)
         self.assertEqual(robot.match_start_time, 0.0)
         self.assertEqual(robot._tier_retries, 0)
+        self.assertEqual(robot.pose, nav.START_POSE)
         self.assertEqual(robot.carried_labels, [None, None])
         self.assertEqual(robot.delivery_queue, [])
         self.assertIsNone(robot._last_delivered_label)

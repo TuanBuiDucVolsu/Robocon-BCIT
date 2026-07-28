@@ -31,7 +31,8 @@ dự phòng bằng **phân tích màu HSV** (không cần AI model, không cần
 ```
 Robocon-BCIT/
 ├── main.py                # State machine: INIT → NAVIGATE → PICKUP → DELIVER → DROP → lặp
-├── config.py              # GPIO, route, HSV, timing — tất cả hằng số tinh chỉnh
+├── config.py              # GPIO, HSV, timing — tất cả hằng số tinh chỉnh
+├── navigation.py          # Bản đồ sa bàn + sinh route theo (vị trí, hướng)
 ├── requirements.txt       # Thư viện Python
 │
 ├── control/               # Điều khiển phần cứng
@@ -301,13 +302,14 @@ Tinh chỉnh ngưỡng: `python3 tests/test_vision.py` option 2
 ## State Machine
 
 ```
-INIT (chờ nút) → START (reset càng, exit_start_zone → chạm line R0)
+INIT (home càng, chờ nút) → START (exit_start_zone → chạm line R0)
+  → DETECT_SIDE (tự dò chiều trái/phải ở giao lộ Kệ 3, ~2-4s)
   │
   ├── NAVIGATE_TO_SHELF → PICKUP_PAIR
   │     _plan_delivery() — tối ưu thứ tự giao (cost gồm return về kệ)
   │     → DELIVER_FIRST → DROP_FIRST
   │     → DELIVER_SECOND → DROP_SECOND (nếu 2 kiện khác nhà máy)
-  │     → RETURN_TO_WAREHOUSE (get_return_route → đúng hàng kệ)
+  │     → RETURN_TO_WAREHOUSE (navigation.plan → đúng kệ kế tiếp)
   │     → lặp 6 lượt (3 kệ × 2 tầng)
   │
   ├── TASK2: nhà máy cuối → Kệ 4 → pickup → nhà máy liên hợp → drop
@@ -320,11 +322,36 @@ INIT (chờ nút) → START (reset càng, exit_start_zone → chạm line R0)
 
 ### Điều hướng quan trọng
 
+Route **không viết tay**. Bản đồ sa bàn khai báo một chỗ trong `navigation.py`
+(node giao lộ + cạnh line thật), route sinh bằng Dijkstra theo `(vị trí, hướng)`.
+
 | API | Mục đích |
 |-----|----------|
-| `get_return_route(factory, target_shelf)` | Quay về đúng hàng R0/R2/R4 trước pickup tầng 2 |
-| `_between_route(a, b)` | Route giữa 2 NM; fallback chiều ngược |
-| `_plan_delivery()` | Chọn thứ tự giao: shelf→NM1→NM2 + **return** |
+| `navigation.plan(pose, goal)` | Sinh route + vị trí mới; route rỗng = đã ở đích |
+| `navigation.route_cost(pose, goal)` | Chi phí để so sánh thứ tự giao |
+| `Robot._goto(goal, ctx)` | Chạy route + cập nhật `self.pose` |
+| `Robot._plan_delivery()` | Chọn thứ tự giao: pose→NM1→NM2 + **return về kệ** |
+
+```bash
+python3 -m tools.show_routes      # in toàn bộ route để đối chiếu trên sa bàn
+```
+
+3 điểm bản đồ khác giả định cũ (đo từ file in — `docs/SA_BAN.md` mục 3):
+R1/R3 không kéo tới cột kệ (Kệ↔Kệ = 1 giao lộ) · giữa các nhà máy không có line nối
+dọc (phải vòng về cột giữa) · hàng R2 đứt 560mm ở vòng tròn ROBOCON (cấm đi thẳng).
+
+> ⚠️ **Nửa sân chọn bằng CÔNG TẮC GẠT (GPIO 12), không sửa file.** Hai nửa sân là bản
+> quay 180° của nhau nên chiều trái/phải giống nhau, NHƯNG cụm nhà máy in trên tường
+> không quay theo → **thứ tự nhà máy theo hàng bị đảo**: đội góc dưới-trái có Foxconn
+> cùng hàng ô xuất phát (`"foxconn"`), đội góc trên-phải có Samsung (`"samsung"`).
+> Robot không tự dò được (qua cảm biến line hai nửa giống hệt). Đặt sai = giao Samsung
+> vào Foxconn, IR vẫn báo thả OK nên log không báo lỗi — mất sạch điểm. Vì vậy dùng
+> công tắc gạt: trạng thái nhìn thấy được bằng mắt, không cần cấp nguồn. Kiểm đấu dây
+> và nhãn bằng `python3 -m tools.check_board_side`; `config.FACTORY_AT_START_ROW` chỉ
+> còn là dự phòng khi công tắc hỏng.
+>
+> Chiều trái/phải thì robot **tự dò** đầu trận (state `DETECT_SIDE`, ~2-4s):
+> đi tới giao lộ Kệ 3, xoay phải xem có nhánh line không.
 
 Scenario calibrate bắt buộc: **Kệ3 T1 → foxconn → samsung → return → Kệ3 T2**
 
@@ -338,8 +365,10 @@ Scenario calibrate bắt buộc: **Kệ3 T1 → foxconn → samsung → return �
 | Scan fail (confidence thấp) | Retry → bỏ tầng |
 | IR không thấy pallet | Retry → bỏ tầng |
 | SPI/ADC lỗi | pickup/drop không coi thành công |
-| Navigate giao hàng fail | Log cảnh báo, vẫn thử hạ |
-| Return route fail | Log cảnh báo, vẫn advance |
+| Navigate giao hàng fail | Log ERROR, vẫn thử hạ |
+| Tiếp cận điểm thả fail | Thử lại 1 lần (`_approach_for_drop`) rồi mới thả tại chỗ |
+| Siêu âm mất echo khi tiếp cận | Dừng sau `APPROACH_BLIND_TIMEOUT` — không chạy mù |
+| Return route fail | Log ERROR, vẫn advance |
 | NV2 fail | Chuyển DONE |
 | NV2 drop fail | Log lỗi, vẫn DONE (không log hoàn thành) |
 | Sắp hết giờ (<10s) | DONE |
@@ -356,8 +385,13 @@ Các giá trị cần đo thực nghiệm trên sa bàn, cập nhật trong `con
 | `LINE_KP`, `LINE_KD` | Hệ số PD bám line | Thử trên sa bàn |
 | `LINE_BLACK_IS_HIGH`, `LINE_THRESHOLD` | Polarity + ngưỡng QTR-8A | `python3 -m tools.calibrate_line` |
 | `EXIT_START_*` | Thoát ô start | test_motion option 6 |
-| `ROUTE_*` | Số giao lộ các route | ✅ đã verify từ file in chuẩn — xem `docs/SA_BAN.md` |
-| `get_return_route` / đoạn dọc | Return về đúng hàng kệ | Test scenario foxconn→samsung → Kệ3 T2 |
+| Công tắc nửa sân (GPIO 12) | **Nửa sân — thứ tự nhà máy** | Gạt theo kết quả bốc thăm; kiểm bằng `python3 -m tools.check_board_side` |
+| `FACTORY_AT_START_ROW` | Dự phòng khi công tắc hỏng | Nhìn từ ô xuất phát sang tường: cụm cùng hàng là Foxconn hay Samsung |
+| `PROBE_TRAVEL_TIME` | Quãng tiến khi dò chiều trái/phải | test_motion option 13 — đủ thoát giao lộ, chưa tới mép sân |
+| `BOARD_MIRRORED` | Dự phòng chiều trái/phải khi dò lỗi | Theo bản in: cả 2 nửa đều False |
+| `navigation.EDGES` | Bản đồ line + số giao lộ | Đo từ file in (`docs/SA_BAN.md`), **đếm lại tay trên sa bàn** |
+| `LINE_GAP_COAST_TIME` | Trôi qua khoảng đứt ô start (245mm) | Chạy Kệ3 ↔ Foxconn, xem có lạc line không |
+| `APPROACH_BLIND_TIMEOUT` | Chặn chạy mù khi mất echo | test_motion option 9, che vật đi giữa chừng |
 | `vision/templates/*.png` | Ảnh mẫu ORB (nhận diện CHÍNH) | `python3 -m tools.capture_templates` — chụp lại nếu đổi camera/kiện hàng |
 | `COLOR_RANGES` | Dải màu HSV (DỰ PHÒNG khi ORB không chắc) | `python3 -m tools.calibrate_vision` (chốt số) rồi test_vision option 2/5 (kiểm tra lại) |
 | `PALLET_THRESHOLD` | Ngưỡng IR pallet | test_lift option a (raw ADC) / option 8 (live) |

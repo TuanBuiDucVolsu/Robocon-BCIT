@@ -148,24 +148,51 @@ class Lift:
         self._right_down.off()
 
     # ----------------------------------------------------------
+    # Quy đổi tầng → thời gian chạy (đã bù lệch 2 càng)
+    # ----------------------------------------------------------
+
+    def _level_time(self, level: int, side: str, raising: bool) -> float:
+        """Thời gian để càng `side` đi từ SÀN lên `level` (mốc TUYỆT ĐỐI, đã bù).
+
+        Bù là hằng số cộng vào mốc tuyệt đối, KHÔNG cộng vào từng lần chạy — nhờ vậy
+        đi 0→1→2 không cộng dồn phần bù 2 lần (lỗi cũ), và nâng/hạ 1 càng lẻ dùng
+        đúng cùng hệ số bù với khi chạy cả 2 càng (trước đây các hàm 1 càng bỏ qua
+        bù hoàn toàn → càng trái chạy dư 0.45s ở tầng 1).
+        """
+        base = self._time_for_level(level)
+        if base <= 0:
+            return 0.0
+        if raising:
+            extra = config.LIFT_LEFT_EXTRA if side == "left" else config.LIFT_RIGHT_EXTRA
+        else:
+            extra = (config.LIFT_LEFT_LOWER_EXTRA if side == "left"
+                     else config.LIFT_RIGHT_LOWER_EXTRA)
+        return max(0.0, base + extra)
+
+    def _move_duration(self, side: str, from_level: int, to_level: int,
+                       raising: bool) -> float:
+        """Thời gian chạy càng `side` giữa 2 tầng (hiệu 2 mốc tuyệt đối)."""
+        return abs(self._level_time(to_level, side, raising)
+                   - self._level_time(from_level, side, raising))
+
+    # ----------------------------------------------------------
     # Điều khiển motor — cả 2 bên đồng bộ
     # ----------------------------------------------------------
 
-    def _raise_both(self, duration: float):
-        left_dur  = duration + config.LIFT_LEFT_EXTRA
-        right_dur = duration + config.LIFT_RIGHT_EXTRA
-        logger.info("Nâng cả 2 càng - trái=%.2fs phải=%.2fs", left_dur, right_dur)
-        self._left_en.on(); self._left_up.on(); self._left_down.off()
-        self._right_up.on(); self._right_down.off()
-        self._run_timed(left_dur, right_dur, raising=True)
-
-    def _lower_both(self, duration: float):
-        left_dur  = duration + config.LIFT_LEFT_LOWER_EXTRA
-        right_dur = duration + config.LIFT_RIGHT_LOWER_EXTRA
-        logger.info("Hạ cả 2 càng - trái=%.2fs phải=%.2fs", left_dur, right_dur)
-        self._left_en.on(); self._left_up.off(); self._left_down.on()
-        self._right_up.off(); self._right_down.on()
-        self._run_timed(left_dur, right_dur, raising=False)
+    def _move_both(self, from_level: int, to_level: int):
+        """Đưa CẢ 2 càng từ `from_level` sang `to_level`, dừng từng bên đúng lúc."""
+        raising = self._time_for_level(to_level) > self._time_for_level(from_level)
+        left_dur = self._move_duration("left", from_level, to_level, raising)
+        right_dur = self._move_duration("right", from_level, to_level, raising)
+        logger.info("%s cả 2 càng (tầng %d→%d) - trái=%.2fs phải=%.2fs",
+                    "Nâng" if raising else "Hạ", from_level, to_level, left_dur, right_dur)
+        if raising:
+            self._left_en.on(); self._left_up.on(); self._left_down.off()
+            self._right_up.on(); self._right_down.off()
+        else:
+            self._left_en.on(); self._left_up.off(); self._left_down.on()
+            self._right_up.off(); self._right_down.on()
+        self._run_timed(left_dur, right_dur, raising=raising)
 
     def _run_timed(self, left_dur: float, right_dur: float, raising: bool):
         """Dừng từng bên đúng thời điểm để 2 càng lên/xuống bằng nhau."""
@@ -204,13 +231,7 @@ class Lift:
         """Di chuyển CẢ 2 càng đến tầng mục tiêu."""
         if target_level == self._current_level:
             return
-        target_time = self._time_for_level(target_level)
-        current_time = self._time_for_level(self._current_level)
-        delta = target_time - current_time
-        if delta > 0:
-            self._raise_both(abs(delta))
-        else:
-            self._lower_both(abs(delta))
+        self._move_both(self._current_level, target_level)
         self._current_level = target_level
         logger.info("Cả 2 càng đã đến tầng %d", target_level)
 
@@ -291,7 +312,7 @@ class Lift:
     def dropoff(self) -> bool:
         """Hạ CẢ 2 pallet xuống (đồng bộ)."""
         logger.info("Đặt hàng — cả 2 càng")
-        self._lower_both(self._time_for_level(self._current_level))
+        self._move_both(self._current_level, 0)
         self._current_level = 0
         self._left_dropped = True
         self._right_dropped = True
@@ -305,7 +326,7 @@ class Lift:
     def dropoff_left(self) -> bool:
         """Hạ càng TRÁI (thả pallet trái), giữ càng phải."""
         logger.info("Đặt hàng — chỉ càng TRÁI")
-        duration = self._time_for_level(self._current_level)
+        duration = self._move_duration("left", self._current_level, 0, raising=False)
         self._lower_left(duration)
         self._left_dropped = True
         time.sleep(0.2)
@@ -314,30 +335,31 @@ class Lift:
     def dropoff_right(self) -> bool:
         """Hạ càng PHẢI (thả pallet phải), giữ càng trái."""
         logger.info("Đặt hàng — chỉ càng PHẢI")
-        duration = self._time_for_level(self._current_level)
+        duration = self._move_duration("right", self._current_level, 0, raising=False)
         self._lower_right(duration)
         self._right_dropped = True
         time.sleep(0.2)
         return self._verify_released("right")
 
     def raise_after_drop(self, side: str):
-        """Nâng lại càng đã thả (để di chuyển không va sàn)."""
-        duration = self._time_for_level(self._current_level)
+        """Nâng lại càng đã thả về ngang tầng càng còn lại (di chuyển không va sàn)."""
+        duration = self._move_duration(side, 0, self._current_level, raising=True)
         if side == "left":
-            logger.info("Nâng lại càng trái")
+            logger.info("Nâng lại càng trái (%.2fs)", duration)
             self._raise_left(duration)
         elif side == "right":
-            logger.info("Nâng lại càng phải")
+            logger.info("Nâng lại càng phải (%.2fs)", duration)
             self._raise_right(duration)
 
     def stow_forks(self, dropped_side: str):
-        """Sau giao kiện cuối: hạ càng còn lại về sàn."""
-        duration = self._time_for_level(self._current_level)
-        if dropped_side == "left":
-            logger.info("Gập càng — hạ càng phải về sàn")
+        """Sau giao kiện cuối: hạ càng CÒN LẠI về sàn."""
+        other = "right" if dropped_side == "left" else "left"
+        duration = self._move_duration(other, self._current_level, 0, raising=False)
+        if other == "right":
+            logger.info("Gập càng — hạ càng phải về sàn (%.2fs)", duration)
             self._lower_right(duration)
         else:
-            logger.info("Gập càng — hạ càng trái về sàn")
+            logger.info("Gập càng — hạ càng trái về sàn (%.2fs)", duration)
             self._lower_left(duration)
         self._current_level = 0
         self._left_dropped = False

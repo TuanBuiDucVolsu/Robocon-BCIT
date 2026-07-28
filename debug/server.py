@@ -54,6 +54,22 @@ def _ensure_watchdog_started():
         threading.Thread(target=_move_watchdog_loop, daemon=True).start()
 
 
+_side_switch = None
+
+
+def _get_side_switch():
+    """Công tắc gạt chọn nửa sân — mở lười, chỉ dùng cho trang kiểm tra."""
+    global _side_switch
+    if _side_switch is None:
+        try:
+            from control.board_switch import BoardSideSwitch
+            _side_switch = BoardSideSwitch()
+        except Exception as e:
+            logger.warning("Không mở được công tắc nửa sân: %s", e)
+            return None
+    return _side_switch
+
+
 def _init_hardware():
     """Khởi tạo phần cứng 1 lần duy nhất (lazy init)."""
     global _motion, _lift, _vision, _hw_error
@@ -246,7 +262,8 @@ def create_app() -> Flask:
                 time.sleep(0.1)
                 continue
 
-            # picamera2 format="BGR888" đã trả về đúng thứ tự BGR mà OpenCV cần
+            # picamera2 cấu hình format="RGB888" trả về mảng đúng thứ tự BGR mà
+            # OpenCV cần (xem vision.Vision._init_camera) → đưa thẳng vào imencode.
             _, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
             yield (
                 b"--frame\r\n"
@@ -273,8 +290,10 @@ def create_app() -> Flask:
 
         try:
             import cv2
-            bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-            _, jpeg = cv2.imencode(".jpg", bgr)
+            # KHÔNG đảo kênh ở đây: frame đã là BGR (giống stream MJPEG ở trên).
+            # Trước đây có cvtColor(RGB2BGR) → ảnh chụp bị đảo đỏ↔xanh so với
+            # stream, lấy màu từ ảnh này đi calibrate HSV sẽ ra dải sai hoàn toàn.
+            _, jpeg = cv2.imencode(".jpg", frame)
             return Response(jpeg.tobytes(), mimetype="image/jpeg")
         except ImportError:
             return jsonify({"ok": False, "error": "OpenCV không khả dụng"}), 500
@@ -315,6 +334,25 @@ def create_app() -> Flask:
     # Trạng thái & cấu hình
     # ----------------------------------------------------------
 
+    @app.route("/api/board_side")
+    def board_side():
+        """Nửa sân đang dùng — kiểm trước khi vào sân, xem công tắc gạt có đúng không."""
+        import navigation
+
+        switch = _get_side_switch()
+        from_switch = switch.read() if switch is not None else None
+        return jsonify({
+            "factory_at_start_row": navigation.FACTORY_AT_START_ROW,
+            "from_switch": from_switch,
+            "switch_available": bool(switch is not None and switch.available),
+            "switch_pin": getattr(config, "BOARD_SIDE_SWITCH_PIN", None),
+            "fallback_config": getattr(config, "FACTORY_AT_START_ROW", None),
+            "factory_rows": {
+                label: navigation.TERMINALS[term][0]
+                for label, term in navigation.FACTORY_TERMINAL.items()
+            },
+        })
+
     @app.route("/api/status")
     def status():
         hw_ok = _motion is not None
@@ -332,7 +370,11 @@ def create_app() -> Flask:
             "line_sensor": line_values,
             "pallet": pallet,
             "camera_ready": _vision._camera is not None if _vision else False,
-            "vision_method": "HSV color",
+            "vision_method": (
+                "ORB shape + HSV fallback"
+                if _vision is not None and _vision._shape_matcher.ready
+                else "HSV color (chưa có ảnh mẫu ORB)"
+            ),
         })
 
     @app.route("/api/config")
