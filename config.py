@@ -150,6 +150,22 @@ LINE_END_CONFIRM_TIME = 0.25 # Giây mất line liên tục để kết luận "
 ADVANCE_TIMEOUT = 6.0
 
 # ============================================================
+# LÙI RA KHỎI KỆ / NHÀ MÁY — lệnh ("back", N)
+# ============================================================
+# Rút khỏi điểm cuối bằng cách LÙI thay vì xoay 180° rồi tiến. Mỗi lần bỏ được 2 lần
+# xoay; đo trên toàn bộ 6 lượt thì bớt ~28 lần xoay ở kịch bản tệ nhất (~34s) — chi
+# phí cố định lớn nhất của trận. Robot vẫn BÁM LINE khi lùi (thanh cảm biến ở đầu xe
+# lúc này thành đuôi), không chạy mù.
+REVERSE_SPEED = 35           # Chậm hơn tiến: sai số lái nằm ở đầu kia của xe
+REVERSE_TIMEOUT = 8.0
+EDGE_COST_REVERSE = 1        # Phụ phí so với tiến 1 giao lộ → hoà thì vẫn ưu tiên tiến
+
+# Sau khi lùi tới giao lộ, thân xe nằm QUÁ giao lộ một đoạn bằng khoảng cách từ trục
+# bánh tới thanh cảm biến (tiến thì thân nằm trước giao lộ đúng bấy nhiêu). Nếu xoay
+# xong hay bị trượt line thì đặt số giây tiến bù ở đây (đo bằng test_motion option 15).
+REVERSE_RECENTER_TIME = 0.0
+
+# ============================================================
 # CHI PHÍ TÌM ĐƯỜNG (navigation.py) — quy đổi ra "1 giao lộ đi thẳng"
 # ============================================================
 ROUTE_TURN_COST = 2          # Giá 1 lần xoay 90°

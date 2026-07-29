@@ -358,6 +358,54 @@ def test_cross_line_gap(m: Motion):
         print("  → Nếu robot có lúc quay ngang giữa khoảng trống thì vẫn nên tăng thêm.")
 
 
+def test_back_out_of_shelf(m: Motion):
+    """LÙI ra khỏi kệ tới giao lộ — lệnh ("back", N), thay cho xoay 180°.
+
+    ĐÂY LÀ TEST QUAN TRỌNG NHẤT của tính năng lùi. Thanh cảm biến gắn ở ĐẦU xe nên
+    khi lùi nó thành đuôi, và luật lái phải ĐẢO DẤU mới hội tụ (xem Motion.follow_line).
+    Lý thuyết nói đảo dấu là đúng, nhưng chỉ chạy thật mới biết:
+
+      - Đảo dấu SAI  → robot ngoáy đuôi mỗi lúc một mạnh rồi văng khỏi line.
+      - Đảo dấu ĐÚNG → robot lùi thẳng, bám line, dừng khi thanh cảm biến chạm
+        vạch ngang của giao lộ.
+
+    Sau khi dừng, thân xe nằm QUÁ giao lộ một đoạn bằng khoảng cách trục bánh → cảm
+    biến. Nếu xoay tiếp mà bị trượt line thì đo đoạn đó rồi đặt REVERSE_RECENTER_TIME.
+    """
+    print(f"\n[TEST] LÙI ra khỏi kệ (REVERSE_SPEED={config.REVERSE_SPEED}%, "
+          f"RECENTER={config.REVERSE_RECENTER_TIME}s)")
+    print("  Đặt robot Ở SÁT KỆ như vừa nâng hàng xong: trên line, QUAY MẶT VÀO KỆ.")
+    print("  Robot sẽ LÙI dọc line (không xoay) cho tới khi gặp giao lộ.")
+    print("  ⚠ Đứng sẵn cạnh công tắc nguồn — nếu đảo dấu sai robot sẽ ngoáy đuôi.")
+    input("  Nhấn Enter để chạy...")
+
+    t0 = time.time()
+    ok = m.back_to_intersection(1)
+    dt = time.time() - t0
+    print(f"  Kết quả: {'✅ tới giao lộ' if ok else '❌ THẤT BẠI'} sau {dt:.1f}s")
+
+    if not ok:
+        print("  → Mất line hoặc timeout. Kiểm theo thứ tự:")
+        print("     1. Robot có ngoáy đuôi tăng dần không? → dấu đảo đang SAI,")
+        print("        xem lại nhánh `if reverse: correction = -correction`.")
+        print("     2. Chạy quá nhanh? → giảm config.REVERSE_SPEED.")
+        print("     3. Không bao giờ thấy giao lộ? → kiểm INTERSECTION_THRESHOLD.")
+        return
+
+    print("  Giờ kiểm phần QUAN TRỌNG: robot dừng có đúng chỗ không.")
+    print("  Đo khoảng cách từ TRỤC BÁNH tới vạch ngang của giao lộ:")
+    print("    - Trục nằm NGAY TRÊN vạch  → tốt, để REVERSE_RECENTER_TIME = 0")
+    print("    - Trục nằm QUÁ vạch (về phía xa kệ) → đó là khoảng trục→cảm biến.")
+    print(f"      Đặt REVERSE_RECENTER_TIME ≈ khoảng đó ÷ tốc độ lùi rồi chạy lại.")
+    ans = input("  Xoay thử 90° tại chỗ để xem có bắt lại được line không? (y/N): ")
+    if ans.strip().lower() == "y":
+        m.turn_right_90()
+        values = m.read_line_sensor()
+        print(f"  Sau khi xoay, cảm biến đọc: {values} (tổng {sum(values)})")
+        print("  → Có ít nhất 1 mắt thấy line = bắt được line mới, tốt.")
+        print("  → Toàn 0 = lệch quá xa, phải chỉnh REVERSE_RECENTER_TIME.")
+
+
 def test_probe_board_side(m: Motion):
     """Dò nửa sân: đứng TẠI giao lộ Kệ 3, xoay phải thử xem có nhánh line không."""
     import navigation as nav
@@ -406,6 +454,7 @@ def main():
         "12": ("Shared SPI: line + IR cùng lúc", test_spi_line_and_ir),
         "13": ("Tự dò NỬA SÂN tại giao lộ Kệ 3", test_probe_board_side),
         "14": ("Vượt khoảng đứt line ô xuất phát", test_cross_line_gap),
+        "15": ("LÙI ra khỏi kệ tới giao lộ (lệnh back)", test_back_out_of_shelf),
         "d": ("Chẩn đoán motor từng bánh riêng", test_motor_diagnosis),
         "e": ("Đọc xung encoder real-time (Ctrl+C để thoát)", test_encoder_live),
         "f": ("Calibrate PWM_COMPENSATION bằng encoder (lưu config)", test_calibrate_pwm_by_encoder),
@@ -416,12 +465,12 @@ def main():
     for key, (name, _) in tests.items():
         print(f"  {key}. {name}")
 
-    choice = input("\nNhập số (0-14, d-f): ").strip()
+    choice = input("\nNhập số (0-15, d-f): ").strip()
 
     try:
         if choice == "0":
             for key, (name, func) in tests.items():
-                if func and key not in ("5", "10", "11", "12", "13", "14", "e"):
+                if func and key not in ("5", "10", "11", "12", "13", "14", "15", "e"):
                     func(m)
         elif choice in tests and tests[choice][1]:
             tests[choice][1](m)

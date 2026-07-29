@@ -28,6 +28,8 @@ def _robot_stub() -> Robot:
     robot.pose = nav.START_POSE
     robot.current_shelf = 0
     robot.current_tier = 1
+    robot._tier_retries = 0
+    robot._side_detected = False
     return robot
 
 
@@ -56,6 +58,15 @@ def _simulate(pose, route):
                 assert step is not None, (
                     f"Không có line từ {place} theo hướng {nav.HEADING_NAMES[heading]}")
                 place = step[0]
+        elif cmd[0] == "back":
+            # Lùi CHỈ dùng để rút khỏi điểm cuối, và vẫn phải quay mặt vào nó
+            for _ in range(cmd[1]):
+                assert place in nav.TERMINALS, (
+                    f"Lệnh lùi ở {place} — chỉ được lùi ra khỏi điểm cuối")
+                node, term_heading, _ = nav.TERMINALS[place]
+                assert heading == term_heading, (
+                    f"Lùi khỏi {place} mà không quay mặt vào nó")
+                place = node
         elif cmd[0] == "advance":
             terms = [t for t, (n, h, _) in nav.TERMINALS.items()
                      if n == place and h == heading]
@@ -161,12 +172,17 @@ class TestRouteReachesDestination(unittest.TestCase):
     def test_shelf_to_shelf_is_one_intersection(self):
         """Kệ↔kệ = 1 giao lộ (R1/R3 không cắt cột kệ), không phải 2."""
         route, _ = nav.plan(nav.pose_at("SHELF0"), "SHELF1")
-        forwards = [c[1] for c in route if c[0] == "forward"]
+        # Đếm cả "back": rút khỏi điểm cuối bằng cách LÙI cũng là đi hết 1 khoảng
+        # line như tiến, chỉ khác là không phải quay đầu trước.
+        hops = [c[1] for c in route if c[0] in ("forward", "back")]
         # ra khỏi điểm cuối (1) + đi 1 giao lộ dọc cột kệ (1)
-        self.assertEqual(sum(forwards), 2, nav.route_to_text(route))
+        self.assertEqual(sum(hops), 2, nav.route_to_text(route))
 
     def test_route_leaving_terminal_starts_with_uturn(self):
-        """Rời kệ phải quay đầu 180° (2 lần xoay) rồi mới đi."""
+        """Rời kệ để đi TIẾP THEO HƯỚNG CŨ thì vẫn phải quay đầu 180°.
+
+        (Đi vuông góc thì rẻ hơn nếu LÙI ra — xem TestReverseExit.)
+        """
         route, _ = nav.plan(nav.pose_at("SHELF0"), "F_foxconn")
         self.assertEqual(route[0][0], route[1][0])
         self.assertIn(route[0][0], ("left", "right"))
@@ -373,10 +389,12 @@ class TestMidMatchReset(unittest.TestCase):
         self.robot = _robot_stub()
         self.robot.motion = MagicMock()
         self.robot.lift = MagicMock()
+        self.robot._start_button = MagicMock()
         self.robot.packages_delivered = 5
         self.robot.pickup_count = 3
         self.robot.current_shelf = 1
         self.robot.current_tier = 2
+        self.robot._tier_retries = 1
         self.robot.pose = nav.pose_at("F_samsung")
         self.robot.carried_labels = ["samsung", "foxconn"]
         self.robot.delivery_queue = ["foxconn"]
@@ -415,6 +433,50 @@ class TestMidMatchReset(unittest.TestCase):
         self.robot._on_reset_button()
         self.assertTrue(self.robot._reset_requested)
         self.robot.motion.stop.assert_called()
+
+    def test_reset_waits_for_second_press_before_running_again(self):
+        """Luật: đội viên TAY đặt robot về ô xuất phát. Chạy tiếp ngay sau cú bấm
+        gây reset = robot tiến trong lúc người còn đang bê nó."""
+        self.robot._handle_reset()
+        self.robot._start_button.wait_for_press.assert_called_once()
+
+    def test_reset_waits_for_release_before_press(self):
+        """Nút có thể vẫn đang được giữ từ cú bấm gây reset — wait_for_press() sẽ
+        trả về ngay nếu không chờ nhả trước, tức là tự xác nhận mà không ai bấm."""
+        calls = []
+        self.robot._start_button.wait_for_release.side_effect = \
+            lambda *a, **k: calls.append("release")
+        self.robot._start_button.wait_for_press.side_effect = \
+            lambda *a, **k: calls.append("press")
+        self.robot._handle_reset()
+        self.assertEqual(calls, ["release", "press"])
+
+    def test_confirm_press_is_not_taken_as_a_new_reset(self):
+        """Callback phải được gỡ trong lúc chờ, nếu không cú bấm xác nhận lại bị
+        hiểu là yêu cầu reset mới → reset lặp vô hạn."""
+        self.robot._handle_reset()
+        self.assertFalse(self.robot._reset_requested)
+        # ...và phải được gắn lại để lần reset sau vẫn bấm được
+        self.assertEqual(self.robot._start_button.when_pressed,
+                         self.robot._on_reset_button)
+
+    def test_reset_clears_tier_retries(self):
+        """Tầng đang dở bị bỏ giữa chừng — bộ đếm retry phải về 0."""
+        self.robot._handle_reset()
+        self.assertEqual(self.robot._tier_retries, 0)
+
+    def test_button_failure_does_not_hang_the_match(self):
+        """Nút hỏng/đứt dây → log lỗi rồi chạy tiếp, không đứng im hết 240s."""
+        self.robot._start_button.wait_for_press.side_effect = RuntimeError("nút hỏng")
+        self.assertEqual(self.robot._handle_reset(), State.START)
+
+    def test_wait_is_bounded_by_remaining_match_time(self):
+        """Không ai bấm xác nhận → không được treo quá 240s, còn phải in kết quả."""
+        self.robot.match_start_time = time.time() - 200      # còn ~40s
+        self.robot._handle_reset()
+        timeout = self.robot._start_button.wait_for_press.call_args.kwargs["timeout"]
+        self.assertGreater(timeout, 0)
+        self.assertLessEqual(timeout, config.MATCH_DURATION - 200 + 1)
 
 
 class TestMotionAbort(unittest.TestCase):
@@ -499,13 +561,104 @@ class TestDetectSide(unittest.TestCase):
         self.robot.motion.probe_side_branch.assert_not_called()
         self.assertFalse(nav.MIRRORED)
 
+    def test_probe_runs_only_once_per_match(self):
+        """Sau RESET, state machine quay lại START → DETECT_SIDE. Sa bàn không đổi
+        giữa trận nên dò lại chỉ tốn ~2-4s để ra đúng kết quả cũ."""
+        config.BOARD_AUTO_DETECT = True
+        self.robot.motion.probe_side_branch.return_value = True
+        self.robot._handle_detect_side()
+        self.assertTrue(self.robot._side_detected)
+
+        self.robot.motion.probe_side_branch.reset_mock()
+        self.assertEqual(self.robot._handle_detect_side(), State.NAVIGATE_TO_SHELF)
+        self.robot.motion.probe_side_branch.assert_not_called()
+
+    def test_sensor_error_leaves_probe_open_for_retry(self):
+        """Dò lỗi cảm biến = chưa có kết luận → lần reset sau vẫn được thử lại."""
+        config.BOARD_AUTO_DETECT = True
+        self.robot.motion.probe_side_branch.return_value = None
+        self.robot._handle_detect_side()
+        self.assertFalse(self.robot._side_detected)
+
+
+class TestReverseExit(unittest.TestCase):
+    """Lệnh ("back", N) — rút khỏi kệ/nhà máy mà không xoay 180°.
+
+    Xoay là chi phí cố định LỚN NHẤT của trận (~70 lần). Mỗi lần rút bằng cách lùi
+    bỏ được 2 lần xoay khi chặng kế tiếp đi vuông góc.
+    """
+
+    def test_perpendicular_leg_uses_reverse(self):
+        """Kệ 2 → Samsung: rời kệ rồi đi LÊN — lùi ra rẻ hơn quay đầu."""
+        route, _ = nav.plan(nav.pose_at("SHELF1"), "F_samsung")
+        self.assertEqual(route[0], ("back", 1), nav.route_to_text(route))
+
+    def test_straight_leg_still_turns_around(self):
+        """Kệ 3 → Foxconn: rời kệ rồi đi THẲNG tiếp — quay đầu vẫn rẻ hơn."""
+        route, _ = nav.plan(nav.pose_at("SHELF0"), "F_foxconn")
+        self.assertNotIn("back", [c[0] for c in route], nav.route_to_text(route))
+
+    def test_reverse_keeps_heading_and_reaches_the_node(self):
+        pose = nav.pose_at("SHELF1")                    # (SHELF1, hướng vào kệ)
+        self.assertEqual(nav.apply(pose, [("back", 1)]),
+                         (nav.TERMINALS["SHELF1"][0], pose[1]))
+
+    def test_reverse_from_wrong_heading_is_rejected(self):
+        """Đã quay đầu rồi mà còn lùi = lùi vào kệ. apply() phải dừng tại chỗ."""
+        node, term_heading, _ = nav.TERMINALS["SHELF1"]
+        pose = ("SHELF1", nav.opposite(term_heading))
+        self.assertEqual(nav.apply(pose, [("back", 1)]), pose)
+
+    def test_reverse_only_from_terminals(self):
+        """Giữa 2 giao lộ không được lùi — chỉ dùng để rút khỏi điểm cuối."""
+        self.assertEqual(nav.apply(("C1R2", nav.NORTH), [("back", 1)]),
+                         ("C1R2", nav.NORTH))
+
+    def test_no_route_reverses_into_a_shelf(self):
+        """Quét mọi tuyến: lệnh lùi chỉ được xuất hiện ở ĐẦU route, khi đang ở
+        điểm cuối và còn quay mặt vào nó."""
+        places = list(nav.TERMINALS)
+        for src in places:
+            for dst in places:
+                if src == dst:
+                    continue
+                route, _ = nav.plan(nav.pose_at(src), dst)
+                if route is None:
+                    continue
+                for i, cmd in enumerate(route):
+                    if cmd[0] == "back":
+                        with self.subTest(src=src, dst=dst):
+                            self.assertEqual(i, 0, nav.route_to_text(route))
+
+    def test_reverse_cuts_total_turns_across_the_match(self):
+        """Đo trên toàn bộ tuyến kệ→nhà máy: phải bớt được nhiều lần xoay."""
+        def turns(pose, goal):
+            route, _ = nav.plan(pose, goal)
+            return sum(1 for c in route if c[0] in ("left", "right"))
+
+        pairs = [(nav.pose_at(s), f) for s in ("SHELF0", "SHELF1", "SHELF2")
+                 for f in nav.FACTORY_TERMINAL.values()]
+        with_reverse = sum(turns(p, g) for p, g in pairs)
+
+        saved = config.EDGE_COST_REVERSE
+        try:
+            config.EDGE_COST_REVERSE = 10 ** 6      # cấm lùi → về hành vi cũ
+            without = sum(turns(p, g) for p, g in pairs)
+        finally:
+            config.EDGE_COST_REVERSE = saved
+
+        self.assertLess(with_reverse, without,
+                        f"lùi phải bớt xoay ({with_reverse} vs {without})")
+
 
 class TestRouteCost(unittest.TestCase):
     def test_cost_is_positive_and_symmetric_ish(self):
-        c1 = nav.route_cost(nav.pose_at("SHELF0"), "F_foxconn")
-        c2 = nav.route_cost(nav.pose_at("SHELF0"), "F_samsung")
+        # Đo từ Kệ 1 (R4), KHÔNG phải Kệ 3: tuyến Kệ3→Foxconn đi qua cạnh R0 bị phạt
+        # EDGE_COST_START_GAP nên chi phí không còn phản ánh khoảng cách nữa.
+        c1 = nav.route_cost(nav.pose_at("SHELF2"), "F_samsung")      # cùng hàng R4
+        c2 = nav.route_cost(nav.pose_at("SHELF2"), "F_foxconn")      # tận hàng R0
         self.assertGreater(c1, 0)
-        self.assertGreater(c2, c1, "Kệ3 (R0) tới Samsung (R4) phải xa hơn tới Foxconn (R0)")
+        self.assertGreater(c2, c1, "Kệ1 (R4) tới Foxconn (R0) phải xa hơn tới Samsung (R4)")
 
     def test_unreachable_goal_is_expensive(self):
         with self.assertRaises(KeyError):

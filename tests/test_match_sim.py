@@ -52,6 +52,14 @@ def _simulate(pose, route):
                 assert step is not None, \
                     f"KHÔNG có line từ {place} theo hướng {nav.HEADING_NAMES[heading]}"
                 place = step[0]
+        elif cmd[0] == "back":
+            for _ in range(cmd[1]):
+                assert place in nav.TERMINALS, \
+                    f"lệnh lùi ở {place} — chỉ lùi ra khỏi điểm cuối"
+                node, term_heading, _ = nav.TERMINALS[place]
+                assert heading == term_heading, \
+                    f"lùi khỏi {place} mà không quay mặt vào nó"
+                place = node
         elif cmd[0] == "advance":
             terms = [t for t, (n, h, _) in nav.TERMINALS.items()
                      if n == place and h == heading]
@@ -65,7 +73,7 @@ def _simulate(pose, route):
 def _atomic(route):
     out = []
     for cmd in route:
-        out.extend([("forward", 1)] * cmd[1] if cmd[0] == "forward" else [cmd])
+        out.extend([(cmd[0], 1)] * cmd[1] if cmd[0] in ("forward", "back") else [cmd])
     return out
 
 
@@ -92,6 +100,10 @@ def run_match(seed: int, hw_fail_rate: float = 0.0, line_loss_rate: float = 0.0,
     robot.current_shelf = 0
     robot.current_tier = 1
     robot._tier_retries = 0
+    robot._side_detected = False
+    # Reset giữa trận chờ đội viên đặt robot xong rồi bấm nút xác nhận
+    # (main._wait_for_placement) — mock trả về ngay, không chặn mô phỏng.
+    robot._start_button = MagicMock()
     robot.pose = nav.START_POSE
     robot.carried_labels = [None, None]
     robot.delivery_queue = []

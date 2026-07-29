@@ -34,9 +34,11 @@ pixel đen của đường line). Xem docs/SA_BAN.md để biết số đo và c
 HƯỚNG (heading): EAST=0 (về phía nhà máy), NORTH=1 (về phía R4), WEST=2 (về phía
 kệ), SOUTH=3 (về phía R0/Kệ4). Xoay trái = +1, xoay phải = -1.
 
-LỆNH ROUTE sinh ra: ("forward", N) | ("left",) | ("right",) | ("advance",)
+LỆNH ROUTE sinh ra: ("forward", N) | ("back", N) | ("left",) | ("right",) | ("advance",)
     ("advance",) = bám line đến HẾT line (vào kệ / khu nhà máy / Kệ 4) — những chỗ
     này là ĐIỂM CUỐI của line, không phải giao lộ nên không đếm được bằng forward.
+    ("back", N) = LÙI ra khỏi điểm cuối, vẫn bám line, vẫn quay mặt vào kệ/nhà máy.
+    Có nó thì không phải xoay 180° mỗi lần rút khỏi kệ — xem config.REVERSE_SPEED.
 """
 
 import heapq
@@ -350,10 +352,16 @@ def _neighbours(place: str, heading: int, goal: str):
             if term == goal and TERMINALS[term][1] == heading:
                 yield config.ADVANCE_COST, (term, heading), ("advance",)
     else:
-        # Đang ở điểm cuối: chỉ ra được node theo hướng ngược với hướng điểm cuối
+        # Đang ở điểm cuối: ra được node bằng 2 cách
         node, term_heading, _ = TERMINALS[place]
+        # 1) Đã quay đầu rồi thì tiến ra
         if heading == opposite(term_heading):
             yield 1, (node, heading), ("forward", 1)
+        # 2) Còn đang quay mặt VÀO kệ/nhà máy thì LÙI ra, giữ nguyên hướng — bỏ được
+        #    2 lần xoay khi chặng kế tiếp đi vuông góc (lên/xuống dọc cột). Bộ tìm
+        #    đường tự cân nhắc: đi thẳng tiếp theo hướng cũ thì quay đầu vẫn rẻ hơn.
+        if heading == term_heading:
+            yield 1 + config.EDGE_COST_REVERSE, (node, heading), ("back", 1)
 
 
 def _search(pose: tuple[str, int], goal: str):
@@ -463,6 +471,15 @@ def apply(pose: tuple[str, int], route: list) -> tuple[str, int]:
                 if step is None:
                     return place, heading
                 place = step[0]
+        elif cmd[0] == "back":
+            # Chỉ dùng để RÚT khỏi điểm cuối, vẫn quay mặt vào kệ/nhà máy
+            for _ in range(cmd[1]):
+                if place not in TERMINALS:
+                    return place, heading
+                node, term_heading, _ = TERMINALS[place]
+                if heading != term_heading:
+                    return place, heading
+                place = node
         elif cmd[0] == "advance":
             terms = [t for t, (n, h, _) in TERMINALS.items()
                      if n == place and h == heading]
@@ -488,6 +505,8 @@ def route_to_text(route: list) -> str:
     for cmd in route:
         if cmd[0] == "forward":
             parts.append(f"tiến {cmd[1]} giao lộ")
+        elif cmd[0] == "back":
+            parts.append(f"LÙI {cmd[1]} giao lộ")
         elif cmd[0] == "left":
             parts.append("xoay trái")
         elif cmd[0] == "right":

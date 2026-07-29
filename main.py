@@ -23,7 +23,11 @@ except Exception:
         from gpiozero import Button
     except ImportError:
         from unittest.mock import MagicMock
-        Button = MagicMock
+
+        # Không gán thẳng MagicMock: tham số vị trí đầu của nó là `spec`, nên
+        # Button(16, ...) sẽ sinh mock bị spec theo int (xem control/motion.py).
+        def Button(*_args, **_kwargs):
+            return MagicMock()
 
 import config
 import navigation
@@ -89,6 +93,7 @@ class Robot:
         self.current_tier = 1             # Tầng kệ hiện tại (1 = dưới, 2 = trên)
         self.match_start_time = 0.0
         self._tier_retries = 0            # Số lần đã thử lại tầng kệ hiện tại
+        self._side_detected = False       # Đã dò xong chiều trái/phải chưa (1 lần/trận)
 
         # Đo thời gian từng chặng — để biết 240s đang tiêu vào đâu
         self._phase_times: dict[str, float] = {}
@@ -197,7 +202,43 @@ class Robot:
         self.lift.reset()
         self._clear_carry_state()
         self.pose = navigation.START_POSE
+        # Tầng đang dở đã bị bỏ giữa chừng — trả bộ đếm retry về 0 để tầng mới
+        # được thử đủ số lần như bình thường.
+        self._tier_retries = 0
+        self._wait_for_placement()
         return State.START
+
+    def _wait_for_placement(self):
+        """Chờ đội viên đặt XONG robot vào ô xuất phát rồi bấm nút lần nữa.
+
+        BẮT BUỘC phải chờ: luật quy định đội viên TAY đặt robot về ô xuất phát. Nếu
+        chạy tiếp ngay sau cú bấm gây reset thì robot bắt đầu tiến trong lúc người
+        còn đang bê nó — vừa nguy hiểm vừa chắc chắn hỏng lượt vì xuất phát sai chỗ.
+        """
+        logger.warning("  → ĐẶT robot vào ô xuất phát (quay mặt về phía kệ), "
+                       "rồi BẤM NÚT lần nữa để chạy tiếp")
+
+        # Gỡ callback trước khi chờ: để nguyên thì chính cú bấm xác nhận này lại
+        # được hiểu là một yêu cầu reset mới → reset lặp vô hạn.
+        self._start_button.when_pressed = None
+        # Không chờ lâu hơn thời gian trận còn lại: hết 240s thì có chờ tiếp cũng
+        # không ghi thêm điểm, mà treo ở đây thì không bao giờ in được bảng kết quả.
+        remaining = max(self.time_remaining(), 0.0) if self.match_start_time > 0 else None
+        try:
+            # Nút có thể VẪN đang được giữ từ cú bấm gây reset. wait_for_press()
+            # trả về ngay khi nút đang ở trạng thái nhấn, nên phải chờ nhả trước —
+            # không thì "xác nhận" tự xảy ra mà không ai bấm.
+            self._start_button.wait_for_release(timeout=5)
+            if self._start_button.wait_for_press(timeout=remaining) is False:
+                logger.error("Hết giờ trận mà chưa có nút xác nhận — kết thúc")
+            else:
+                logger.warning("Đã bấm nút — chạy tiếp, còn %.0fs", self.time_remaining())
+        except Exception as e:
+            logger.error("Không chờ được nút (%s) — chạy tiếp ngay", e)
+
+        # Cú bấm vừa rồi là XÁC NHẬN, không phải yêu cầu reset mới.
+        self._reset_requested = False
+        self._start_button.when_pressed = self._on_reset_button
 
     def _signal_handler(self, sig, frame):
         logger.warning("Nhận tín hiệu dừng (signal %s)", sig)
@@ -417,6 +458,14 @@ class Robot:
                         navigation.MIRRORED)
             return State.NAVIGATE_TO_SHELF
 
+        # Sau RESET, state machine quay lại START → DETECT_SIDE. Nhưng sa bàn không
+        # đổi giữa trận: dò lại là mất thêm ~2-4s mỗi lần (5 lần reset = tới 20s)
+        # để ra đúng kết quả cũ. Dò một lần duy nhất đầu trận là đủ.
+        if getattr(self, "_side_detected", False):
+            logger.info("Đã dò nửa sân từ đầu trận (%s) — bỏ qua, đi thẳng vào kệ",
+                        "GƯƠNG" if navigation.MIRRORED else "CHUẨN")
+            return State.NAVIGATE_TO_SHELF
+
         if not self._goto(navigation.PROBE_NODE, "tới giao lộ Kệ 3 để dò nửa sân"):
             logger.error("Không tới được giao lộ dò — giữ nguyên bản đồ theo "
                          "config.BOARD_MIRRORED=%s", navigation.MIRRORED)
@@ -427,6 +476,9 @@ class Robot:
             logger.error("Dò nửa sân THẤT BẠI (cảm biến line) — giữ nguyên bản đồ "
                          "theo config.BOARD_MIRRORED=%s", navigation.MIRRORED)
         else:
+            # Chỉ chốt "đã dò xong" khi có kết luận rõ ràng — dò lỗi cảm biến thì để
+            # lần sau (nếu có reset) thử lại, chứ không khoá luôn kết quả không chắc.
+            self._side_detected = True
             mirrored = not found
             if mirrored != navigation.MIRRORED:
                 navigation.set_mirrored(mirrored)
@@ -897,6 +949,7 @@ class Robot:
         self.current_tier = 1
         self.match_start_time = 0.0
         self._tier_retries = 0
+        self._side_detected = False
         self._phase_times = {}
         self._phase_counts = {}
         self._reset_requested = False

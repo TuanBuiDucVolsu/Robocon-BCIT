@@ -18,7 +18,11 @@ except Exception:
         from gpiozero import DigitalOutputDevice
     except ImportError:
         from unittest.mock import MagicMock
-        DigitalOutputDevice = MagicMock
+
+        # Không gán thẳng MagicMock: tham số vị trí đầu của nó là `spec`, nên
+        # DigitalOutputDevice(5) sẽ sinh mock bị spec theo int (xem control/motion.py).
+        def DigitalOutputDevice(*_args, **_kwargs):
+            return MagicMock()
 
 import config
 from control.mcp3008_bus import Mcp3008Bus, get_mcp3008_bus

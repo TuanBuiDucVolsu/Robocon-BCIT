@@ -38,7 +38,7 @@ def count_route(pose, goal):
     route, new_pose = nav.plan(pose, goal)
     if route is None:
         return None, pose
-    fwd = sum(c[1] for c in route if c[0] == "forward")
+    fwd = sum(c[1] for c in route if c[0] in ("forward", "back"))
     turns = sum(1 for c in route if c[0] in ("left", "right"))
     adv = sum(1 for c in route if c[0] == "advance")
     return (fwd, turns, adv), new_pose

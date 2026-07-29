@@ -21,6 +21,10 @@ Thi đấu dự kiến **ngày 08-09/08/2026** tại phường Bắc Giang, tỉ
 - Thời gian: **240 giây** (4 phút)
 - Reset: tối đa **5 lần**, mỗi lần **-10 điểm** (sẵn 50 điểm reset)
 - Khi reset: đội viên **tay đặt** robot về ô xuất phát
+  → thao tác trên robot là **BẤM NÚT 2 LẦN**: lần 1 = dừng ngay (`_on_reset_button`),
+  đặt robot xong rồi lần 2 = chạy tiếp (`_wait_for_placement`). Không có lần 2 thì
+  robot đứng yên — trước đây 1 lần bấm là nó tự chạy sau ~4.5s, tiến trong lúc còn
+  đang bê. Đồng hồ trận KHÔNG dừng trong lúc chờ.
 - Khởi động sai trước hiệu lệnh → cảnh báo lần 1, lần 2 bị loại
 - Robot rời sa bàn hoặc sang phần sân đối phương → bị reset
 - Tương tác từ xa với robot tự động → **bị loại**
@@ -218,6 +222,9 @@ Dò được vì đường line dọc cột kệ **chỉ chạy về một phía
 kia là mép sa bàn. Tốn ~2-4s đầu trận. Phải tiến ra khỏi giao lộ mới đọc được: ngay
 tại điểm giao, line cắt ngang nằm dọc thanh cảm biến nên xoay kiểu gì cũng thấy đen.
 
+- Dò **1 lần/trận** (`Robot._side_detected`): sau reset, state machine quay lại
+  START → DETECT_SIDE nhưng sa bàn không đổi, dò lại chỉ tốn thêm 2-4s mỗi lần để ra
+  đúng kết quả cũ. Dò lỗi cảm biến (`None`) thì KHÔNG chốt — lần reset sau vẫn thử lại.
 - `config.BOARD_AUTO_DETECT` — tắt thì dùng thẳng `config.BOARD_MIRRORED`
 - `navigation.set_board(mirrored=…, factory_at_start_row=…)` dựng lại CHÍNH BẢN ĐỒ,
   không đảo từng lệnh → tìm đường, `apply()`, log hướng tự đúng theo
@@ -252,20 +259,53 @@ tại điểm giao, line cắt ngang nằm dọc thanh cảm biến nên xoay ki
 - **Bù PWM**: `follow_line()` dùng ĐÚNG cùng `PWM_COMPENSATION`/`PWM_COMPENSATION_LEFT`
   như `forward()` — nếu lệch nhau thì đi thẳng và bám line sẽ khác nhau sau calibrate.
 - **Bản đồ line**: đã đo lại bằng quét pixel file in chuẩn (docs/SA_BAN.md mục 3).
+- **`back_to_intersection()` — lùi ra khỏi kệ**: rút khỏi điểm cuối bằng cách LÙI
+  thay vì xoay 180° rồi tiến. Bỏ được **28/70 lần xoay** mỗi trận (~32s) — xoay là
+  chi phí cố định lớn nhất. Bộ tìm đường tự chọn: chặng kế đi vuông góc thì lùi,
+  đi thẳng tiếp thì vẫn quay đầu (`config.EDGE_COST_REVERSE` để cân).
+  ⚠️ **Khi lùi phải ĐẢO DẤU hiệu chỉnh PD.** Thanh cảm biến ở đầu xe, lùi thì thành
+  đuôi; ma trận trạng thái `(y, θ)` có `det = v·k` nên `k` phải cùng dấu vận tốc.
+  Giữ nguyên dấu = robot ngoáy đuôi tăng dần rồi văng khỏi line. Kiểm trên robot
+  thật bằng `tests/test_motion.py` option **15** TRƯỚC khi tin dùng.
 
 ## Test
 
 | Script | Mục đích |
 |--------|----------|
-| `tests/test_logic.py` | 52 unit test — PC, không GPIO (bản đồ + mô phỏng route tới đúng chỗ + polarity + phân loại màu + reset + resume) |
+| `tests/test_logic.py` | 88 unit test — PC, không GPIO (bản đồ + mô phỏng route tới đúng chỗ + polarity + phân loại màu + reset + resume) |
+| `tests/test_units.py` | 35 unit test — PC (bám line, lift, ShapeMatcher, classify_pair) |
 | `tests/test_match_sim.py` | Mô phỏng TRỌN trận với phần cứng giả lập: 12/12 kiện, lỗi phần cứng, mất line giữa route — kiểm vị trí main.py tin tưởng có khớp vị trí thật không |
+| `tests/test_tools.py` | 16 unit test — PC (regex của `measure_phases` phải khớp chuỗi log CÓ THẬT trong source + round-trip; `dry_run` chạy hết được và mọi bước đi đều có line thật) |
 | `tools/show_routes.py` | In toàn bộ route sinh ra để đối chiếu tay trên sa bàn |
+| `tools/dry_run.py` | **Chạy khô trọn trận** — in từng bước robot sẽ đi kèm mốc giây. Cầm đi bộ trên sa bàn để đối chiếu tay |
+| `tools/measure_phases.py` | Đọc `robot_log.txt` → 6 tham số cho `estimate_time` + dự báo điểm. Chạy sau mỗi lượt `practice.sh` |
+| `tools/estimate_time.py` | "Worst case giao được mấy kiện trong 240s" — nạp số đo từ `measure_phases` |
 | `tests/test_motion.py` | 12 option (1-12) + `d` chẩn đoán — motor, line, route, exit start |
 | `tests/test_lift.py` | 8 option (1-8) + `a-d` calibrate/độc lập — nâng/hạ, IR, drop từng càng, NV2 |
 | `tests/test_vision.py` | 7 option — camera, HSV, classify_pair |
 | `tests/test_smoke.py` | Smoke tích hợp trên sa bàn |
 
 Scenario calibrate quan trọng: **Kệ3 T1 → giao foxconn → samsung → return → Kệ3 T2**
+
+### Ngân sách 240 giây — đo, đừng đoán
+
+BTC xếp kiện NGẪU NHIÊN mỗi trận và chi phí giữa kịch bản đẹp nhất/xấu nhất chênh
+hơn 2 lần. Chạy thử trúng kịch bản nhẹ rồi kết luận "kịp giờ" là tự lừa mình.
+
+```
+bash scripts/practice.sh          # 1 lượt thật trên sa bàn
+python3 -m tools.measure_phases   # log → 6 tham số + dự báo cả 2 biên
+```
+
+`measure_phases` ghép mốc thời gian trong `robot_log.txt` (chính xác hơn đồng hồ bấm
+tay), lấy **trung vị** và **loại** các chặng chạy hỏng, rồi đếm riêng phần phụ trội
+(retry, mất line, reset) — thứ mà `estimate_time` KHÔNG mô hình hoá, nên trận thật
+luôn chậm hơn dự báo đúng bằng phần đó.
+
+Đọc kết quả theo **điểm**, không theo "kịp/không kịp": hết giờ vẫn giữ điểm kiện đã
+giao, nên câu hỏi đúng là *worst case được bao nhiêu điểm*. Chặng ăn nhiều giây nhất
+là **chạy thẳng (~35%)** → ưu tiên tăng `SPEED_DEFAULT` (đang để 50 mức bring-up)
+theo quy trình ở `config.py`, rồi mới tới `LIFT_TIME_SHELF_2`.
 
 ## Lift API (càng độc lập + 2 IR qua SPI)
 
@@ -290,6 +330,7 @@ Scenario calibrate quan trọng: **Kệ3 T1 → giao foxconn → samsung → ret
 |------|---------|
 | `("forward", N)` | Bám line qua **N giao lộ** (`navigate_intersections`) |
 | `("left",)` / `("right",)` | Xoay 90° tại chỗ (`TURN_TIME`) |
+| `("back", N)` | **LÙI** qua N giao lộ, vẫn bám line, KHÔNG quay đầu — rút khỏi kệ/nhà máy |
 | `("advance",)` | Bám line tới **HẾT line** — vào kệ / khu nhà máy / Kệ 4 |
 | route rỗng `[]` | Đã ở đích → trả `True`, không chạy motor |
 

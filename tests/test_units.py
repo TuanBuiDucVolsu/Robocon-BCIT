@@ -321,6 +321,23 @@ class TestClassifyPair(unittest.TestCase):
         v = self._vision(attempts)
         self.assertEqual(v.classify_pair(), ("samsung", "foxconn"))
 
+    def test_confident_orb_survives_a_higher_scoring_hsv_retry(self):
+        """conf của ORB (inlier/40) và của HSV (tỉ lệ pixel) là HAI THANG khác nhau.
+
+        Ca thật: Foxconn chỉ đạt ~7 inlier (xem config.SHAPE_MIN_INLIERS) → conf
+        0.175 nhưng ORB đã chắc chắn. Lần quét sau ORB trượt, HSV cho 0.18 mơ hồ.
+        So confidence trần thì 0.18 > 0.175 → ghi đè mất kết quả đúng và trả None.
+        """
+        orb_conf = 7 / 40.0                             # dưới CONFIDENCE_THRESHOLD
+        hsv_conf = config.CONFIDENCE_THRESHOLD - 0.01   # cao hơn nhưng KHÔNG đạt ngưỡng
+        self.assertGreater(hsv_conf, orb_conf, "tiền đề của test")
+        attempts = [
+            (("foxconn", orb_conf, True), ("amkor", 0.05, False)),   # trái: ORB chắc
+            (("samsung", hsv_conf, False), ("amkor", 0.05, False)),  # trái: HSV mơ hồ
+        ] * 3
+        left, _right = self._vision(attempts).classify_pair()
+        self.assertEqual(left, "foxconn")
+
     def test_no_camera_returns_none(self):
         from vision.vision import Vision
         v = object.__new__(Vision)
@@ -389,6 +406,61 @@ class TestLineError(unittest.TestCase):
         self.assertTrue(w0 < analog < w1, f"phải nằm giữa {w0} và {w1}, được {analog}")
         self.assertLess(analog, digital,
                         "analog phải nghiêng về mắt thấy đậm hơn, digital chia đều")
+
+
+# ==========================================================
+# 6. Bám line khi LÙI — lệnh ("back", N)
+# ==========================================================
+
+class TestFollowLineReverse(unittest.TestCase):
+    """Lùi mà giữ nguyên dấu hiệu chỉnh thì robot ngoáy đuôi rồi văng khỏi line.
+
+    Thanh cảm biến ở ĐẦU xe, lùi thì nó thành đuôi. Với luật lái ω = −k·y, ma trận
+    trạng thái (y, θ) có det = v·k, nên k phải CÙNG DẤU vận tốc mới hội tụ. Xem
+    Motion.follow_line — test này canh đúng cái dấu đó.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.m = Motion()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.m.cleanup()
+
+    def _drive(self, reverse):
+        """Đặt line lệch hẳn sang PHẢI rồi đọc PWM 4 chân."""
+        n = config.LINE_SENSOR_COUNT
+        raw = [1.0] * (n - 1) + [0.0]           # 0.0 = trên line
+        self.m._last_error = 0.0
+        self.m.read_line_sensor_raw = lambda: raw
+        self.m.follow_line(base_speed=40, reverse=reverse)
+        return (self.m._left_fwd.value, self.m._right_fwd.value,
+                self.m._left_rev.value, self.m._right_rev.value)
+
+    def test_forward_uses_forward_pins_only(self):
+        lf, rf, lr, rr = self._drive(reverse=False)
+        self.assertEqual((lr, rr), (0, 0), "tiến mà vẫn cấp điện chân lùi")
+        self.assertGreater(lf, rf, "line lệch phải → bánh trái nhanh hơn để bẻ phải")
+
+    def test_reverse_uses_reverse_pins_only(self):
+        lf, rf, lr, rr = self._drive(reverse=True)
+        self.assertEqual((lf, rf), (0, 0), "lùi mà vẫn cấp điện chân tiến")
+        self.assertGreater(lr + rr, 0, "lùi phải có điện ở chân lùi")
+
+    def test_reverse_flips_the_correction(self):
+        _lf, _rf, lr, rr = self._drive(reverse=True)
+        fl, fr, _, _ = self._drive(reverse=False)
+        self.assertLess(lr, rr,
+                        "lùi phải ĐẢO dấu hiệu chỉnh so với tiến, không thì hệ phân kỳ")
+        self.assertGreater(fl, fr, "tiền đề: khi tiến thì bánh trái nhanh hơn")
+
+    def test_intersection_detected_while_reversing(self):
+        n = config.LINE_SENSOR_COUNT
+        self.m.read_line_sensor_raw = lambda: [0.0] * n       # mọi mắt thấy line
+        at_intersection, _values = self.m.follow_line(base_speed=40, reverse=True)
+        self.assertTrue(at_intersection, "lùi vẫn phải nhận ra giao lộ")
+
 
 
 if __name__ == "__main__":

@@ -302,9 +302,15 @@ class Vision:
             ok_l = from_orb_l or conf_l >= config.CONFIDENCE_THRESHOLD
             ok_r = from_orb_r or conf_r >= config.CONFIDENCE_THRESHOLD
 
-            if conf_l > best_conf_left:
+            # So theo (đã_đủ_tự_tin, confidence) — KHÔNG so confidence trần.
+            # conf của ORB là inlier/CONFIDENCE_NORM, conf của HSV là tỉ lệ pixel:
+            # hai thang khác nhau, không so trực tiếp được. Trước đây so trần nên
+            # một kết quả ORB ĐÃ chắc chắn (vd Foxconn 7 inlier → 0.175, ok=True)
+            # bị lần quét sau ghi đè bằng kết quả HSV mơ hồ nhưng số cao hơn
+            # (0.18, ok=False) → cuối cùng trả None và bỏ luôn cả tầng kệ.
+            if (ok_l, conf_l) > (best_ok_left, best_conf_left):
                 best_left, best_conf_left, best_ok_left = label_l, conf_l, ok_l
-            if conf_r > best_conf_right:
+            if (ok_r, conf_r) > (best_ok_right, best_conf_right):
                 best_right, best_conf_right, best_ok_right = label_r, conf_r, ok_r
 
             if ok_l and ok_r:

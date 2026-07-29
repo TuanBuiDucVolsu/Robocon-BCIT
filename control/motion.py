@@ -18,10 +18,21 @@ except Exception:
         from gpiozero import PWMOutputDevice, DigitalOutputDevice, DistanceSensor, DigitalInputDevice
     except ImportError:
         from unittest.mock import MagicMock
-        PWMOutputDevice = MagicMock
-        DigitalOutputDevice = MagicMock
-        DistanceSensor = MagicMock
-        DigitalInputDevice = MagicMock
+
+        def _mock_device(*_args, **_kwargs):
+            """Không có gpiozero (chạy test trên PC) → thiết bị giả rỗng.
+
+            KHÔNG gán thẳng `PWMOutputDevice = MagicMock`: tham số vị trí ĐẦU TIÊN
+            của MagicMock là `spec`, nên `PWMOutputDevice(17, frequency=100)` sinh ra
+            mock bị spec theo `int` → `.off()` ném AttributeError giữa chừng và bộ
+            test tự tắt (đã từng che mất test 'reset dừng motor ngay').
+            """
+            return MagicMock()
+
+        PWMOutputDevice = _mock_device
+        DigitalOutputDevice = _mock_device
+        DistanceSensor = _mock_device
+        DigitalInputDevice = _mock_device
 
 import config
 from control.mcp3008_bus import Mcp3008Bus, get_mcp3008_bus
@@ -220,8 +231,8 @@ class Motion:
 
     def forward(self, speed: float = config.SPEED_DEFAULT):
         logger.debug("Tiến - speed=%s", speed)
-        self._left_rev.off()
-        self._right_rev.off()
+        self._left_rev.value = 0
+        self._right_rev.value = 0
         self._left_fwd.value = self._pct(speed * config.PWM_COMPENSATION_LEFT)
         self._right_fwd.value = self._pct(speed * config.PWM_COMPENSATION)
 
@@ -248,10 +259,12 @@ class Motion:
 
     def stop(self):
         logger.debug("Dừng")
+        # Cả 4 chân đều là PWMOutputDevice → dùng chung `.value = 0` cho cả 4
+        # (trước đây 2 chân lùi dùng `.off()`, khác kiểu không vì lý do gì).
         self._left_fwd.value = 0
         self._right_fwd.value = 0
-        self._left_rev.off()
-        self._right_rev.off()
+        self._left_rev.value = 0
+        self._right_rev.value = 0
 
     # ----------------------------------------------------------
     # Xuất phát — tìm line đầu tiên
@@ -383,7 +396,7 @@ class Motion:
     def execute_route(self, route: list) -> bool:
         """Chạy route do navigation.plan() sinh ra.
 
-        Lệnh hợp lệ: ("forward", N) | ("left",) | ("right",) | ("advance",).
+        Lệnh hợp lệ: ("forward", N) | ("back", N) | ("left",) | ("right",) | ("advance",).
         Route RỖNG = không có gì để đi (robot đã ở đích) → coi là thành công; caller
         tự quyết định có gọi hay không.
         """
@@ -404,6 +417,13 @@ class Motion:
                     if not self.navigate_intersections(1):
                         return False
                     self.last_route_progress.append(("forward", 1))
+            elif action == "back":
+                # Rút khỏi kệ/nhà máy mà không xoay 180° — cũng đi từng giao lộ một
+                # để biết chính xác dừng ở đâu khi hỏng giữa chừng.
+                for _ in range(max(0, step[1])):
+                    if not self.back_to_intersection(1):
+                        return False
+                    self.last_route_progress.append(("back", 1))
             elif action == "left":
                 self.turn_left_90()
                 self.last_route_progress.append(step)
@@ -589,7 +609,20 @@ class Motion:
         weighted = sum(w * s for w, s in zip(config.LINE_WEIGHTS, strengths))
         return weighted / total
 
-    def follow_line(self, base_speed: float = config.SPEED_DEFAULT) -> tuple[bool, list[int]]:
+    def follow_line(self, base_speed: float = config.SPEED_DEFAULT,
+                    reverse: bool = False) -> tuple[bool, list[int]]:
+        """Một nhịp bám line. reverse=True thì chạy LÙI mà vẫn bám line.
+
+        ⚠️ Khi lùi PHẢI đảo dấu hiệu chỉnh. Thanh cảm biến gắn ở ĐẦU xe, lùi thì nó
+        thành đuôi. Đặt y = lệch của cảm biến so với line, θ = lệch hướng, v = vận
+        tốc, L = khoảng cách trục bánh → cảm biến, luật lái ω = -k·y:
+
+            ẏ = v·θ − L·k·y ,  θ̇ = −k·y   →   det = v·k
+
+        Hệ chỉ hội tụ khi det > 0, tức k phải CÙNG DẤU với v. Lùi (v < 0) mà giữ
+        nguyên dấu k thì det < 0 — robot ngoáy đuôi mỗi lúc một mạnh rồi văng khỏi
+        line. Đảo dấu là đủ để ổn định trở lại.
+        """
         raw = self.read_line_sensor_raw()
         values = LineSensor.digital_from_raw(raw)
         active_count = sum(values)
@@ -603,18 +636,83 @@ class Motion:
         derivative = error - self._last_error
         correction = config.LINE_KP * error + config.LINE_KD * derivative
         self._last_error = error
+        if reverse:
+            correction = -correction
 
         left_speed = max(0, min(100, base_speed + correction))
         right_speed = max(0, min(100, base_speed - correction))
 
-        self._left_rev.off()
-        self._right_rev.off()
-        # Bù lệch tốc độ 2 bánh — phải dùng ĐÚNG cùng hệ số như forward(), nếu không
-        # robot đi thẳng và robot bám line sẽ lệch nhau sau khi calibrate.
-        self._left_fwd.value = self._pct(left_speed * config.PWM_COMPENSATION_LEFT)
-        self._right_fwd.value = self._pct(right_speed * config.PWM_COMPENSATION)
+        # Bù lệch tốc độ 2 bánh — phải dùng ĐÚNG cùng hệ số như forward()/backward(),
+        # nếu không đi thẳng và bám line sẽ lệch nhau sau khi calibrate.
+        if reverse:
+            self._left_fwd.value = 0
+            self._right_fwd.value = 0
+            self._left_rev.value = self._pct(left_speed * config.PWM_COMPENSATION_LEFT_REV)
+            self._right_rev.value = self._pct(right_speed * config.PWM_COMPENSATION_REV)
+        else:
+            self._left_rev.value = 0
+            self._right_rev.value = 0
+            self._left_fwd.value = self._pct(left_speed * config.PWM_COMPENSATION_LEFT)
+            self._right_fwd.value = self._pct(right_speed * config.PWM_COMPENSATION)
 
         return False, values
+
+    def back_to_intersection(self, count: int = 1,
+                             base_speed: float = config.REVERSE_SPEED,
+                             timeout: float = config.REVERSE_TIMEOUT) -> bool:
+        """LÙI dọc theo line qua `count` giao lộ (lệnh ("back", N) của navigation).
+
+        Dùng để rút khỏi kệ / khu nhà máy mà KHÔNG phải xoay 180° — mỗi lần bỏ được
+        2 lần xoay, và xoay là chi phí cố định lớn nhất của trận (~84s/70 lần).
+
+        Khác `follow_line_until_intersection`: mất line thì DỪNG hẳn chứ không quét
+        tìm lại. Đoạn điểm-cuối → giao lộ là đường liền, không có khoảng đứt nào; mất
+        line ở đây nghĩa là đã lệch thật, mà quét tìm khi đang lùi thì dễ đâm vào kệ
+        vừa rời.
+        """
+        if count <= 0:
+            return True
+
+        for i in range(count):
+            if self._aborted():
+                return False
+            logger.info("Lùi về giao lộ %d/%d (speed=%d%%)", i + 1, count, base_speed)
+            start = time.time()
+            lost_since = None
+            reached = False
+
+            while time.time() - start < timeout:
+                if self._aborted():
+                    return False
+                at_intersection, values = self.follow_line(base_speed, reverse=True)
+                if at_intersection:
+                    reached = True
+                    break
+                if sum(values) == 0:
+                    if lost_since is None:
+                        lost_since = time.time()
+                    elif time.time() - lost_since > config.LINE_GAP_COAST_TIME:
+                        self.stop()
+                        logger.error("Lùi: mất line quá %.1fs — dừng an toàn",
+                                     config.LINE_GAP_COAST_TIME)
+                        return False
+                else:
+                    lost_since = None
+                time.sleep(0.01)
+
+            self.stop()
+            if not reached:
+                logger.warning("Lùi: timeout sau %.1fs, không thấy giao lộ", timeout)
+                return False
+
+            # Thân xe đang nằm QUÁ giao lộ một đoạn = khoảng cách trục bánh → cảm biến
+            # (tiến thì nằm trước giao lộ đúng bấy nhiêu). Tiến bù nếu đã calibrate.
+            if config.REVERSE_RECENTER_TIME > 0:
+                self.forward(base_speed)
+                time.sleep(config.REVERSE_RECENTER_TIME)
+                self.stop()
+
+        return True
 
     def follow_line_until_intersection(self, base_speed: float = config.SPEED_DEFAULT,
                                        timeout: float = 15.0) -> bool:
