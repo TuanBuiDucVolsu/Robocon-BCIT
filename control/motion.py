@@ -673,9 +673,19 @@ class Motion:
         if count <= 0:
             return True
 
+        # Xoá sai số cũ TRƯỚC khi đổi chiều. `_last_error` đang giữ giá trị của lần
+        # bám line khi TIẾN; giữ lại thì nhịp lùi đầu tiên có đạo hàm giả
+        # (LINE_KD × chênh lệch) và robot giật một cái ngay lúc bắt đầu lùi.
+        self._last_error = 0.0
+
         for i in range(count):
             if self._aborted():
                 return False
+            # Đang đứng NGAY TRÊN giao lộ vừa tới (trừ lần đầu, lúc đó ở điểm cuối).
+            # Không lùi khỏi nó trước thì follow_line nhận lại chính giao lộ đó và
+            # coi như đã đi xong chặng kế tiếp.
+            if i > 0:
+                self._escape_intersection(base_speed, reverse=True)
             logger.info("Lùi về giao lộ %d/%d (speed=%d%%)", i + 1, count, base_speed)
             start = time.time()
             lost_since = None
@@ -712,6 +722,9 @@ class Motion:
                 time.sleep(config.REVERSE_RECENTER_TIME)
                 self.stop()
 
+        # Trả sai số về 0 để lần bám line TIẾN kế tiếp không thừa hưởng đạo hàm của
+        # pha lùi (dấu hiệu chỉnh 2 pha ngược nhau).
+        self._last_error = 0.0
         return True
 
     def follow_line_until_intersection(self, base_speed: float = config.SPEED_DEFAULT,
@@ -770,8 +783,13 @@ class Motion:
         self.stop()
         return False
 
-    def _escape_intersection(self, speed: float = config.SPEED_DEFAULT):
-        self.forward(speed)
+    def _escape_intersection(self, speed: float = config.SPEED_DEFAULT,
+                             reverse: bool = False):
+        """Chạy mù 0.3s để rời khỏi giao lộ đang đứng, trước khi bám line tiếp."""
+        if reverse:
+            self.backward(speed)
+        else:
+            self.forward(speed)
         time.sleep(0.3)
         self.stop()
 

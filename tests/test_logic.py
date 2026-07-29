@@ -508,6 +508,39 @@ class TestMotionAbort(unittest.TestCase):
         self.assertFalse(self.motion.exit_start_zone(timeout=5))
 
 
+class TestStartTimeGuard(unittest.TestCase):
+    """START phải từ chối xuất phát khi trận đã hết giờ.
+
+    Đường vào START sau RESET bỏ qua lần kiểm giờ của _run_state_machine (nó
+    `continue` ngay sau _handle_reset). Không chặn ở đây thì reset lúc 239s mà không
+    ai bấm xác nhận sẽ làm robot lao ra khỏi ô xuất phát sau khi đã hết giờ.
+    """
+
+    def _robot(self):
+        robot = _robot_stub()
+        robot.motion = MagicMock()
+        robot.motion.exit_start_zone.return_value = True
+        return robot
+
+    def test_refuses_to_start_when_time_is_up(self):
+        robot = self._robot()
+        robot.match_start_time = time.time() - config.MATCH_DURATION
+        self.assertEqual(robot._handle_start(), State.DONE)
+        robot.motion.exit_start_zone.assert_not_called()
+
+    def test_starts_normally_at_the_beginning_of_a_match(self):
+        robot = self._robot()
+        robot.match_start_time = time.time()
+        self.assertEqual(robot._handle_start(), State.DETECT_SIDE)
+        robot.motion.exit_start_zone.assert_called()
+
+    def test_clock_not_started_yet_does_not_block(self):
+        """Luyện tập/khởi động: match_start_time = 0 thì không được coi là hết giờ."""
+        robot = self._robot()
+        robot.match_start_time = 0.0
+        self.assertEqual(robot._handle_start(), State.DETECT_SIDE)
+
+
 class TestDetectSide(unittest.TestCase):
     """State DETECT_SIDE: robot tự dò nửa sân bằng nhánh line ở giao lộ Kệ 3."""
 
@@ -614,21 +647,52 @@ class TestReverseExit(unittest.TestCase):
         self.assertEqual(nav.apply(("C1R2", nav.NORTH), [("back", 1)]),
                          ("C1R2", nav.NORTH))
 
+    def test_never_reverses_out_of_the_start_box(self):
+        """Ô xuất phát nằm giữa khoảng ĐỨT 245mm của hàng R0 — không có line để bám
+        khi lùi. Ra khỏi đó phải bằng exit_start_zone() (tiến thẳng qua chỗ hở)."""
+        for dst in list(nav.TERMINALS) + list(nav.NODES):
+            if dst == "START":
+                continue
+            route, _ = nav.plan(nav.pose_at("START"), dst)
+            if not route:
+                continue
+            with self.subTest(dst=dst):
+                self.assertNotIn("back", [c[0] for c in route],
+                                 nav.route_to_text(route))
+
     def test_no_route_reverses_into_a_shelf(self):
-        """Quét mọi tuyến: lệnh lùi chỉ được xuất hiện ở ĐẦU route, khi đang ở
-        điểm cuối và còn quay mặt vào nó."""
-        places = list(nav.TERMINALS)
-        for src in places:
-            for dst in places:
+        """Quét MỌI tuyến (điểm cuối + giao lộ): lệnh lùi chỉ được ở ĐẦU route, và
+        không bao giờ được nối tiếp bằng forward/advance — lùi ra rồi tiến lại vào
+        chính chỗ vừa rời là đi thừa, mà tệ hơn là đi ngược vào kệ."""
+        targets = list(nav.TERMINALS) + list(nav.NODES)
+        for src in nav.TERMINALS:
+            for dst in targets:
                 if src == dst:
                     continue
                 route, _ = nav.plan(nav.pose_at(src), dst)
-                if route is None:
+                if not route:
                     continue
                 for i, cmd in enumerate(route):
-                    if cmd[0] == "back":
-                        with self.subTest(src=src, dst=dst):
-                            self.assertEqual(i, 0, nav.route_to_text(route))
+                    if cmd[0] != "back":
+                        continue
+                    with self.subTest(src=src, dst=dst):
+                        self.assertEqual(i, 0, nav.route_to_text(route))
+                        nxt = route[i + 1][0] if i + 1 < len(route) else None
+                        self.assertNotIn(nxt, ("forward", "advance"),
+                                         nav.route_to_text(route))
+
+    def test_apply_matches_plan_for_every_route(self):
+        """Mô phỏng độc lập phải ra đúng vị trí mà plan() hứa — gồm cả lệnh lùi."""
+        for src in nav.TERMINALS:
+            for dst in nav.TERMINALS:
+                if src == dst:
+                    continue
+                route, promised = nav.plan(nav.pose_at(src), dst)
+                if route is None:
+                    continue
+                with self.subTest(src=src, dst=dst):
+                    self.assertEqual(nav.apply(nav.pose_at(src), route), promised,
+                                     nav.route_to_text(route))
 
     def test_reverse_cuts_total_turns_across_the_match(self):
         """Đo trên toàn bộ tuyến kệ→nhà máy: phải bớt được nhiều lần xoay."""

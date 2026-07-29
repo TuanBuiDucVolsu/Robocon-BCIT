@@ -88,9 +88,13 @@ def _prompt(msg: str):
 
 
 def _roi_hsv_pixels(vision: Vision, seconds: float):
-    """Chụp nhiều frame, cắt ROI (giống hệt _classify_by_color — dùng đúng config.ROI_MARGIN
-    để mô phỏng chính xác khung hình lúc quét thật), gộp toàn bộ pixel HSV."""
-    margin = getattr(config, "ROI_MARGIN", 0.2)
+    """Chụp nhiều frame, lấy pixel HSV của ĐÚNG 2 vùng mà classify_pair() phân tích.
+
+    Trước đây hàm này cắt ROI trên NGUYÊN khung và tự nhận là "mô phỏng chính xác
+    khung hình lúc quét thật" — sai. Lúc thi đấu main.py gọi classify_pair(): chia
+    đôi khung TRƯỚC rồi mới cắt ROI từng nửa. Vùng nguyên khung (tâm 50%) phủ lên
+    khe giữa 2 kiện, chỗ mà robot không bao giờ nhìn tới (xem Vision.pair_rois).
+    """
     pixels = []
     end = time.time() + seconds
     while time.time() < end:
@@ -98,11 +102,9 @@ def _roi_hsv_pixels(vision: Vision, seconds: float):
         if frame is None:
             time.sleep(SAMPLE_INTERVAL)
             continue
-        h, w = frame.shape[:2]
-        mx, my = int(w * margin), int(h * margin)
-        roi = frame[my:h - my, mx:w - mx]
-        hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-        pixels.append(hsv.reshape(-1, 3))
+        for roi in vision.pair_rois(frame):
+            hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+            pixels.append(hsv.reshape(-1, 3))
         time.sleep(SAMPLE_INTERVAL)
     if not pixels:
         return np.empty((0, 3), dtype=np.uint8)
@@ -266,11 +268,14 @@ def main():
         return
 
     print("=== CALIBRATE MÀU HSV — 4 KIỆN HÀNG CỐ ĐỊNH ===\n")
-    print("Với mỗi kiện: đặt MỘT MÌNH kiện hàng đó vào giữa khung hình camera,")
-    print("đúng khoảng cách/góc như lúc robot quét thật trên kệ, giữ yên rồi nhấn Enter.")
+    print("Với mỗi kiện: đặt HAI kiện CÙNG LOẠI lên tầng kệ — đúng như lúc thi đấu —")
+    print("rồi đưa robot vào đúng khoảng cách quét thật, giữ yên và nhấn Enter.")
+    print("KHÔNG đặt một kiện ở GIỮA khung: lúc thi đấu main.py gọi classify_pair(),")
+    print("chia đôi khung rồi soi tâm TỪNG NỬA (25% và 75% bề ngang). Dải giữa khung")
+    print("là KHE giữa 2 kiện — robot không bao giờ nhìn tới. Chốt màu ở đó thì")
+    print("calibrate xong vẫn nhận sai.\n")
     print("QUAN TRỌNG: dùng phông trắng/xám trơn chắn hết bàn/ghế/đồ vật phía sau —")
-    print("ROI ở đây RỘNG BẰNG ĐÚNG lúc quét thật (config.ROI_MARGIN), nền lẫn vào sẽ")
-    print("làm range tính sai (xem CLAUDE.md).\n")
+    print("nền lẫn vào ROI sẽ làm range tính sai (xem CLAUDE.md).\n")
 
     _prompt("  → Bước 0: dọn TRỐNG kệ (không đặt kiện hàng nào), hướng camera vào đúng\n"
             "     vị trí/khoảng cách quét thật (chỉ thấy kệ + pallet thật, màu gì cũng được),\n"
@@ -281,7 +286,7 @@ def main():
     results = {}
     for label in config.LABEL_TO_FACTORY:
         factory = config.LABEL_TO_FACTORY[label]
-        _prompt(f"  → Đặt kiện '{label}' ({factory}) vào khung hình, nhấn Enter...")
+        _prompt(f"  → Đặt 2 kiện '{label}' ({factory}) lên tầng kệ, nhấn Enter...")
         pixels = _roi_hsv_pixels(vision, SAMPLE_SECONDS)
         print(f"    Đã lấy {len(pixels)} pixel mẫu.")
         if label == config.ACHROMATIC_LABEL:

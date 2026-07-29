@@ -196,9 +196,13 @@ def main():
     bg_brightness = float(cv2.cvtColor(frame_bg, cv2.COLOR_BGR2GRAY).mean())
     print(f"     Độ sáng TB ảnh nền: {bg_brightness:.1f}\n")
 
+    print("  ⚠️ Đặt ĐÚNG MỘT kiện mỗi lần. Lúc thi đấu robot dùng classify_pair():")
+    print("     chia đôi khung hình rồi nhận diện từng nửa MỘT kiện — ảnh mẫu chụp")
+    print("     cả 2 kiện sẽ không khớp được với nửa khung đó.\n")
+
     for label in target_labels:
         factory = config.LABEL_TO_FACTORY[label]
-        _prompt(f"  → Đặt kiện '{label}' ({factory}) vào đúng vị trí trên bệ, nhấn Enter để chụp...")
+        _prompt(f"  → Đặt MỘT kiện '{label}' ({factory}) vào đúng vị trí trên bệ, nhấn Enter để chụp...")
         time.sleep(0.3)  # 1 nhịp để tay/máy ổn định sau khi buông phím
 
         frame = vision._capture_frame()
@@ -225,6 +229,16 @@ def main():
                 print("       ngờ dính nhầm nền (camera xê dịch so với lúc chụp nền ở Bước 0,")
                 print("       hoặc ánh sáng đổi giữa 2 lần chụp). Nên chụp lại kiện này:")
                 print(f"       `python3 -m tools.capture_templates {label}`")
+
+            # Vùng rộng hơn cao rõ rệt = đang chụp CẢ 2 kiện cạnh nhau trên tầng kệ.
+            # Lúc thi đấu main.py dùng classify_pair(): chia đôi khung rồi so từng
+            # nửa MỘT kiện. Ảnh mẫu 2 kiện đem so với nửa khung 1 kiện thì quá nửa
+            # đặc trưng của mẫu không có chỗ khớp — và phần khớp được lại rơi vào
+            # nền/pallet dùng chung, thứ giống hệt nhau ở cả 4 mẫu.
+            if w > h * 1.4:
+                print(f"    ⚠️ Vùng phát hiện rất RỘNG ({w}x{h}) — nhiều khả năng đang")
+                print("       chụp CẢ 2 kiện cạnh nhau. Ảnh mẫu phải là MỘT kiện thôi:")
+                print("       bỏ bớt 1 kiện khỏi bệ rồi chụp lại kiện này.")
 
             # Thu hẹp vào giữa — bbox trên là cả hộp+pallet, chỉ giữ lại vùng decal
             dx, dy, dw, dh = _shrink_to_decal((x, y, w, h))

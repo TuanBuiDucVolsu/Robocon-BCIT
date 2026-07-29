@@ -204,6 +204,13 @@ LOOSE_TERMINAL = "LOOSE"
 # (lên R2/R4), phía kia là mép sa bàn — xoay thử rồi đọc line là biết nửa nào.
 PROBE_NODE = "C0R0"
 
+# Điểm cuối KHÔNG được rút ra bằng lệnh ("back", N).
+# Ô xuất phát nằm giữa khoảng ĐỨT 245mm của hàng R0 (docs/SA_BAN.md: R0 có line ở
+# x 89→615 và 782→1208, ô start nằm trong chỗ hở) — không có line nào để bám khi
+# lùi, `back_to_intersection` sẽ báo mất line ngay. Robot ra khỏi ô xuất phát bằng
+# `Motion.exit_start_zone()`: tiến thẳng qua khoảng trống cho tới khi chạm line R0.
+NO_REVERSE_TERMINALS = frozenset({"START"})
+
 
 # ============================================================
 # Đồ thị dẫn xuất — dựng lại được khi đổi nửa sân
@@ -360,7 +367,7 @@ def _neighbours(place: str, heading: int, goal: str):
         # 2) Còn đang quay mặt VÀO kệ/nhà máy thì LÙI ra, giữ nguyên hướng — bỏ được
         #    2 lần xoay khi chặng kế tiếp đi vuông góc (lên/xuống dọc cột). Bộ tìm
         #    đường tự cân nhắc: đi thẳng tiếp theo hướng cũ thì quay đầu vẫn rẻ hơn.
-        if heading == term_heading:
+        if heading == term_heading and place not in NO_REVERSE_TERMINALS:
             yield 1 + config.EDGE_COST_REVERSE, (node, heading), ("back", 1)
 
 
@@ -474,7 +481,7 @@ def apply(pose: tuple[str, int], route: list) -> tuple[str, int]:
         elif cmd[0] == "back":
             # Chỉ dùng để RÚT khỏi điểm cuối, vẫn quay mặt vào kệ/nhà máy
             for _ in range(cmd[1]):
-                if place not in TERMINALS:
+                if place not in TERMINALS or place in NO_REVERSE_TERMINALS:
                     return place, heading
                 node, term_heading, _ = TERMINALS[place]
                 if heading != term_heading:

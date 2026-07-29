@@ -82,6 +82,10 @@ SPANS = [
          end=r"Phát hiện giao lộ \(active=",
          abort=(r"Không tìm thấy giao lộ", r"Timeout bám line",
                 r"Không tìm lại được line", r"Mất line quá")),
+    Span("reverse", "LÙI 1 khoảng ra khỏi kệ",
+         start=r"Lùi về giao lộ \d+/\d+",
+         end=r"Phát hiện giao lộ \(active=",
+         abort=(r"Lùi: (mất line|timeout)",)),
     Span("turn", "Xoay 90°",
          start=r"Xoay 90° (trái|phải)",
          end=NEXT_LINE, max_s=5.0),
@@ -122,6 +126,7 @@ SPANS = [
 ANOMALIES = [
     ("Mất line giữa đường",        r"Mất line quá"),
     ("Không tìm thấy giao lộ",     r"Không tìm thấy giao lộ"),
+    ("Lùi ra khỏi kệ hỏng",        r"Lùi: (mất line|timeout)"),
     ("Timeout bám line",           r"Timeout bám line"),
     ("Advance hỏng",               r"Advance: (timeout|gặp giao lộ)"),
     ("Tiếp cận hỏng",              r"(Timeout tiếp cận kệ|Tiếp cận: chạy mù)"),
