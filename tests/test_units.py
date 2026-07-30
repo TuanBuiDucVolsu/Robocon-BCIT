@@ -687,6 +687,50 @@ class TestBackToIntersection(unittest.TestCase):
             self.m.abort_check = None
 
 
+class TestFitToRange(unittest.TestCase):
+    """Kẹp tốc độ 2 bánh vào 0-100 phải GIỮ ĐỘ CHÊNH — độ chênh mới tạo ra góc lái."""
+
+    def _diff(self, l, r):
+        a, b = Motion._fit_to_range(l, r)
+        return a - b, (a, b)
+
+    def test_no_change_inside_range(self):
+        self.assertEqual(Motion._fit_to_range(90.0, 10.0), (90.0, 10.0))
+
+    def test_keeps_differential_when_over_100(self):
+        """SPEED_DEFAULT=80 + correction 40 → (120, 40): phải ra (100, 20) chênh 80."""
+        diff, pair = self._diff(120.0, 40.0)
+        self.assertEqual(pair, (100.0, 20.0))
+        self.assertEqual(diff, 80.0, "kẹp riêng từng bánh sẽ ăn mất 25% lực lái")
+
+    def test_keeps_differential_when_below_zero(self):
+        diff, pair = self._diff(30.0, -10.0)
+        self.assertEqual(pair, (40.0, 0.0))
+        self.assertEqual(diff, 40.0)
+
+    def test_clamps_when_differential_wider_than_range(self):
+        """Chênh > 100 thì phải đảo chiều một bánh mới đạt — đành kẹp, nhưng hợp lệ."""
+        a, b = Motion._fit_to_range(150.0, -30.0)
+        self.assertEqual((a, b), (100.0, 0.0))
+
+    def test_always_in_range_and_diff_preserved_up_to_100(self):
+        for l, r in ((120.0, 40.0), (40.0, 120.0), (-10.0, 30.0), (105.0, 25.0),
+                     (150.0, -30.0), (50.0, 50.0)):
+            with self.subTest(pair=(l, r)):
+                a, b = Motion._fit_to_range(l, r)
+                self.assertTrue(0.0 <= a <= 100.0 and 0.0 <= b <= 100.0)
+                want = l - r
+                # Giữ nguyên độ chênh nếu nó nằm trong dải; ngoài dải thì kẹp ±100
+                expect = max(-100.0, min(100.0, want))
+                self.assertAlmostEqual(a - b, expect)
+
+    def test_current_speed_never_saturates_but_80_does(self):
+        """Chốt lại con số: ở 50 chưa vượt dải, ở 80 thì vượt → lỗi này ngủ tới khi tăng tốc."""
+        corr = config.LINE_KP * max(abs(w) for w in config.LINE_WEIGHTS)
+        self.assertLessEqual(50 + corr, 100.0, "ở tốc độ 50 không được vượt dải")
+        self.assertGreater(80 + corr, 100.0, "ở tốc độ 80 phải vượt dải (nếu không, test này lạc hậu)")
+
+
 class TestContinuousIntersections(unittest.TestCase):
     """Chế độ đếm giao lộ KHÔNG dừng (config.CONTINUOUS_INTERSECTIONS)."""
 
@@ -729,13 +773,34 @@ class TestContinuousIntersections(unittest.TestCase):
 
     def test_does_not_count_before_clearing(self):
         """Chưa tụt xuống dưới ngưỡng CLEAR thì không được đếm cái kế."""
-        on = config.INTERSECTION_THRESHOLD
+        on, off = config.INTERSECTION_THRESHOLD, 1
         mid = config.INTERSECTION_CLEAR_THRESHOLD + 1   # vẫn còn trên vạch
-        self._feed([on] * 3 + [mid] * 3 + [on] * 3 + [1] * 30)
+        self._feed([off] * 2 + [on] * 3 + [mid] * 3 + [on] * 3 + [off] * 30)
         reached = []
         # chỉ có 1 giao lộ THẬT → yêu cầu 2 phải timeout, không được tự đếm đủ
         self.assertFalse(self.m._navigate_continuous(2, 50, lambda: reached.append(1)))
         self.assertEqual(len(reached), 1)
+
+    def test_does_not_count_the_mark_it_starts_on(self):
+        """KHỞI HÀNH khi đang đứng trên giao lộ → không được đếm chính cái đó.
+
+        Lệnh ("forward", N) luôn bắt đầu tại một giao lộ (vừa dừng ở giao lộ trước
+        hoặc vừa xoay tại đó). Đếm cả cái đang đứng là mọi chặng dừng SỚM một giao
+        lộ — sai vị trí toàn bộ phần route còn lại mà không có dấu hiệu gì.
+        """
+        on, off = config.INTERSECTION_THRESHOLD, 1
+        # đang trên vạch (3 nhịp) → ra khỏi → 1 giao lộ THẬT → hết
+        self._feed([on] * 3 + [off] * 3 + [on] * 3 + [off] * 30)
+        reached = []
+        self.assertTrue(self.m._navigate_continuous(1, 50, lambda: reached.append(1)),
+                        "đòi 1 giao lộ mà không tới được → cờ on_mark ban đầu bị sai")
+        self.assertEqual(len(reached), 1, "đã đếm cả giao lộ đang đứng trên")
+
+    def test_still_works_when_not_starting_on_a_mark(self):
+        """Chặng đầu sau exit_start_zone KHÔNG đứng trên giao lộ — cờ phải tự hạ."""
+        on, off = config.INTERSECTION_THRESHOLD, 1
+        self._feed([off] * 5 + [on] * 2 + [off] * 30)
+        self.assertTrue(self.m._navigate_continuous(1, 50))
 
     def test_stops_only_at_last_intersection(self):
         on, off = config.INTERSECTION_THRESHOLD, 1

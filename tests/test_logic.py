@@ -541,6 +541,58 @@ class TestStartTimeGuard(unittest.TestCase):
         self.assertEqual(robot._handle_start(), State.DETECT_SIDE)
 
 
+class TestNoDropOutsideFactory(unittest.TestCase):
+    """Hết giờ ở DELIVER thì DỪNG, không được thả kiện giữa sân.
+
+    Bản trước rẽ sang DROP_FIRST/DROP_SECOND. Thả ngoài khu nhà máy = 0 điểm theo
+    thể lệ, NHƯNG cảm biến IR vẫn xác nhận pallet đã rời càng nên packages_delivered
+    vẫn +1/+2. Con số đó dùng để: in điểm ra log, quyết định chuyển sang NV2
+    (>= TOTAL_PACKAGES_TASK1), và làm đầu vào cho tools.measure_phases — sai một chỗ
+    là sai cả chuỗi, mà không có dấu hiệu lỗi nào.
+    """
+
+    def _robot(self, queue, carried):
+        robot = _robot_stub()
+        robot.motion = MagicMock()
+        robot.lift = MagicMock()
+        robot.lift.dropoff.return_value = True
+        robot.lift.dropoff_left.return_value = True
+        robot.lift.dropoff_right.return_value = True
+        robot.vision = MagicMock()
+        robot.vision.get_factory_name.side_effect = lambda lb: lb
+        robot.packages_delivered = 0
+        robot._last_delivered_label = None
+        robot.delivery_queue = list(queue)
+        robot.carried_labels = list(carried)
+        robot.match_start_time = time.time() - (config.MATCH_DURATION - 1)  # còn 1s
+        return robot
+
+    def test_deliver_first_stops_instead_of_dropping(self):
+        robot = self._robot(["samsung", "amkor"], ["samsung", "amkor"])
+        self.assertEqual(robot._handle_deliver_first(), State.DONE)
+        self.assertEqual(robot.packages_delivered, 0)
+        robot.lift.dropoff.assert_not_called()
+        robot.lift.dropoff_left.assert_not_called()
+
+    def test_deliver_second_stops_instead_of_dropping(self):
+        robot = self._robot(["amkor"], ["samsung", "amkor"])
+        self.assertEqual(robot._handle_deliver_second(), State.DONE)
+        self.assertEqual(robot.packages_delivered, 0)
+        robot.lift.dropoff_right.assert_not_called()
+
+    def test_still_delivers_when_time_is_fine(self):
+        robot = self._robot(["samsung", "amkor"], ["samsung", "amkor"])
+        robot.match_start_time = time.time()
+        self.assertEqual(robot._handle_deliver_first(), State.DROP_FIRST)
+        robot.motion.execute_route.assert_called()
+
+    def test_queue_untouched_so_nothing_is_marked_delivered(self):
+        """delivery_queue KHÔNG được pop: pop là hành vi của DROP, nghĩa là 'đã giao'."""
+        robot = self._robot(["samsung", "amkor"], ["samsung", "amkor"])
+        robot._handle_deliver_first()
+        self.assertEqual(robot.delivery_queue, ["samsung", "amkor"])
+
+
 class TestDetectSide(unittest.TestCase):
     """State DETECT_SIDE: robot tự dò nửa sân bằng nhánh line ở giao lộ Kệ 3."""
 
@@ -921,6 +973,92 @@ class TestNextPickupShelf(unittest.TestCase):
         robot.current_shelf = 0
         robot.current_tier = 2
         self.assertEqual(robot._next_pickup_shelf(), 1)
+
+
+class TestConfigInvariants(unittest.TestCase):
+    """Các quan hệ giữa hằng số config PHẢI đúng, không thì phần cứng hỏng/logic sai.
+
+    Calibrate là sửa trực tiếp config.py (menu d của test_motion/test_lift, tools.
+    calibrate_line, calibrate_vision). Mỗi hằng số nhìn riêng thì hợp lý, nhưng vài
+    cặp có ràng buộc mà không chỗ nào kiểm — sửa một cái là ngầm phá cái kia.
+    """
+
+    def test_no_duplicate_gpio_pins(self):
+        """2 thiết bị dùng chung 1 chân → gpiozero ném GPIOPinInUse lúc khởi tạo."""
+        pins = {k: v for k, v in vars(config).items()
+                if k.isupper() and isinstance(v, int) and not isinstance(v, bool)
+                and ("PIN" in k or k.startswith(("IN1", "IN2", "IN3", "IN4", "ENA", "ENB")))}
+        seen = {}
+        for name, pin in sorted(pins.items()):
+            with self.subTest(pin=name):
+                self.assertNotIn(pin, seen,
+                                 f"GPIO {pin} dùng cho cả {seen.get(pin)} và {name}")
+            seen[pin] = name
+
+    def test_does_not_use_hardware_spi_pins(self):
+        """MCP3008 chiếm cứng GPIO 8/9/10/11 — không thiết bị nào được lấn vào."""
+        spi = {8: "CE0", 9: "MISO", 10: "MOSI", 11: "SCLK"}
+        for name, value in vars(config).items():
+            if (name.isupper() and isinstance(value, int) and not isinstance(value, bool)
+                    and ("PIN" in name or name.startswith(("IN", "ENA", "ENB")))):
+                with self.subTest(const=name):
+                    self.assertNotIn(value, spi,
+                                     f"{name}={value} đụng chân SPI {spi.get(value)}")
+
+    def test_distance_thresholds_ordered(self):
+        self.assertLess(config.APPROACH_DISTANCE, config.APPROACH_SLOW_DISTANCE,
+                        "điểm dừng phải gần hơn ngưỡng chuyển sang pha chậm")
+        self.assertLessEqual(config.APPROACH_SLOW_DISTANCE, config.APPROACH_DETECT_DISTANCE,
+                             "vào pha chậm mà chưa tính là 'đã thấy mục tiêu' thì "
+                             "APPROACH_BLIND_TIMEOUT có thể cắt ngang lúc đang tới gần")
+        self.assertGreater(config.RETREAT_DISTANCE, config.APPROACH_DISTANCE,
+                           "lùi ra phải xa hơn lúc tiếp cận, không thì retreat về ngay")
+
+    def test_blind_timeout_shorter_than_total(self):
+        """Chặn chạy mù phải cắt TRƯỚC timeout tổng, không thì nó vô nghĩa."""
+        self.assertLess(config.APPROACH_BLIND_TIMEOUT, config.APPROACH_TIMEOUT)
+
+    def test_intersection_hysteresis_valid(self):
+        """Ngưỡng CLEAR phải THẤP HƠN ngưỡng đếm, nếu không trễ 2 ngưỡng vô hiệu và
+        một vạch cắt bị đếm thành nhiều giao lộ."""
+        self.assertLess(config.INTERSECTION_CLEAR_THRESHOLD, config.INTERSECTION_THRESHOLD)
+        self.assertLessEqual(config.INTERSECTION_THRESHOLD, config.LINE_SENSOR_COUNT,
+                             "không bao giờ đủ mắt → không bao giờ nhận ra giao lộ")
+
+    def test_task2_threshold_above_safety_margin(self):
+        """Cả chuyến NV2 tốn ~20-25s: ngưỡng riêng phải lớn hơn SAFETY_MARGIN chung."""
+        self.assertGreater(config.TASK2_MIN_TIME, config.SAFETY_MARGIN)
+
+    def test_speeds_ordered(self):
+        self.assertLessEqual(config.SPEED_SLOW, config.SPEED_DEFAULT)
+        self.assertLess(config.APPROACH_SLOW_SPEED, config.APPROACH_FAST_SPEED)
+        for name in ("SPEED_DEFAULT", "SPEED_SLOW", "SPEED_TURN", "APPROACH_FAST_SPEED",
+                     "APPROACH_SLOW_SPEED", "ADVANCE_SPEED", "REVERSE_SPEED",
+                     "EXIT_START_SPEED", "PROBE_SPEED"):
+            with self.subTest(const=name):
+                self.assertTrue(0 < getattr(config, name) <= 100,
+                                f"{name} phải trong (0, 100]")
+
+    def test_package_counts_consistent(self):
+        """3 kệ × 2 tầng × 2 kiện = 12 kiện NV1. Sửa lệch là state machine dừng sai chỗ."""
+        self.assertEqual(config.SHELVES_TASK1 * 2, config.PICKUPS_TASK1)
+        self.assertEqual(config.PICKUPS_TASK1 * 2, config.TOTAL_PACKAGES_TASK1)
+        self.assertEqual(len(nav.SHELF_TERMINAL), config.SHELVES_TASK1)
+
+    def test_every_label_has_a_factory_and_a_terminal(self):
+        for label in config.LABEL_TO_FACTORY:
+            with self.subTest(label=label):
+                self.assertIn(label, nav.FACTORY_TERMINAL,
+                              "nhãn nhận diện được nhưng không có nhà máy trên bản đồ "
+                              "→ main.py bỏ cả lượt giao")
+                self.assertIn(nav.FACTORY_TERMINAL[label], nav.TERMINALS)
+
+    def test_lift_home_covers_worst_case(self):
+        """Nhắc lại ở đây vì calibrate LIFT_*_LOWER_EXTRA rất dễ phá ngưỡng home."""
+        from control.lift import Lift, MAX_LEVEL
+        lift = object.__new__(Lift)
+        lift._current_level = 0
+        self.assertGreaterEqual(config.LIFT_HOME_DURATION, lift.min_home_duration())
 
 
 class TestRouteConfigIntegrity(unittest.TestCase):

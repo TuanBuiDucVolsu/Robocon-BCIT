@@ -230,7 +230,7 @@ Robot lao ra khỏi sa bàn hoặc sang sân đối phương → phải dừng �
 ## Checklist ngày thi đấu
 
 **Trước khi vào sân**
-- [ ] `python3 -m pytest tests/ -q` → `197 passed`
+- [ ] `python3 -m pytest tests/ -q` → `219 passed`
 - [ ] Pin đầy, đo điện áp
 - [ ] Robot lọt khuôn 400×400×400mm
 

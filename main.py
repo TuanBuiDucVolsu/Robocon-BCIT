@@ -584,8 +584,15 @@ class Robot:
             return State.RETURN_TO_WAREHOUSE
 
         if not self.is_time_safe():
-            logger.warning("Sắp hết giờ!")
-            return State.DROP_FIRST
+            # KHÔNG rẽ sang DROP_FIRST: chưa đi tới nhà máy nào cả, thả ở đây là thả
+            # giữa sân — 0 điểm theo thể lệ, nhưng IR VẪN báo pallet đã rời càng nên
+            # packages_delivered +1/+2 và log báo điểm không hề có. Số đó còn dùng để
+            # quyết định chuyển sang NV2 và để tools.measure_phases dự báo, nên sai ở
+            # đây là sai cả chuỗi. Hạ càng lúc này cũng tốn thêm vài giây vô ích.
+            logger.warning("Sắp hết giờ (còn %.0fs) — KHÔNG thả giữa sân, giữ kiện "
+                           "trên càng và dừng (thả ngoài khu nhà máy không có điểm)",
+                           self.time_remaining())
+            return State.DONE
 
         self._goto(goal, f"DELIVER → {label}")
         return State.DROP_FIRST
@@ -670,8 +677,11 @@ class Robot:
             return State.RETURN_TO_WAREHOUSE
 
         if not self.is_time_safe():
-            logger.warning("Sắp hết giờ!")
-            return State.DROP_SECOND
+            # Xem lý do ở _handle_deliver_first: kiện 1 đã giao xong và đã được đếm,
+            # kiện 2 thả tại nhà máy 1 (hoặc giữa đường) thì không có điểm.
+            logger.warning("Sắp hết giờ (còn %.0fs) — KHÔNG thả kiện 2 ngoài khu nhà "
+                           "máy của nó, dừng tại đây", self.time_remaining())
+            return State.DONE
 
         # Bộ tìm đường tự lo đoạn nhà máy → nhà máy (phải vòng về cột giữa vì giữa
         # các khu nhà máy không có line nối dọc).

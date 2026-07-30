@@ -207,6 +207,13 @@ LABEL_TO_FACTORY = {
 # thấy báo nhận nhầm lúc KHÔNG có kiện hàng nào trong khung.
 SHAPE_MIN_INLIERS = 6
 
+# Kiện thắng phải có inlier ≥ ngần này lần kiện đứng THỨ 2 mới được nhận. Chặn ca
+# bệ trống: nền vẫn cho 1-2 nhãn sát nút nhau (vd 4 so với 3), kiện thật thì cách
+# biệt rõ (7 so với 3). Tăng = khắt khe hơn (hay rơi về HSV), giảm = dễ nhận nhầm.
+# vision/shape_match.py VẪN ĐỌC hằng số này qua getattr — trước đây nó không có
+# trong file này nên chỉnh mãi không thấy tác dụng vì không ai biết nó tồn tại.
+SHAPE_MARGIN_RATIO = 1.8
+
 # --- HSV (dự phòng khi ORB không đủ tự tin) ---
 # Amkor là khối XÁM nên nền trắng/xám dễ lọt vào dải của nó → ưu tiên màu chromatic
 # đạt ngưỡng, kể cả khi Amkor đếm nhiều pixel hơn.

@@ -113,7 +113,7 @@ debug/server.py      — Flask web debug UI (MJPEG stream, line sensor, classify
 scripts/             — install.sh, start.sh, robot.service (systemd auto-start)
 docs/                — CAC_BUOC_HOAT_DONG.md, PHAN_CUNG.md, ...
 tests/               — test_motion/lift/vision/smoke + test_logic/units/match_sim/tools
-                        (197 unit test). config_editor.save_config: ghi hằng số vào
+                        (219 unit test). config_editor.save_config: ghi hằng số vào
                         config.py cho 2 menu calibrate, TỪ CHỐI khi regex không khớp
 ```
 
@@ -267,6 +267,14 @@ tại điểm giao, line cắt ngang nằm dọc thanh cảm biến nên xoay ki
   `LINE_THRESHOLD` bằng `python3 -m tools.calibrate_line` (chạy trên Pi).
 - **Bù PWM**: `follow_line()` dùng ĐÚNG cùng `PWM_COMPENSATION`/`PWM_COMPENSATION_LEFT`
   như `forward()` — nếu lệch nhau thì đi thẳng và bám line sẽ khác nhau sau calibrate.
+  `turn_left/right()` cũng lấy hệ số theo ĐÚNG CHIỀU từng bánh (`*_LEFT_REV` cho bánh
+  trái lùi…) — `TURN_TIME` chỉ có MỘT hằng số cho cả 2 chiều nên hệ số lệch là một
+  chiều xoay quá, chiều kia thiếu, không cách nào chỉnh cho khớp cả hai.
+- **Kẹp tốc độ giữ ĐỘ CHÊNH 2 bánh** (`Motion._fit_to_range`): độ chênh mới tạo ra
+  góc lái, nên khi `base + correction > 100` phải trượt CẢ HAI bánh xuống, không kẹp
+  riêng. Kẹp riêng ở `SPEED_DEFAULT=80` làm mất 25% lực lái đúng lúc sai số lớn nhất
+  ((120,40)→(100,40) chênh 60 thay vì 80). Ở tốc độ 50 chưa vượt dải nên **lỗi này
+  chỉ hiện ra khi TĂNG tốc độ** — đúng đòn tối ưu số 1 của ngân sách 240s.
 - **Bản đồ line**: đã đo lại bằng quét pixel file in chuẩn (docs/SA_BAN.md mục 3).
 - **`back_to_intersection()` — lùi ra khỏi kệ**: rút khỏi điểm cuối bằng cách LÙI
   thay vì xoay 180° rồi tiến. Bỏ được **28/70 lần xoay** mỗi trận (~32s) — xoay là
@@ -283,8 +291,8 @@ tại điểm giao, line cắt ngang nằm dọc thanh cảm biến nên xoay ki
 
 | Script | Mục đích |
 |--------|----------|
-| `tests/test_logic.py` | 100 unit test — PC, không GPIO (bản đồ + mô phỏng route tới đúng chỗ + polarity + phân loại màu + reset + resume) |
-| `tests/test_units.py` | 62 unit test — PC (bám line, lift, ShapeMatcher, classify_pair) |
+| `tests/test_logic.py` | 114 unit test — PC, không GPIO (bản đồ + mô phỏng route tới đúng chỗ + polarity + phân loại màu + reset + resume) |
+| `tests/test_units.py` | 70 unit test — PC (bám line, lift, ShapeMatcher, classify_pair) |
 | `tests/test_match_sim.py` | Mô phỏng TRỌN trận với phần cứng giả lập: **13/13 kiện** (12 NV1 + hàng rời NV2), reset giữa trận, lỗi phần cứng, mất line giữa route — kiểm vị trí main.py tin tưởng có khớp vị trí thật không |
 | `tests/test_tools.py` | 21 unit test — PC (regex của `measure_phases` phải khớp chuỗi log CÓ THẬT trong source + round-trip; `dry_run` chạy hết được và mọi bước đi đều có line thật) |
 | `tools/show_routes.py` | In toàn bộ route sinh ra để đối chiếu tay trên sa bàn |

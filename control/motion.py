@@ -243,19 +243,25 @@ class Motion:
         self._left_rev.value = self._pct(speed * config.PWM_COMPENSATION_LEFT_REV)
         self._right_rev.value = self._pct(speed * config.PWM_COMPENSATION_REV)
 
+    # Xoay tại chỗ: MỖI bánh phải dùng hệ số bù ĐÚNG CHIỀU nó đang chạy — bánh trái
+    # lùi thì lấy *_LEFT_REV, bánh phải lùi thì lấy *_REV. Bản trước bỏ hẳn hệ số của
+    # bánh trái và luôn lấy hệ số TIẾN cho bánh phải: hiện tại 4 hệ số đều 0.95/1.00
+    # nên không thấy gì, nhưng TURN_TIME chỉ có MỘT hằng số dùng cho cả 2 chiều —
+    # calibrate xong mà 2 hệ số lệch nhau thì một chiều xoay quá, chiều kia xoay thiếu,
+    # và không cách nào chỉnh TURN_TIME cho khớp cả hai.
     def turn_left(self, speed: float = config.SPEED_TURN):
         logger.debug("Xoay trái - speed=%s", speed)
         self._left_fwd.value = 0
-        self._left_rev.value = self._pct(speed)
+        self._left_rev.value = self._pct(speed * config.PWM_COMPENSATION_LEFT_REV)
         self._right_rev.value = 0
         self._right_fwd.value = self._pct(speed * config.PWM_COMPENSATION)
 
     def turn_right(self, speed: float = config.SPEED_TURN):
         logger.debug("Xoay phải - speed=%s", speed)
         self._left_rev.value = 0
-        self._left_fwd.value = self._pct(speed)
+        self._left_fwd.value = self._pct(speed * config.PWM_COMPENSATION_LEFT)
         self._right_fwd.value = 0
-        self._right_rev.value = self._pct(speed * config.PWM_COMPENSATION)
+        self._right_rev.value = self._pct(speed * config.PWM_COMPENSATION_REV)
 
     def stop(self):
         logger.debug("Dừng")
@@ -337,6 +343,10 @@ class Motion:
             return None
 
         logger.info("Dò nhánh line phía %s...", "PHẢI" if direction == "right" else "TRÁI")
+        # Dò mất ~2-4s và nằm ngay đầu trận — thiếu chỗ kiểm này thì bấm nút reset
+        # trong lúc dò cũng phải chờ nó xoay/tiến/lùi xong mới phản ứng.
+        if self._aborted():
+            return None
         if direction == "right":
             self.turn_right_90()
         else:
@@ -361,6 +371,8 @@ class Motion:
                     break
             time.sleep(0.02)
 
+        if self._aborted():
+            return None
         # Lùi về đúng chỗ cũ rồi xoay trả lại tư thế ban đầu
         self.backward(config.PROBE_SPEED)
         time.sleep(config.PROBE_TRAVEL_TIME)
@@ -461,15 +473,24 @@ class Motion:
         self._escape_intersection(base_speed)
         start = time.time()
         lost_since = None
+        # Một lần đo siêu âm chập chờn là đủ để kết thúc advance và báo THÀNH CÔNG —
+        # đây là chỗ duy nhất mà nhiễu gây "thành công giả". Đòi 2 nhịp liên tiếp thấy
+        # gần mới tin (approach_shelf() phía sau lo nốt đoạn cuối, nên tốn thêm 1 nhịp
+        # 10ms là không đáng kể).
+        near_streak = 0
 
         while time.time() - start < timeout:
             if self._aborted():
                 return False
             dist = self.get_distance()
             if 0 <= dist <= config.APPROACH_SLOW_DISTANCE:
-                self.stop()
-                logger.info("Advance: đã tới gần mục tiêu (%.1fcm)", dist)
-                return True
+                near_streak += 1
+                if near_streak >= 2:
+                    self.stop()
+                    logger.info("Advance: đã tới gần mục tiêu (%.1fcm)", dist)
+                    return True
+            else:
+                near_streak = 0
 
             at_intersection, values = self.follow_line(base_speed)
             if at_intersection:
@@ -653,12 +674,37 @@ class Motion:
         đen nên sai số line là số rác, để PD chạy theo sẽ giật)."""
         self._drive(base_speed, base_speed, reverse)
 
+    @staticmethod
+    def _fit_to_range(left: float, right: float) -> tuple[float, float]:
+        """Đưa 2 tốc độ vào dải 0-100 mà GIỮ ĐỘ CHÊNH giữa chúng.
+
+        Độ chênh 2 bánh — chứ không phải trị số tuyệt đối — mới là thứ tạo ra góc lái.
+        Kẹp thẳng từng bánh sẽ ĂN MẤT độ chênh đúng lúc cần nó nhất: sai số lớn nhất
+        (|error|=2.5, LINE_KP=16 → correction 40) ở SPEED_DEFAULT=80 cho ra (120, 40),
+        kẹp thành (100, 40) — chênh 60 thay vì 80, mất 25% lực lái ở khúc gấp. Ở tốc
+        độ 50 hiện tại chưa bao giờ vượt dải nên không thấy; TĂNG tốc độ (đòn tối ưu
+        số 1 của ngân sách 240s) là kích hoạt ngay.
+
+        Trượt CẢ HAI bánh xuống/lên thay vì kẹp riêng → robot tự chậm lại ở khúc gấp
+        mà vẫn ngoặt đủ.
+        """
+        over = max(left, right) - 100.0
+        if over > 0:
+            left -= over
+            right -= over
+        under = -min(left, right)
+        if under > 0:
+            left += under
+            right += under
+        # Còn vượt dải sau khi trượt = độ chênh yêu cầu rộng hơn cả dải PWM (phải đảo
+        # chiều một bánh mới đạt) — đành kẹp.
+        return max(0.0, min(100.0, left)), max(0.0, min(100.0, right))
+
     def _drive(self, left_speed: float, right_speed: float, reverse: bool = False):
         """Đặt tốc độ 2 bánh (đã kẹp 0-100) kèm bù lệch — dùng ĐÚNG cùng hệ số như
         forward()/backward(), nếu không đi thẳng và bám line sẽ lệch nhau sau
         khi calibrate."""
-        left_speed = max(0, min(100, left_speed))
-        right_speed = max(0, min(100, right_speed))
+        left_speed, right_speed = self._fit_to_range(left_speed, right_speed)
         if reverse:
             self._left_fwd.value = 0
             self._right_fwd.value = 0
@@ -853,7 +899,15 @@ class Motion:
         timeout = config.CONTINUOUS_TIMEOUT_PER_HOP * count
         start = time.time()
         seen = 0
-        on_mark = False          # đang nằm trên vạch cắt, chưa ra khỏi
+        # Bắt đầu coi như ĐANG nằm trên vạch: lệnh ("forward", N) luôn khởi hành khi
+        # robot đứng NGAY TRÊN giao lộ (vừa dừng ở giao lộ trước, hoặc vừa xoay tại
+        # đó). Để False thì nhịp đọc đầu tiên thấy đủ mắt đen và đếm luôn CHÍNH cái
+        # giao lộ đang đứng → mọi chặng dừng sớm một giao lộ. Nhánh dừng-từng-cái
+        # tránh được nhờ _escape_intersection() chạy mù 0.3s trước mỗi chặng; ở đây
+        # dùng cờ thay vì chạy mù để không mất đi cái lợi về thời gian, và cách này
+        # đúng cho cả trường hợp KHÔNG đứng trên giao lộ (chặng đầu sau exit_start_zone:
+        # ít mắt đen → cờ tự hạ ngay nhịp đầu).
+        on_mark = True
         lost_since = None
 
         logger.info("Đi qua %d giao lộ (chạy liền, không dừng giữa chừng)", count)
