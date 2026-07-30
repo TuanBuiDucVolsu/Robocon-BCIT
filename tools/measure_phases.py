@@ -34,7 +34,7 @@ sys.path.insert(0, __file__.rsplit("/tools/", 1)[0])
 
 import config
 import navigation as nav
-from tools.estimate_time import lap_ops, seconds
+from tools.estimate_time import lap_ops, seconds, task2_seconds
 
 # Khớp đúng format ở main.py: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 LINE_RE = re.compile(
@@ -82,6 +82,10 @@ SPANS = [
          end=r"Phát hiện giao lộ \(active=",
          abort=(r"Không tìm thấy giao lộ", r"Timeout bám line",
                 r"Không tìm lại được line", r"Mất line quá")),
+    Span("reverse", "LÙI 1 khoảng giữa 2 giao lộ",
+         start=r"Lùi về giao lộ \d+/\d+",
+         end=r"Phát hiện giao lộ \(active=",
+         abort=(r"Lùi: (mất line|timeout)",)),
     Span("turn", "Xoay 90°",
          start=r"Xoay 90° (trái|phải)",
          end=NEXT_LINE, max_s=5.0),
@@ -135,6 +139,10 @@ ANOMALIES = [
 ]
 
 RESULT_PACKAGES = re.compile(r"Kiện hàng đã giao: (\d+)/(\d+)")
+# Kiện thứ 13 (hàng rời NV2, +30 điểm) — không đọc dòng này thì mọi tổng kết đều
+# thiếu đúng 30 điểm, vì dòng "Kiện hàng đã giao" chỉ đếm 12 kiện NV1.
+RESULT_TASK2 = re.compile(r"Nhiệm vụ 2: (HOÀN THÀNH|chưa xong)")
+RESULT_TOTAL = re.compile(r"TỔNG: (\d+)/(\d+) kiện — (-?\d+) điểm")
 RESULT_ELAPSED = re.compile(r"Thời gian: ([\d.]+)/(\d+)s")
 
 
@@ -211,7 +219,7 @@ def summarize(entries: list[Entry]) -> dict:
 # ============================================================
 
 DEFAULTS = {"forward": 2.5, "turn": 1.2, "advance": 2.0,
-            "approach": 3.0, "lift": None, "scan": 1.0}
+            "approach": 3.0, "lift": None, "scan": 1.0, "reverse": None}
 
 
 def _median(samples):
@@ -219,13 +227,27 @@ def _median(samples):
 
 
 def derive(measured: dict) -> tuple[dict, dict]:
-    """(6 tham số, nguồn của từng tham số) — thiếu số đo thì giữ mặc định."""
+    """(7 tham số, nguồn của từng tham số) — thiếu số đo thì giữ mặc định."""
     med = {k: _median(v[0]) for k, v in measured.items()}
     params, source = {}, {}
 
     for key in ("forward", "turn", "advance", "scan"):
         params[key] = med.get(key)
         source[key] = "đo" if params[key] is not None else "MẶC ĐỊNH"
+
+    # LÙI (lệnh "back") chạy ở REVERSE_SPEED, chậm hơn tiến — phải đo riêng, không
+    # được gộp vào "forward". Chưa có mẫu (lượt chạy chưa dùng tuyến nào phải lùi)
+    # thì SUY RA theo tỉ lệ tốc độ chứ không lấy bằng tiến, vì lấy bằng tiến là
+    # ngầm nói lùi nhanh như tiến — dự báo sẽ lạc quan.
+    params["reverse"] = med.get("reverse")
+    if params["reverse"] is not None:
+        source["reverse"] = "đo"
+    elif params["forward"] is not None:
+        ratio = config.SPEED_DEFAULT / max(config.REVERSE_SPEED, 1)
+        params["reverse"] = params["forward"] * ratio
+        source["reverse"] = f"suy ra = tiến × {ratio:.2f} (tỉ lệ tốc độ)"
+    else:
+        source["reverse"] = "MẶC ĐỊNH"
 
     # estimate_time gộp tiếp cận + lùi ra vào một tham số
     if med["approach"] is not None and med["retreat"] is not None:
@@ -246,7 +268,12 @@ def derive(measured: dict) -> tuple[dict, dict]:
         med["lift_pickup"] or 0.0, drop_cycle or 0.0)) if cycles else "MẶC ĐỊNH"
 
     for key, value in params.items():
-        if value is None:
+        if value is not None:
+            continue
+        if key == "reverse":
+            params[key] = DEFAULTS["forward"] * (config.SPEED_DEFAULT
+                                                 / max(config.REVERSE_SPEED, 1))
+        else:
             params[key] = (DEFAULTS[key] if DEFAULTS[key] is not None
                            else (config.LIFT_TIME_SHELF_1 + config.LIFT_TIME_SHELF_2))
     return params, source
@@ -262,7 +289,7 @@ class _Params:
 
 
 def project(params: dict) -> list[tuple]:
-    """[(tên kịch bản, kiện giao được, điểm, giây đã dùng, giây cần đủ 12 kiện)]"""
+    """[(tên kịch bản, kiện giao được /13, điểm, giây đã dùng, giây cần đủ NV1)]"""
     a = _Params(params)
     labels = list(nav.FACTORY_TERMINAL)
     pairs = list(itertools.combinations_with_replacement(labels, 2))
@@ -283,7 +310,15 @@ def project(params: dict) -> list[tuple]:
                 break
             used += lap
             delivered += 2
-        rows.append((title, delivered, delivered * 20, used, start + sum(laps)))
+        points = delivered * 20
+        # Kiện thứ 13: chỉ được làm khi đã xong 100% NV1 và còn đủ giờ
+        if delivered == config.TOTAL_PACKAGES_TASK1:
+            nv2 = pick(task2_seconds(a, lb) for lb in nav.FACTORY_TERMINAL)
+            if used + nv2 <= config.MATCH_DURATION:
+                used += nv2
+                delivered += 1
+                points += 30
+        rows.append((title, delivered, points, used, start + sum(laps)))
     return rows
 
 

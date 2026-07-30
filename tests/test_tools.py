@@ -22,7 +22,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import config
 from tools.measure_phases import (ANOMALIES, RESULT_ELAPSED, RESULT_PACKAGES,
-                                  SPANS, derive, parse_log, split_runs, summarize)
+                                  RESULT_TASK2, RESULT_TOTAL, SPANS, derive,
+                                  parse_log, project, split_runs, summarize)
 
 ROOT = os.path.join(os.path.dirname(__file__), "..")
 SOURCES = ["main.py", "control/motion.py", "control/lift.py", "vision/vision.py",
@@ -79,6 +80,27 @@ class TestPatternsMatchRealLogStrings(unittest.TestCase):
                 self.assertTrue(any(rx.search(m) for m in self.msgs),
                                 f"phụ trội {title!r} không khớp chuỗi log nào")
 
+    def test_task2_package_is_counted(self):
+        """Kiện thứ 13 (hàng rời NV2, +30đ) phải đọc được từ log.
+
+        Dòng "Kiện hàng đã giao" chỉ đếm 12 kiện NV1 — chỉ đọc dòng đó thì mọi tổng
+        kết đều thiếu đúng 30 điểm, mà log vẫn trông như bình thường.
+        """
+        text = _build_log()
+        self.assertTrue(RESULT_TASK2.search(text), "không đọc được kết quả NV2")
+        m = RESULT_TOTAL.search(text)
+        self.assertTrue(m, "không đọc được dòng TỔNG")
+        self.assertEqual((m.group(1), m.group(2), m.group(3)), ("13", "13", "270"))
+
+    def test_projection_includes_thirteenth_package(self):
+        """Dự báo phải tính được 13/13 kiện = 270đ khi thừa giờ, không dừng ở 12."""
+        fast = dict(forward=0.5, reverse=0.7, turn=0.3, advance=0.5,
+                    approach=0.6, lift=1.0, scan=0.3)
+        rows = project(fast)
+        best = min(rows, key=lambda r: r[3])
+        self.assertEqual(best[1], 13, f"thừa giờ mà vẫn chỉ 12 kiện: {best}")
+        self.assertEqual(best[2], 270)
+
     def test_result_patterns_match_source(self):
         for rx in (RESULT_PACKAGES, RESULT_ELAPSED):
             self.assertTrue(any(rx.search(m) for m in self.msgs), rx.pattern)
@@ -89,7 +111,8 @@ class TestPatternsMatchRealLogStrings(unittest.TestCase):
 # ============================================================
 
 TRUTH = dict(forward=1.80, turn=0.90, advance=1.50, approach=1.40,
-             retreat=0.80, pickup=4.00, drop=2.20, raise_=0.70, scan=0.60)
+             retreat=0.80, pickup=4.00, drop=2.20, raise_=0.70, scan=0.60,
+             reverse=2.60)      # lùi chậm hơn tiến — chạy ở REVERSE_SPEED
 
 
 def _build_log(laps: int = 3) -> str:
@@ -112,6 +135,12 @@ def _build_log(laps: int = 3) -> str:
             log("Xoay 90° phải")
             log("Dừng", TRUTH["turn"])
 
+    def back(n=1):
+        """Rút khỏi điểm cuối bằng cách LÙI — lệnh ("back", N)."""
+        for i in range(n):
+            log(f"Lùi về giao lộ {i + 1}/{n} (speed=35%)")
+            log("Phát hiện giao lộ (active=5)", TRUTH["reverse"])
+
     def dock():
         log("Bám line tới hết line (advance, speed=40%)")
         log("Advance: đã hết line — dừng tại điểm cuối", TRUTH["advance"])
@@ -124,19 +153,21 @@ def _build_log(laps: int = 3) -> str:
 
     log("========== BẮT ĐẦU STATE MACHINE ==========", 0.1)
     for _ in range(laps):
-        turn(2); go(2); dock()
+        go(2); dock()
         log("Nhận diện OK (lần 1): trái=samsung, phải=foxconn", TRUTH["scan"])
         log("Nhấc hàng tầng 1 — lần 1/2 (require_both=True)", 0.01)
         log("Xác nhận: CẢ 2 pallet trên càng", TRUTH["pickup"])
-        undock()
+        undock(); back()
         for side, other in (("TRÁI", "trái"), ("PHẢI", "phải")):
             turn(2); go(3); dock()
             log(f"Đặt hàng — chỉ càng {side}", 0.01)
             log(f"Xác nhận: pallet {other} đã rời càng", TRUTH["drop"])
             log(f"Nâng lại càng {other} (0.75s)", 0.01)
             log("Dừng", TRUTH["raise_"])
-            undock()
+            undock(); back()
     log("Kiện hàng đã giao: 12/12 (trong 6 lượt nâng)", 0.1)
+    log("Nhiệm vụ 2: HOÀN THÀNH (+30 điểm)")
+    log("TỔNG: 13/13 kiện — 270 điểm")
     log("Thời gian: 231.4/240s  (còn 8.6s)")
     return "\n".join(lines) + "\n"
 
@@ -163,6 +194,25 @@ class TestMeasureRoundTrip(unittest.TestCase):
                 samples, dropped = self.measured[spec.key]
                 self.assertTrue(samples, f"{spec.key}: không ghép được cặp mốc nào")
                 self.assertEqual(dropped, 0, f"{spec.key}: log sạch mà vẫn báo hỏng")
+
+    def test_reverse_is_measured_separately_from_forward(self):
+        """LÙI chạy ở REVERSE_SPEED nên chậm hơn tiến. Nếu tool lấy reverse = forward
+        thì mọi dự báo thời gian đều lạc quan ở mỗi tuyến rời kệ/nhà máy."""
+        self.assertAlmostEqual(self.params["reverse"], TRUTH["reverse"], places=1)
+        self.assertNotAlmostEqual(self.params["reverse"], self.params["forward"],
+                                  places=1)
+        self.assertEqual(self.source["reverse"], "đo")
+
+    def test_reverse_falls_back_to_speed_ratio_not_forward(self):
+        """Lượt chạy không có bước lùi nào → SUY RA theo tỉ lệ tốc độ, KHÔNG lấy
+        bằng forward (lấy bằng forward = ngầm nói lùi nhanh như tiến)."""
+        measured = dict(self.measured)
+        measured["reverse"] = ([], 0)
+        params, source = derive(measured)
+        ratio = config.SPEED_DEFAULT / config.REVERSE_SPEED
+        self.assertAlmostEqual(params["reverse"], params["forward"] * ratio, places=2)
+        self.assertGreater(params["reverse"], params["forward"])
+        self.assertIn("suy ra", source["reverse"])
 
     def test_derived_params_match_injected_truth(self):
         expected = {

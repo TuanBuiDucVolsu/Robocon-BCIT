@@ -138,6 +138,20 @@ LINE_KP = 16.0               # CHƯA calibrate thật
 LINE_KD = 6.5                # CHƯA calibrate thật
 INTERSECTION_THRESHOLD = 4   # Số mắt (/6) thấy line cùng lúc để nhận là giao lộ
 
+# --- Đếm giao lộ mà KHÔNG dừng lại ở từng cái ---
+# Chế độ mặc định dừng hẳn ở mỗi giao lộ rồi chạy mù 0.3s để thoát ra
+# (_escape_intersection). Kịch bản tệ nhất đi qua ~65 giao lộ nên riêng phần phanh +
+# chạy mù + tăng tốc lại đã ăn hàng chục giây — đây là đòn bẩy phần mềm lớn nhất cho
+# ngân sách 240s (xem tools.estimate_time).
+# ⚠️ MẶC ĐỊNH TẮT: nó đụng vào vòng lặp quan trọng nhất và CHƯA chạy trên robot thật.
+# Bật lên rồi chạy test_motion option 11 hai lần (tắt/bật), so số giao lộ đếm được và
+# thời gian. Đếm thiếu/thừa giao lộ nghĩa là phải chỉnh 2 ngưỡng dưới.
+CONTINUOUS_INTERSECTIONS = False
+# Trễ hai ngưỡng chống đếm trùng: đếm khi ≥ INTERSECTION_THRESHOLD mắt thấy line,
+# chỉ cho đếm cái kế sau khi đã tụt xuống ≤ ngưỡng này (tức đã ra khỏi vạch cắt).
+INTERSECTION_CLEAR_THRESHOLD = 2
+CONTINUOUS_TIMEOUT_PER_HOP = 15.0   # Giây tối đa cho mỗi khoảng giữa 2 giao lộ
+
 # Sa bàn có khoảng ĐỨT line thật ở ô xuất phát (~245mm). Mất line thì giữ lái và trôi
 # thẳng bấy nhiêu giây rồi mới coi là lạc và quét tìm lại. Ngắn quá → quay ngang giữa
 # khoảng đứt; dài quá → lạc thật mà vẫn chạy. Đo lại theo tốc độ thật.
@@ -242,6 +256,13 @@ EXIT_START_ALIGN_TIME = 0.4  # Giây bám line ngắn để căn giữa sau khi 
 
 MATCH_DURATION = 240
 SAFETY_MARGIN = 10           # Giây dừng sớm trước khi hết giờ
+
+# NV2 (30đ) chỉ được làm SAU khi xong 100% NV1, và tốn khoảng 20-25s cho cả chuyến
+# nhà máy → Kệ 4 → nhấc → liên hợp → thả. Dùng chung SAFETY_MARGIN (10s) thì robot
+# vẫn khởi hành khi còn 15s — chuyến chắc chắn không kịp, lại kết thúc trận trong
+# lúc đang chạy giữa sân thay vì đứng yên. Đo lại bằng tools.measure_phases rồi
+# chỉnh cho khớp thời gian NV2 thật.
+TASK2_MIN_TIME = 30          # Giây tối thiểu còn lại thì mới bắt đầu NV2
 TURN_TIME = 0.5              # ⚠️ CHƯA đo cho JGA25-370 — ƯU TIÊN #1, test_motion op.10
 
 # Mốc bắt đầu trận: lỗi giữa trận → thoát mã 1 → systemd restart → đọc lại file này

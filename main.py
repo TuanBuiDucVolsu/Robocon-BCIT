@@ -93,6 +93,7 @@ class Robot:
         self.current_tier = 1             # Tầng kệ hiện tại (1 = dưới, 2 = trên)
         self.match_start_time = 0.0
         self._tier_retries = 0            # Số lần đã thử lại tầng kệ hiện tại
+        self.task2_done = False           # Kiện hàng rời NV2 đã giao chưa (kiện thứ 13)
         self._side_detected = False       # Đã dò xong chiều trái/phải chưa (1 lần/trận)
 
         # Đo thời gian từng chặng — để biết 240s đang tiêu vào đâu
@@ -739,7 +740,13 @@ class Robot:
         """Đi từ nhà máy cuối cùng đã giao → kho hàng rời (kệ 4, dưới trái)."""
         logger.info("Nhiệm vụ 2: đi đến kho hàng rời (kệ 4) từ %s...",
                     navigation.describe(self.pose))
-        if not self.is_time_safe():
+        # Ngưỡng RIÊNG, không dùng chung SAFETY_MARGIN: cả chuyến NV2 tốn ~20-25s,
+        # khởi hành khi còn 15s là chắc chắn không kịp mà vẫn kết thúc trận giữa sân.
+        remaining = self.time_remaining()
+        if remaining < config.TASK2_MIN_TIME:
+            logger.warning("Bỏ NV2: còn %.0fs, cần tối thiểu %ds — đứng yên an toàn "
+                           "hơn chạy một chuyến chắc chắn không kịp",
+                           remaining, config.TASK2_MIN_TIME)
             return State.DONE
 
         if not self._goto(navigation.LOOSE_TERMINAL, "NV2 → kho hàng rời"):
@@ -748,16 +755,31 @@ class Robot:
         return State.TASK2_PICKUP
 
     def _handle_task2_pickup(self) -> State:
-        logger.info("Nhiệm vụ 2: nhấc hàng từ kho hàng rời...")
-        if not self._approach_shelf("TASK2_PICKUP"):
-            logger.error("Nhiệm vụ 2: không tiếp cận được kho rời — dừng")
-            return State.DONE
-        success = self.lift.pickup(shelf_level=1, require_both=False)
-        self._retreat_from_shelf("TASK2_PICKUP")
-        if not success:
-            logger.error("Nhiệm vụ 2: nâng thất bại — bỏ qua")
-            return State.DONE
-        return State.TASK2_NAVIGATE_TO_JOINT
+        """Nhấc kiện hàng rời (kiện thứ 13, +30 điểm).
+
+        CÓ thử lại — khác bản trước bỏ cuộc ngay lần đầu hỏng. NV1 được retry
+        MAX_TIER_RETRIES lần mà NV2 thì không, trong khi một lần thử lại chỉ tốn vài
+        giây và đây là 30 trong 270 điểm. Vẫn kiểm giờ trước mỗi lần để không thử
+        lại vô ích ở phút chót.
+        """
+        for attempt in range(1, config.MAX_TIER_RETRIES + 2):
+            logger.info("Nhiệm vụ 2: nhấc hàng từ kho hàng rời (lần %d)...", attempt)
+            if self.time_remaining() < config.TASK2_MIN_TIME / 2:
+                logger.warning("Bỏ NV2: còn %.0fs, không đủ để nhấc và giao",
+                               self.time_remaining())
+                return State.DONE
+
+            approached = self._approach_shelf("TASK2_PICKUP")
+            success = (self.lift.pickup(shelf_level=1, require_both=False)
+                       if approached else False)
+            self._retreat_from_shelf("TASK2_PICKUP")
+            if success:
+                return State.TASK2_NAVIGATE_TO_JOINT
+            logger.warning("Nhiệm vụ 2: lần %d thất bại (%s)", attempt,
+                           "không tiếp cận được" if not approached else "IR không thấy pallet")
+
+        logger.error("Nhiệm vụ 2: nhấc hàng rời thất bại — bỏ kiện thứ 13")
+        return State.DONE
 
     def _handle_task2_navigate_to_joint(self) -> State:
         logger.info("Nhiệm vụ 2: đi đến nhà máy liên hợp...")
@@ -772,6 +794,7 @@ class Robot:
         logger.info("Nhiệm vụ 2: đặt hàng tại nhà máy liên hợp...")
         self._approach_for_drop("TASK2_DROP")
         if self.lift.dropoff():
+            self.task2_done = True
             logger.info("NHIỆM VỤ 2 HOÀN THÀNH!")
         else:
             logger.error("NHIỆM VỤ 2: drop thất bại — IR vẫn thấy pallet hoặc lỗi cảm biến")
@@ -954,6 +977,7 @@ class Robot:
         self._phase_counts = {}
         self._reset_requested = False
         self._reset_count = 0
+        self.task2_done = False
         self.pose = navigation.START_POSE
         self.carried_labels = [None, None]
         self.delivery_queue = []
@@ -968,9 +992,20 @@ class Robot:
         logger.info("Kiện hàng đã giao: %d/%d (trong %d lượt nâng)",
                      self.packages_delivered, config.TOTAL_PACKAGES_TASK1,
                      self.pickup_count)
+        logger.info("Nhiệm vụ 2: %s",
+                    "HOÀN THÀNH (+30 điểm)" if self.task2_done else "chưa xong")
         if self._reset_count:
             logger.warning("Số lần RESET: %d (−%d điểm theo luật)",
                            self._reset_count, self._reset_count * 10)
+        # Tổng kết theo ĐIỂM, gồm cả kiện hàng rời NV2 (kiện thứ 13) và trừ reset —
+        # không có dòng này thì log báo "12/12" kể cả khi đã ăn thêm 30 điểm NV2,
+        # và tools.measure_phases đọc log sẽ tính thiếu đúng 30 điểm đó.
+        total_pkg = self.packages_delivered + (1 if self.task2_done else 0)
+        points = (self.packages_delivered * 20
+                  + (30 if self.task2_done else 0)
+                  - self._reset_count * 10)
+        logger.info("TỔNG: %d/%d kiện — %d điểm",
+                    total_pkg, config.TOTAL_PACKAGES_TASK1 + 1, points)
         self._log_phase_breakdown(elapsed)
 
     def _log_phase_breakdown(self, total: float):

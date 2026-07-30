@@ -412,11 +412,13 @@ class Motion:
         for step in route:
             action = step[0]
             if action == "forward":
-                # Đi từng giao lộ một để biết chính xác đã qua được mấy cái
-                for _ in range(max(0, step[1])):
-                    if not self.navigate_intersections(1):
-                        return False
-                    self.last_route_progress.append(("forward", 1))
+                # Gọi MỘT lần cho cả N giao lộ (chia nhỏ sẽ ép dừng ở từng cái, mất
+                # hết cái lợi của chế độ chạy liền); tiến độ ghi qua callback.
+                count = max(0, step[1])
+                if count and not self.navigate_intersections(
+                        count,
+                        on_reached=lambda: self.last_route_progress.append(("forward", 1))):
+                    return False
             elif action == "back":
                 # Rút khỏi kệ/nhà máy mà không xoay 180° — cũng đi từng giao lộ một
                 # để biết chính xác dừng ở đâu khi hỏng giữa chừng.
@@ -632,18 +634,31 @@ class Motion:
             logger.info("Phát hiện giao lộ (active=%d)", active_count)
             return True, values
 
+        self._steer(raw, base_speed, reverse)
+        return False, values
+
+    def _steer(self, raw: list[float], base_speed: float, reverse: bool = False):
+        """Một nhịp lái PD theo sai số line. Tách riêng để chế độ chạy liền
+        (_navigate_continuous) dùng chung đúng luật lái với follow_line()."""
         error = self.compute_line_error_analog(raw)
         derivative = error - self._last_error
         correction = config.LINE_KP * error + config.LINE_KD * derivative
         self._last_error = error
         if reverse:
             correction = -correction
+        self._drive(base_speed + correction, base_speed - correction, reverse)
 
-        left_speed = max(0, min(100, base_speed + correction))
-        right_speed = max(0, min(100, base_speed - correction))
+    def _drive_straight(self, base_speed: float, reverse: bool = False):
+        """Đi thẳng, KHÔNG lái — dùng khi đang cắt ngang vạch giao lộ (mọi mắt đều
+        đen nên sai số line là số rác, để PD chạy theo sẽ giật)."""
+        self._drive(base_speed, base_speed, reverse)
 
-        # Bù lệch tốc độ 2 bánh — phải dùng ĐÚNG cùng hệ số như forward()/backward(),
-        # nếu không đi thẳng và bám line sẽ lệch nhau sau khi calibrate.
+    def _drive(self, left_speed: float, right_speed: float, reverse: bool = False):
+        """Đặt tốc độ 2 bánh (đã kẹp 0-100) kèm bù lệch — dùng ĐÚNG cùng hệ số như
+        forward()/backward(), nếu không đi thẳng và bám line sẽ lệch nhau sau
+        khi calibrate."""
+        left_speed = max(0, min(100, left_speed))
+        right_speed = max(0, min(100, right_speed))
         if reverse:
             self._left_fwd.value = 0
             self._right_fwd.value = 0
@@ -654,8 +669,6 @@ class Motion:
             self._right_rev.value = 0
             self._left_fwd.value = self._pct(left_speed * config.PWM_COMPENSATION_LEFT)
             self._right_fwd.value = self._pct(right_speed * config.PWM_COMPENSATION)
-
-        return False, values
 
     def back_to_intersection(self, count: int = 1,
                              base_speed: float = config.REVERSE_SPEED,
@@ -676,6 +689,14 @@ class Motion:
         for i in range(count):
             if self._aborted():
                 return False
+            if i > 0:
+                # Đang ĐỨNG TRÊN giao lộ vừa đếm — phải lùi ra khỏi nó trước, nếu
+                # không follow_line() nhận lại chính giao lộ đó và đếm 2 lần.
+                # (Bộ tìm đường hiện chỉ sinh ("back", 1) nên nhánh này chưa dùng
+                # tới, nhưng để đúng thì hàm phải nhận count bất kỳ.)
+                self.backward(base_speed)
+                time.sleep(0.3)
+                self.stop()
             logger.info("Lùi về giao lộ %d/%d (speed=%d%%)", i + 1, count, base_speed)
             start = time.time()
             lost_since = None
@@ -776,9 +797,18 @@ class Motion:
         self.stop()
 
     def navigate_intersections(self, count: int,
-                               base_speed: float = config.SPEED_DEFAULT) -> bool:
+                               base_speed: float = config.SPEED_DEFAULT,
+                               on_reached=None) -> bool:
+        """Bám line qua `count` giao lộ.
+
+        on_reached: gọi sau MỖI giao lộ đếm được — caller dùng để ghi tiến độ mà
+            không phải chia nhỏ lời gọi (chia nhỏ sẽ ép dừng ở từng giao lộ, mất
+            hết cái lợi của chế độ chạy liền).
+        """
         if count <= 0:
             return True
+        if getattr(config, "CONTINUOUS_INTERSECTIONS", False):
+            return self._navigate_continuous(count, base_speed, on_reached)
 
         for i in range(count):
             if self._aborted():
@@ -789,8 +819,81 @@ class Motion:
                 logger.error("Không tìm thấy giao lộ %d/%d!", i + 1, count)
                 self.stop()
                 return False
+            if on_reached is not None:
+                on_reached()
         self.stop()
         return True
+
+    def _navigate_continuous(self, count: int, base_speed: float, on_reached=None) -> bool:
+        """Đếm giao lộ mà KHÔNG dừng ở từng cái — chỉ dừng ở giao lộ CUỐI.
+
+        Vì sao đáng làm: chế độ dừng-từng-cái tốn 0.3s chạy mù (_escape_intersection)
+        cộng phanh + tăng tốc lại cho MỖI giao lộ. Kịch bản tệ nhất đi qua ~65 giao
+        lộ, nên riêng phần đứng dậy ngồi xuống đã ăn hàng chục giây.
+
+        Chống đếm trùng bằng TRỄ HAI NGƯỠNG: đếm khi số mắt thấy line ≥
+        INTERSECTION_THRESHOLD, và chỉ cho phép đếm cái kế sau khi đã tụt xuống ≤
+        INTERSECTION_CLEAR_THRESHOLD (đã ra khỏi vạch cắt). Một ngưỡng đơn sẽ rung
+        quanh mép vạch và đếm một giao lộ thành nhiều.
+
+        Khi ĐANG cắt ngang vạch thì mọi mắt đều đen → sai số bám line vô nghĩa, nên
+        giữ thẳng lái cho tới lúc ra khỏi vạch thay vì để PD giật theo số rác.
+        """
+        clear_threshold = getattr(config, "INTERSECTION_CLEAR_THRESHOLD", 2)
+        timeout = config.CONTINUOUS_TIMEOUT_PER_HOP * count
+        start = time.time()
+        seen = 0
+        on_mark = False          # đang nằm trên vạch cắt, chưa ra khỏi
+        lost_since = None
+
+        logger.info("Đi qua %d giao lộ (chạy liền, không dừng giữa chừng)", count)
+        while time.time() - start < timeout:
+            if self._aborted():
+                return False
+
+            raw = self.read_line_sensor_raw()
+            values = LineSensor.digital_from_raw(raw)
+            active = sum(values)
+
+            if active >= config.INTERSECTION_THRESHOLD:
+                if not on_mark:
+                    on_mark = True
+                    seen += 1
+                    logger.info("Qua giao lộ %d/%d", seen, count)
+                    if on_reached is not None:
+                        on_reached()
+                    if seen >= count:
+                        self.stop()
+                        return True
+                lost_since = None
+                self._drive_straight(base_speed)      # cắt ngang: giữ thẳng lái
+                time.sleep(0.01)
+                continue
+
+            if active <= clear_threshold:
+                on_mark = False
+
+            if active == 0:
+                if lost_since is None:
+                    lost_since = time.time()
+                elif time.time() - lost_since > config.LINE_GAP_COAST_TIME:
+                    logger.warning("Chạy liền: mất line quá %.1fs — quét tìm lại",
+                                   config.LINE_GAP_COAST_TIME)
+                    if not self._recover_line():
+                        self.stop()
+                        logger.error("Không tìm lại được line!")
+                        return False
+                    lost_since = None
+            else:
+                lost_since = None
+
+            self._steer(raw, base_speed)
+            time.sleep(0.01)
+
+        self.stop()
+        logger.error("Chạy liền: timeout sau %.1fs, mới qua %d/%d giao lộ",
+                     timeout, seen, count)
+        return False
 
     # ----------------------------------------------------------
     # Cleanup

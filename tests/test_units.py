@@ -463,5 +463,136 @@ class TestFollowLineReverse(unittest.TestCase):
 
 
 
+class TestBackToIntersection(unittest.TestCase):
+    """Lệnh ("back", N) — lùi ra khỏi kệ/nhà máy, vẫn bám line."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.m = Motion()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.m.cleanup()
+
+    def setUp(self):
+        self.m.abort_check = None
+
+    def tearDown(self):
+        self.m.abort_check = None
+
+    def test_zero_count_is_noop(self):
+        self.assertTrue(self.m.back_to_intersection(0))
+
+    def test_abort_stops_immediately(self):
+        self.m.abort_check = lambda: True
+        self.assertFalse(self.m.back_to_intersection(1))
+
+    def test_counts_each_intersection_once(self):
+        """REGRESSION: sau khi đếm 1 giao lộ, robot đang ĐỨNG TRÊN nó — phải lùi ra
+        khỏi vùng đó trước, nếu không lần lặp sau nhận lại chính giao lộ đó."""
+        seen = {"n": 0}
+        real_follow = self.m.follow_line
+
+        def fake_follow(base_speed=0, reverse=False):
+            # luôn báo "đang ở trên giao lộ" — nếu hàm không thoát ra trước khi
+            # đếm tiếp thì 3 giao lộ sẽ được đếm xong tức thì mà robot không hề đi
+            seen["n"] += 1
+            return True, [1] * config.LINE_SENSOR_COUNT
+
+        moved = {"n": 0}
+        real_backward = self.m.backward
+        self.m.backward = lambda *a, **k: moved.__setitem__("n", moved["n"] + 1)
+        self.m.follow_line = fake_follow
+        try:
+            ok = self.m.back_to_intersection(3)
+        finally:
+            self.m.follow_line = real_follow
+            self.m.backward = real_backward
+
+        self.assertTrue(ok)
+        self.assertEqual(moved["n"], 2,
+                         "phải lùi thoát giao lộ trước mỗi lần đếm tiếp (n-1 lần)")
+
+
+class TestContinuousIntersections(unittest.TestCase):
+    """Chế độ đếm giao lộ KHÔNG dừng (config.CONTINUOUS_INTERSECTIONS)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.m = Motion()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.m.cleanup()
+
+    def setUp(self):
+        self._saved = getattr(config, "CONTINUOUS_INTERSECTIONS", False)
+        config.CONTINUOUS_INTERSECTIONS = True
+        self.m.abort_check = None
+        self.m._last_error = 0.0
+
+    def tearDown(self):
+        config.CONTINUOUS_INTERSECTIONS = self._saved
+        self.m.abort_check = None
+
+    def _feed(self, pattern):
+        """pattern: list số mắt thấy line cho từng nhịp đọc."""
+        n = config.LINE_SENSOR_COUNT
+        thr = config.LINE_THRESHOLD / 1023.0
+        seq = iter(pattern)
+
+        def fake_raw():
+            active = next(seq, 0)
+            return [thr * 0.5] * active + [1.0] * (n - active)
+        self.m.read_line_sensor_raw = fake_raw
+
+    def test_counts_each_mark_once_with_hysteresis(self):
+        """Vạch cắt kéo dài nhiều nhịp đọc → vẫn chỉ đếm MỘT giao lộ."""
+        on, off = config.INTERSECTION_THRESHOLD, 1
+        self._feed([off] * 3 + [on] * 5 + [off] * 3 + [on] * 5 + [off] * 20)
+        reached = []
+        self.assertTrue(self.m._navigate_continuous(2, 50, lambda: reached.append(1)))
+        self.assertEqual(len(reached), 2, "vạch dài bị đếm thành nhiều giao lộ")
+
+    def test_does_not_count_before_clearing(self):
+        """Chưa tụt xuống dưới ngưỡng CLEAR thì không được đếm cái kế."""
+        on = config.INTERSECTION_THRESHOLD
+        mid = config.INTERSECTION_CLEAR_THRESHOLD + 1   # vẫn còn trên vạch
+        self._feed([on] * 3 + [mid] * 3 + [on] * 3 + [1] * 30)
+        reached = []
+        # chỉ có 1 giao lộ THẬT → yêu cầu 2 phải timeout, không được tự đếm đủ
+        self.assertFalse(self.m._navigate_continuous(2, 50, lambda: reached.append(1)))
+        self.assertEqual(len(reached), 1)
+
+    def test_stops_only_at_last_intersection(self):
+        on, off = config.INTERSECTION_THRESHOLD, 1
+        self._feed([off] * 2 + [on] * 2 + [off] * 2 + [on] * 2 + [off] * 20)
+        stops = []
+        real_stop = self.m.stop
+        self.m.stop = lambda: (stops.append(1), real_stop())[1]
+        try:
+            self.assertTrue(self.m._navigate_continuous(2, 50))
+        finally:
+            self.m.stop = real_stop
+        self.assertEqual(len(stops), 1, "chỉ được dừng ở giao lộ CUỐI")
+
+    def test_abort_stops_immediately(self):
+        self._feed([1] * 50)
+        self.m.abort_check = lambda: True
+        self.assertFalse(self.m._navigate_continuous(3, 50))
+
+    def test_flag_off_uses_stop_at_each_mode(self):
+        """Cờ TẮT → vẫn đi qua nhánh cũ (dừng từng giao lộ)."""
+        config.CONTINUOUS_INTERSECTIONS = False
+        called = []
+        real = self.m._navigate_continuous
+        self.m._navigate_continuous = lambda *a, **k: called.append(1) or True
+        try:
+            self.m.navigate_intersections(0)      # count<=0 → về ngay
+        finally:
+            self.m._navigate_continuous = real
+        self.assertEqual(called, [])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

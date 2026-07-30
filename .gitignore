@@ -33,3 +33,6 @@ test_roi.jpg
 # OS
 .DS_Store
 Thumbs.db
+
+# Trang mô phỏng do tools/sim_ui.py sinh ra (khuôn là tools/sim_ui.html)
+sim_view.html

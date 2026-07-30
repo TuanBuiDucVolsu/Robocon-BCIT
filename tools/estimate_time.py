@@ -34,14 +34,19 @@ SHELF_NAMES = {0: "Kệ3", 1: "Kệ2", 2: "Kệ1"}
 
 
 def count_route(pose, goal):
-    """(số giao lộ, số lần xoay, số lệnh advance) của route pose→goal."""
+    """(giao lộ tiến, lần xoay, lệnh advance, giao lộ LÙI) của route pose→goal.
+
+    Đếm LÙI riêng vì lệnh ("back", N) chạy ở config.REVERSE_SPEED — chậm hơn tiến.
+    Gộp chung vào "tiến" là ngầm nói lùi nhanh bằng tiến → dự báo lạc quan.
+    """
     route, new_pose = nav.plan(pose, goal)
     if route is None:
         return None, pose
-    fwd = sum(c[1] for c in route if c[0] in ("forward", "back"))
+    fwd = sum(c[1] for c in route if c[0] == "forward")
+    rev = sum(c[1] for c in route if c[0] == "back")
     turns = sum(1 for c in route if c[0] in ("left", "right"))
     adv = sum(1 for c in route if c[0] == "advance")
-    return (fwd, turns, adv), new_pose
+    return (fwd, turns, adv, rev), new_pose
 
 
 def lap_ops(shelf, tier, label_l, label_r):
@@ -51,39 +56,59 @@ def lap_ops(shelf, tier, label_l, label_r):
     back = nav.SHELF_TERMINAL.get(next_shelf)
 
     def chain(order):
-        f = t = a = 0
+        f = t = a = r = 0
         p = pose
         drops = 0
         for label in order:
             got, p = count_route(p, nav.FACTORY_TERMINAL[label])
             if got is None:
                 return None
-            f += got[0]; t += got[1]; a += got[2]
+            f += got[0]; t += got[1]; a += got[2]; r += got[3]
             drops += 1
         if back:
             got, p = count_route(p, back)
             if got is None:
                 return None
-            f += got[0]; t += got[1]; a += got[2]
-        return f, t, a, drops
+            f += got[0]; t += got[1]; a += got[2]; r += got[3]
+        return f, t, a, drops, r
 
     if label_l == label_r:
         return chain([label_l])
     best = None
     for order in ((label_l, label_r), (label_r, label_l)):
         got = chain(order)
-        if got and (best is None or got[0] + got[1] * 2 < best[0] + best[1] * 2):
+        if got and (best is None or got[0] + got[4] + got[1] * 2
+                    < best[0] + best[4] + best[1] * 2):
             best = got
     return best
 
 
 def seconds(ops, a):
-    """ops = (giao lộ, xoay, advance, số lần thả) → giây."""
-    f, t, adv, drops = ops
-    return (f * a.forward + t * a.turn + adv * a.advance
+    """ops = (giao lộ tiến, xoay, advance, số lần thả, giao lộ lùi) → giây."""
+    f, t, adv, drops, rev = ops
+    return (f * a.forward + rev * getattr(a, "reverse", a.forward)
+            + t * a.turn + adv * a.advance
             + (adv + 1) * a.approach          # mỗi advance kèm 1 lần tiếp cận + lùi
             + drops * a.lift                  # mỗi lần thả = 1 chu kỳ hạ/nâng càng
             + a.lift + a.scan)                # + nâng lúc pickup + quét nhận diện
+
+
+def task2_seconds(a, last_factory: str) -> float:
+    """Giây cho trọn NV2: nhà máy cuối → Kệ 4 → nhấc → liên hợp → thả.
+
+    Tách riêng vì NV2 là kiện thứ 13 (+30 điểm) và chỉ được làm sau khi xong 100%
+    NV1 — bỏ qua nó là bỏ qua 30 trong 270 điểm tối đa.
+    """
+    total = 0.0
+    p = nav.pose_at(nav.FACTORY_TERMINAL[last_factory])
+    for goal in (nav.LOOSE_TERMINAL, nav.JOINT_TERMINAL):
+        got, p = count_route(p, goal)
+        if got is None:
+            return float("inf")
+        f, t, adv, rev = got
+        total += (f * a.forward + rev * getattr(a, "reverse", a.forward)
+                  + t * a.turn + adv * a.advance + a.approach)
+    return total + a.lift * 2      # nhấc hàng rời + hạ tại liên hợp
 
 
 def main():
@@ -94,15 +119,20 @@ def main():
     p.add_argument("--approach", type=float, default=3.0, help="giây tiếp cận + lùi ra")
     p.add_argument("--lift", type=float, default=None, help="giây nâng+hạ 1 lượt")
     p.add_argument("--scan", type=float, default=1.0, help="giây quét classify_pair")
+    p.add_argument("--reverse", type=float, default=None,
+                   help="giây LÙI 1 khoảng giao lộ (mặc định: tiến × tỉ lệ tốc độ)")
     a = p.parse_args()
     if a.lift is None:
         a.lift = (config.LIFT_TIME_SHELF_1 + config.LIFT_TIME_SHELF_2) / 2 * 2
+    if a.reverse is None:
+        a.reverse = a.forward * (config.SPEED_DEFAULT / max(config.REVERSE_SPEED, 1))
 
     print("=" * 72)
     print(" ƯỚC TÍNH THỜI GIAN TRẬN")
     print("=" * 72)
     print(f" {nav.board_summary()}")
-    print(f"\n Số đo đang dùng: giao lộ {a.forward}s | xoay {a.turn}s | advance {a.advance}s")
+    print(f"\n Số đo đang dùng: giao lộ {a.forward}s | LÙI {a.reverse:.2f}s | "
+          f"xoay {a.turn}s | advance {a.advance}s")
     print(f"                  tiếp cận+lùi {a.approach}s | nâng/hạ {a.lift}s | quét {a.scan}s")
     print(" (đo lại trên sa bàn rồi truyền vào bằng --forward/--turn/... cho đúng)")
 
@@ -123,13 +153,21 @@ def main():
                 secs, l, r, ops = pick(cand, key=lambda x: x[0])
                 total += secs
                 print(f"  {SHELF_NAMES[shelf]} tầng {tier}: {secs:6.1f}s  "
-                      f"({l}+{r})  [{ops[0]} giao lộ, {ops[1]} xoay, {ops[2]} advance]")
+                      f"({l}+{r})  [{ops[0]} tiến, {ops[4]} lùi, {ops[1]} xoay, "
+                      f"{ops[2]} advance]")
         exit_start = a.forward + a.approach + 2 * a.turn + a.advance   # thoát start + dò nửa sân
         grand = total + exit_start
-        print(f"  {'xuất phát + dò nửa sân':<20} {exit_start:6.1f}s")
-        print(f"  {'TỔNG NV1':<20} {grand:6.1f}s / {config.MATCH_DURATION}s"
-              f"   → {'✅ KỊP' if grand < config.MATCH_DURATION - config.SAFETY_MARGIN else '❌ KHÔNG KỊP'}"
-              f"  (còn {config.MATCH_DURATION - grand:.0f}s cho NV2)")
+        nv2 = pick(task2_seconds(a, lb) for lb in labels)
+        print(f"  {'xuất phát + dò nửa sân':<22} {exit_start:6.1f}s")
+        print(f"  {'TỔNG NV1 (12 kiện)':<22} {grand:6.1f}s / {config.MATCH_DURATION}s")
+        print(f"  {'NV2 (kiện thứ 13)':<22} {nv2:6.1f}s")
+        if grand + nv2 <= config.MATCH_DURATION:
+            print(f"  → ✅ ĐỦ 13/13 KIỆN = 270 điểm (còn {config.MATCH_DURATION-grand-nv2:.0f}s)")
+        elif grand <= config.MATCH_DURATION:
+            print(f"  → 12/13 kiện = 240đ. NV1 xong ở giây {grand:.0f}, cần xong trước "
+                  f"giây {config.MATCH_DURATION - nv2:.0f} mới với được NV2")
+        else:
+            print(f"  → ❌ KHÔNG kịp cả NV1 (thiếu {grand - config.MATCH_DURATION:.0f}s)")
 
     print("\n" + "=" * 72)
     print(" Cách dùng số này:")

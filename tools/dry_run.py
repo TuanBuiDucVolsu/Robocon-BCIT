@@ -59,13 +59,29 @@ class Recorder:
         self.a = a
         self.rows = []      # (loại, mô tả, giây, mốc tích luỹ, kiện NV1, có phải NV2)
         self.clock = 0.0
+        # Vị trí + hướng bám theo từng bước, để `tools.sim_ui` vẽ được robot chạy.
+        # Giữ Ở ĐÂY chứ không tính lại ở chỗ khác — vẽ sai chỗ so với bản in giấy
+        # thì mô phỏng thành vô dụng.
+        self.place, self.heading = nav.START_POSE
+        self.events = []    # [{kind, text, secs, clock, from, to, h0, h1, pkg, nv2}]
 
-    def add(self, kind, text, secs, packages=0, nv2=False):
+    def add(self, kind, text, secs, packages=0, nv2=False, moved_to=None, turned_to=None):
         self.clock += secs
         self.rows.append((kind, text, secs, self.clock, packages, nv2))
+        self.events.append({
+            "kind": kind, "text": text, "secs": round(secs, 3),
+            "clock": round(self.clock, 3), "pkg": packages, "nv2": nv2,
+            "from": self.place, "to": moved_to or self.place,
+            "h0": self.heading, "h1": turned_to if turned_to is not None else self.heading,
+        })
+        if moved_to is not None:
+            self.place = moved_to
+        if turned_to is not None:
+            self.heading = turned_to
 
     def route(self, pose, route):
         """Tách route thành từng lệnh rời để in cho dễ đối chiếu trên sa bàn."""
+        self.place, self.heading = pose      # main.pose là nguồn đúng
         place, heading = pose
         for cmd in route:
             if cmd[0] in ("forward", "back"):
@@ -74,18 +90,19 @@ class Recorder:
                     nxt = self._step(place, heading)
                     self.add("đi", f"{'LÙI' if lui else 'tiến'} 1 giao lộ "
                                    f"({place} → {nxt}){' — không xoay đầu' if lui else ''}",
-                             self.a.reverse if lui else self.a.forward)
+                             self.a.reverse if lui else self.a.forward, moved_to=nxt)
                     place = nxt
             elif cmd[0] in ("left", "right"):
                 heading = (nav.turn_left(heading) if cmd[0] == "left"
                            else nav.turn_right(heading))
                 self.add("xoay", f"xoay 90° {'TRÁI' if cmd[0] == 'left' else 'PHẢI'}"
                                  f"  (giờ quay {nav.HEADING_NAMES.get(heading, '?')})",
-                         self.a.turn)
+                         self.a.turn, turned_to=heading)
             elif cmd[0] == "advance":
                 term = next((t for t, (n, h, _) in nav.TERMINALS.items()
                              if n == place and h == heading), "?")
-                self.add("đi", f"bám line tới HẾT line  ({place} → {term})", self.a.advance)
+                self.add("đi", f"bám line tới HẾT line  ({place} → {term})",
+                         self.a.advance, moved_to=term)
                 place = term
 
     @staticmethod

@@ -1,0 +1,409 @@
+<title>Mô phỏng robot Bảng O2 — sa bàn Robocon Bắc Ninh</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --mat: #f4f2ec;          /* nền hiflex sa bàn */
+    --ground: #eceae3;
+    --panel: #ffffff;
+    --line: #171a1f;         /* line đen in trên sa bàn */
+    --ink: #171a1f;
+    --muted: #69727e;
+    --hair: #d8d5cc;
+    --trace: #00849a;        /* mắt xanh của mascot — chỉ dùng cho robot + vệt đi */
+    --trace-soft: #00849a26;
+    --warn: #b4501a;
+    --grid: #00000010;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --mat: #191e25; --ground: #0f1216; --panel: #151a20;
+      --line: #dfdcd4; --ink: #e8e6e1; --muted: #8b95a3; --hair: #2a323c;
+      --trace: #2ad4ee; --trace-soft: #2ad4ee22; --warn: #ff9a5c;
+      --grid: #ffffff0d;
+    }
+  }
+  :root[data-theme="dark"] {
+    --mat: #191e25; --ground: #0f1216; --panel: #151a20;
+    --line: #dfdcd4; --ink: #e8e6e1; --muted: #8b95a3; --hair: #2a323c;
+    --trace: #2ad4ee; --trace-soft: #2ad4ee22; --warn: #ff9a5c; --grid: #ffffff0d;
+  }
+  :root[data-theme="light"] {
+    --mat: #f4f2ec; --ground: #eceae3; --panel: #ffffff;
+    --line: #171a1f; --ink: #171a1f; --muted: #69727e; --hair: #d8d5cc;
+    --trace: #00849a; --trace-soft: #00849a26; --warn: #b4501a; --grid: #00000010;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font: 15px/1.5 ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+          font-variant-numeric: tabular-nums; }
+  .lbl { font-size: 11px; letter-spacing: .09em; text-transform: uppercase;
+         color: var(--muted); font-weight: 600; }
+
+  header {
+    padding: 18px 22px 14px; border-bottom: 1px solid var(--hair);
+    display: flex; flex-wrap: wrap; gap: 4px 20px; align-items: baseline;
+  }
+  h1 { margin: 0; font-size: 20px; font-weight: 650; letter-spacing: -.01em;
+       text-wrap: balance; }
+  header .sub { font-size: 12.5px; color: var(--muted); }
+
+  main { display: grid; grid-template-columns: minmax(0,1fr) 340px; gap: 20px;
+         padding: 20px 22px 28px; align-items: start; }
+  @media (max-width: 940px) { main { grid-template-columns: minmax(0,1fr); } }
+
+  .stage { background: var(--mat); border: 1px solid var(--hair); border-radius: 3px;
+           padding: 10px; }
+  canvas { width: 100%; height: auto; display: block; }
+
+  .transport { display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+               margin-top: 12px; }
+  button {
+    font: inherit; font-size: 13px; padding: 7px 14px; border-radius: 2px;
+    border: 1px solid var(--hair); background: var(--panel); color: var(--ink);
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--trace); }
+  button:focus-visible { outline: 2px solid var(--trace); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: var(--trace); border-color: var(--trace);
+                                color: #fff; }
+  .pc { padding: 4px 7px; font-size: 11.5px; }
+  input[type=range] { flex: 1 1 200px; min-width: 140px; accent-color: var(--trace); }
+
+  .rail { display: flex; flex-direction: column; gap: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--hair); border-radius: 3px;
+          padding: 14px 15px; }
+  .stat { display: flex; justify-content: space-between; align-items: baseline;
+          gap: 12px; padding: 5px 0; }
+  .stat + .stat { border-top: 1px solid var(--hair); }
+  .stat b { font-weight: 650; font-size: 19px; }
+  .big { font-size: 30px; font-weight: 650; letter-spacing: -.02em; }
+  .over { color: var(--warn); }
+
+  .steps { max-height: 46vh; overflow-y: auto; border: 1px solid var(--hair);
+           border-radius: 3px; background: var(--panel); }
+  .step { display: grid; grid-template-columns: 34px 1fr auto; gap: 8px;
+          padding: 5px 10px; font-size: 12.5px; border-bottom: 1px solid var(--hair);
+          color: var(--muted); }
+  .step:last-child { border-bottom: 0; }
+  .step.on { background: var(--trace-soft); color: var(--ink); }
+  .step.past { color: var(--ink); }
+  .step .n { color: var(--muted); }
+  .cut { padding: 6px 10px; font-size: 11px; letter-spacing: .06em;
+         text-transform: uppercase; color: var(--warn);
+         border-top: 2px solid var(--warn); border-bottom: 1px solid var(--hair);
+         background: color-mix(in srgb, var(--warn) 8%, transparent); }
+
+  .scen { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .scen th { text-align: left; font-size: 10.5px; letter-spacing: .08em;
+             text-transform: uppercase; color: var(--muted); font-weight: 600;
+             padding-bottom: 6px; }
+  .scen td { padding: 3px 0; border-top: 1px solid var(--hair); }
+  .note { font-size: 12px; color: var(--muted); margin: 10px 0 0; }
+  .note b { color: var(--ink); font-weight: 600; }
+</style>
+
+<header>
+  <h1>Mô phỏng robot Bảng O2</h1>
+  <span class="sub mono" id="summary"></span>
+</header>
+
+<main>
+  <section>
+    <div class="stage">
+      <canvas id="c" width="1000" height="1000" aria-label="Sa bàn nửa sân, robot chạy theo route"></canvas>
+    </div>
+    <div class="transport">
+      <button id="play" aria-pressed="false">▶ Chạy</button>
+      <button id="rew">⏮ Về đầu</button>
+      <input type="range" id="scrub" min="0" max="1000" value="0" aria-label="Tua thời gian">
+      <span class="mono" id="tcode">0.0s</span>
+      <button class="sp" data-s="1" aria-pressed="true">1×</button>
+      <button class="sp" data-s="4" aria-pressed="false">4×</button>
+      <button class="sp" data-s="12" aria-pressed="false">12×</button>
+    </div>
+    <p class="note" id="stepnow">&nbsp;</p>
+  </section>
+
+  <aside class="rail">
+    <div class="card">
+      <div class="lbl">Đồng hồ trận</div>
+      <div class="big mono" id="clock">0.0<span style="font-size:16px;color:var(--muted)">/240s</span></div>
+      <div class="stat"><span class="lbl">Trạng thái</span><b class="mono" id="state" style="font-size:13px">—</b></div>
+      <div class="stat"><span class="lbl">Kiện đã giao</span><b class="mono" id="pkg">0/13</b></div>
+      <div class="stat"><span class="lbl">Tốc độ robot</span>
+        <span id="spdbtns" style="display:flex;gap:4px">
+          <button class="pc" data-p="50">50%</button>
+          <button class="pc" data-p="65">65%</button>
+          <button class="pc" data-p="80">80%</button>
+          <button class="pc" data-p="100">100%</button>
+        </span></div>
+      <div class="stat"><span class="lbl">Tổng thời gian</span><b class="mono" id="total">—</b></div>
+      <div class="stat"><span class="lbl">Điểm</span><b class="mono" id="pts">0</b></div>
+    </div>
+
+    <div class="card">
+      <div class="lbl" style="margin-bottom:8px">Các bước</div>
+      <div class="steps" id="log"></div>
+    </div>
+
+    <div class="card">
+      <table class="scen">
+        <thead><tr><th>Kệ / tầng</th><th>Trái</th><th>Phải</th></tr></thead>
+        <tbody id="scen"></tbody>
+      </table>
+      <p class="note">BTC xếp kiện <b>ngẫu nhiên</b> mỗi trận — đây chỉ là một khả năng.
+        Đổi bằng <span class="mono">--scenario</span>.</p>
+    </div>
+  </aside>
+</main>
+
+<script>
+const DATA = /*__DATA__*/null;
+
+// File này là KHUÔN, chưa có dữ liệu. Mở thẳng nó thì không chạy được — phải sinh
+// bản có dữ liệu bằng `python3 -m tools.sim_ui`. Không có nhánh này thì mở nhầm sẽ
+// ra màn hình trắng không nói gì.
+if (!DATA) {
+  document.querySelector("main").innerHTML =
+    '<div class="card" style="grid-column:1/-1">' +
+    '<div class="lbl">Chưa có dữ liệu</div>' +
+    '<p>Đây là <b>khuôn</b> trang, không mở trực tiếp được. Sinh bản chạy được:</p>' +
+    '<pre class="mono" style="background:var(--ground);padding:12px;border-radius:3px;' +
+    'overflow-x:auto">cd ~/Robocon-BCIT\npython3 -m tools.sim_ui\n# → sim_view.html' +
+    '\n\n# đổi tốc độ / kịch bản:\npython3 -m tools.sim_ui --speed 80' +
+    '</pre><p class="note">Rồi mở <b>sim_view.html</b> bằng trình duyệt.</p></div>';
+  document.querySelector("header .sub").textContent = "khuôn — chưa có dữ liệu";
+  throw new Error("sim_ui.html là khuôn: chạy python3 -m tools.sim_ui để sinh trang");
+}
+
+const B = DATA.board, S = DATA.steps, LIMIT = DATA.limit;
+
+const el0 = document.getElementById("summary");
+if (el0) el0.textContent = DATA.summary.split("\n")[0];
+// Đặt nội dung an toàn: thiếu một phần tử thì bỏ qua ô đó chứ KHÔNG làm chết cả
+// trang (trước đây một id viết hụt làm canvas không kịp vẽ, màn hình trắng trơn).
+function put(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text; else console.warn("thiếu phần tử #" + id);
+  return el;
+}
+const SP = DATA.speed || { run: 50, ref: 50 };
+
+// Quy đổi tốc độ NGAY TRÊN TRANG. Chỉ nhân lại giây của các bước ĐI — thứ tự và nội
+// dung các bước KHÔNG đổi theo tốc độ, nên đây là số học hiển thị chứ không phải
+// logic điều hướng (logic vẫn chỉ có một chỗ: main.py + navigation.py).
+S.forEach(s => { s.base = s.secs; });
+let SPEED = SP.run, TOTAL = 0;
+
+function applySpeed(pct) {
+  SPEED = pct;
+  const k = SP.ref / pct;
+  let c = 0;
+  S.forEach(s => { s.secs = s.base * (s.spd ? k : 1); c += s.secs; s.clock = c; });
+  TOTAL = c;
+  document.querySelectorAll(".pc").forEach(b =>
+    b.setAttribute("aria-pressed", String(+b.dataset.p === pct)));
+  put("total", TOTAL.toFixed(0) + "s");
+  buildLog();
+  if (t > TOTAL) t = TOTAL;
+  draw();
+}
+document.getElementById("scen").innerHTML = DATA.scenario.map(r =>
+  `<tr><td>${r.shelf} · T${r.tier}</td><td>${r.left}</td><td>${r.right}</td></tr>`).join("");
+
+/* ---------- vẽ sa bàn ---------- */
+const cv = document.getElementById("c"), ctx = cv.getContext("2d");
+let PAD = 40, SC = 1;
+
+function fit() {
+  const w = cv.parentElement.clientWidth - 20;
+  const dpr = window.devicePixelRatio || 1;
+  cv.style.width = w + "px";
+  cv.width = w * dpr; cv.height = w * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  SC = (w - PAD * 2) / B.size;
+  draw();
+}
+const X = mm => PAD + mm * SC, Y = mm => PAD + mm * SC;
+
+function css(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+
+function board() {
+  const w = cv.clientWidth;
+  ctx.clearRect(0, 0, w, w);
+
+  // mép sa bàn
+  ctx.strokeStyle = css("--hair"); ctx.lineWidth = 1;
+  ctx.strokeRect(X(0), Y(0), B.size * SC, B.size * SC);
+
+  // vòng tròn ROBOCON (chỗ làm đứt hàng R2)
+  ctx.beginPath();
+  ctx.arc(X(B.circle.cx), Y(B.circle.cy), B.circle.r * SC, 0, 7);
+  ctx.strokeStyle = css("--hair"); ctx.lineWidth = 1.5; ctx.stroke();
+
+  // ô xuất phát
+  ctx.fillStyle = css("--grid");
+  ctx.fillRect(X(B.start.x - B.start.w / 2), Y(B.start.y - B.start.h / 2),
+               B.start.w * SC, B.start.h * SC);
+
+  // khu nhà máy
+  B.zones.forEach(z => {
+    ctx.fillStyle = z.color + "1f";
+    ctx.fillRect(X(z.x), Y(z.y), z.w * SC, z.h * SC);
+    ctx.strokeStyle = z.color; ctx.lineWidth = 2;
+    ctx.strokeRect(X(z.x), Y(z.y), z.w * SC, z.h * SC);
+    ctx.fillStyle = z.color;
+    ctx.font = "600 10px ui-sans-serif, system-ui";
+    ctx.textAlign = "center";
+    ctx.fillText(z.label, X(z.x + z.w / 2), Y(z.y + z.h / 2) + 3);
+  });
+
+  // giá kệ
+  B.shelves.forEach(s => {
+    ctx.fillStyle = css("--hair");
+    ctx.fillRect(X(s.x), Y(s.y), s.w * SC, s.h * SC);
+    ctx.fillStyle = css("--muted");
+    ctx.font = "600 10px ui-sans-serif, system-ui"; ctx.textAlign = "center";
+    ctx.fillText(s.label, X(s.x + s.w / 2), Y(s.y + s.h / 2) + 3);
+  });
+
+  // đường line
+  ctx.strokeStyle = css("--line"); ctx.lineWidth = Math.max(2, 22 * SC);
+  ctx.lineCap = "butt";
+  B.segments.forEach(([x0, y0, x1, y1]) => {
+    ctx.beginPath(); ctx.moveTo(X(x0), Y(y0)); ctx.lineTo(X(x1), Y(y1)); ctx.stroke();
+  });
+
+  // chỗ line ĐỨT — vẽ nét đứt để đối chiếu với sa bàn thật
+  ctx.setLineDash([4, 5]); ctx.lineWidth = 1.5; ctx.strokeStyle = css("--warn");
+  B.gaps.forEach(g => {
+    ctx.beginPath(); ctx.moveTo(X(g.x0), Y(g.y)); ctx.lineTo(X(g.x1), Y(g.y)); ctx.stroke();
+    ctx.fillStyle = css("--warn"); ctx.font = "10px ui-monospace, monospace";
+    ctx.textAlign = "center";
+    ctx.fillText(g.label, X((g.x0 + g.x1) / 2), Y(g.y) - 8);
+  });
+  ctx.setLineDash([]);
+}
+
+/* ---------- trạng thái phát ---------- */
+let t = 0, playing = false, speed = 1, raf = 0, last = 0;
+
+function at(time) {
+  let i = 0;
+  while (i < S.length - 1 && S[i].clock < time) i++;
+  const s = S[i], t0 = s.clock - s.secs;
+  const k = s.secs > 0 ? Math.max(0, Math.min(1, (time - t0) / s.secs)) : 1;
+  return { i, s, k };
+}
+
+function draw() {
+  board();
+  const { i, s, k } = at(t);
+
+  // vệt đã đi
+  ctx.strokeStyle = css("--trace"); ctx.globalAlpha = .25;
+  ctx.lineWidth = Math.max(1.5, 8 * SC); ctx.lineCap = "round";
+  ctx.beginPath();
+  for (let j = 0; j <= i; j++) {
+    ctx.moveTo(X(S[j].x0), Y(S[j].y0));
+    ctx.lineTo(X(S[j].x1), Y(S[j].y1));
+  }
+  ctx.stroke(); ctx.globalAlpha = 1;
+
+  // robot
+  const x = X(s.x0 + (s.x1 - s.x0) * k), y = Y(s.y0 + (s.y1 - s.y0) * k);
+  let a0 = s.a0, a1 = s.a1, d = ((a1 - a0 + 540) % 360) - 180;
+  const ang = (a0 + d * k) * Math.PI / 180;
+  const r = Math.max(9, 130 * SC);
+
+  ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
+  ctx.fillStyle = css("--trace");
+  ctx.beginPath();
+  ctx.moveTo(r, 0); ctx.lineTo(-r * .7, r * .72);
+  ctx.lineTo(-r * .35, 0); ctx.lineTo(-r * .7, -r * .72);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+
+  // đồng hồ + số liệu
+  const over = t > LIMIT;
+  document.getElementById("clock").innerHTML =
+    `${t.toFixed(1)}<span style="font-size:16px;color:var(--muted)">/${LIMIT}s</span>`;
+  document.getElementById("clock").classList.toggle("over", over);
+  put("state", s.state || "—");
+  put("pkg", `${s.pkg + (s.nv2 ? 1 : 0)}/13`);
+  put("pts", s.points);
+  put("tcode", t.toFixed(1) + "s");
+  document.getElementById("scrub").value = Math.round(t / TOTAL * 1000);
+  document.getElementById("stepnow").innerHTML =
+    `<b>${i + 1}.</b> ${s.text}` + (over ? ' <b class="over">— quá 240s</b>' : "");
+
+  document.querySelectorAll(".step").forEach((el, j) => {
+    el.classList.toggle("on", j === i);
+    el.classList.toggle("past", j < i);
+  });
+  const cur = document.querySelectorAll(".step")[i];
+  if (cur) cur.scrollIntoView({ block: "nearest" });
+}
+
+/* ---------- danh sách bước ---------- */
+const log = document.getElementById("log");
+function buildLog() {
+  let html = "", cut = false, lastFit = null;
+  S.forEach((s, j) => {
+    if (!cut && s.clock > LIMIT) {
+      cut = true;
+      const p = lastFit ? lastFit.pkg + (lastFit.nv2 ? 1 : 0) : 0;
+      const pts = lastFit ? lastFit.points : 0;
+      html += `<div class="cut">hết 240 giây — được ${p}/13 kiện, ${pts} điểm</div>`;
+    }
+    if (!cut) lastFit = s;
+    html += `<div class="step"><span class="n mono">${j + 1}</span>` +
+            `<span>${s.text}</span><span class="mono">${s.clock.toFixed(0)}s</span></div>`;
+  });
+  if (!cut) html += `<div class="cut" style="color:var(--trace);border-color:var(--trace)">` +
+                    `xong trọn kịch bản trong 240 giây</div>`;
+  log.innerHTML = html;
+}
+
+/* ---------- điều khiển ---------- */
+const btn = document.getElementById("play");
+function tick(ts) {
+  if (!playing) return;
+  if (!last) last = ts;
+  t = Math.min(TOTAL, t + (ts - last) / 1000 * speed);
+  last = ts;
+  draw();
+  if (t >= TOTAL) { playing = false; btn.textContent = "▶ Chạy"; btn.setAttribute("aria-pressed", "false"); return; }
+  raf = requestAnimationFrame(tick);
+}
+btn.onclick = () => {
+  playing = !playing;
+  btn.textContent = playing ? "⏸ Dừng" : "▶ Chạy";
+  btn.setAttribute("aria-pressed", String(playing));
+  last = 0;
+  if (playing) raf = requestAnimationFrame(tick);
+};
+document.getElementById("rew").onclick = () => { t = 0; draw(); };
+document.getElementById("scrub").oninput = e => {
+  t = e.target.value / 1000 * TOTAL; draw();
+};
+document.querySelectorAll(".sp").forEach(b => b.onclick = () => {
+  speed = +b.dataset.s;
+  document.querySelectorAll(".sp").forEach(o =>
+    o.setAttribute("aria-pressed", String(o === b)));
+});
+
+document.querySelectorAll(".pc").forEach(b =>
+  b.onclick = () => applySpeed(+b.dataset.p));
+
+addEventListener("resize", fit);
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", draw);
+new MutationObserver(draw).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+applySpeed(SPEED);
+fit();
+</script>

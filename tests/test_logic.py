@@ -743,6 +743,11 @@ class TestMotionRoute(unittest.TestCase):
     def setUp(self):
         self.motion = Motion()
 
+    def tearDown(self):
+        # Phải đóng tường minh: không đóng thì chân GPIO còn bị giữ và test sau
+        # báo GPIOPinInUse — trước đây chỉ chạy được nhờ GC dọn kịp, không tất định.
+        self.motion.cleanup()
+
     def test_execute_route_empty_is_success(self):
         """Route rỗng = đã ở đích (vd lấy tầng 2 cùng kệ), không phải lỗi."""
         self.assertTrue(self.motion.execute_route([]))

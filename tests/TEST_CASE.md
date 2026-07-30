@@ -7,6 +7,10 @@
 | **Smoke tích hợp** | `test_smoke.py` | Pi + **sa bàn thật** | ✅ |
 | **Diễn tập thi đấu** | [DIEN_TAP.md](DIEN_TAP.md) | Pi + sa bàn + đồng hồ | ✅ |
 
+> **Bắt đầu test từ đâu?** → [LO_TRINH_TEST.md](LO_TRINH_TEST.md): danh sách đánh số
+> theo đúng thứ tự phải làm, từ chạy pytest trên PC đến diễn tập thi đấu. File dưới
+> đây là tra cứu từng menu; file đó là lộ trình.
+
 > File này kiểm **từng phần chạy đúng không**. [DIEN_TAP.md](DIEN_TAP.md) kiểm **có ăn
 > được điểm trong 240 giây thật không** — gồm ngân sách thời gian, kịch bản xếp kiện
 > xấu nhất, diễn tập reset/sự cố, pin tụt, ánh sáng sân.
@@ -18,12 +22,12 @@
 ## A. Test tự động (PC, không cần GPIO)
 
 ```bash
-python3 -m pytest tests/ -q          # tất cả — 124 test + 100 subtest
+python3 -m pytest tests/ -q          # tất cả — 176 test + 230 subtest
 python3 -m unittest tests.test_logic -v
 python3 -m unittest tests.test_match_sim -v
 ```
 
-Kết quả mong đợi: `124 passed`. Cảnh báo `PinFactoryFallback` là **bình thường** trên PC.
+Kết quả mong đợi: `176 passed`. Cảnh báo `PinFactoryFallback` là **bình thường** trên PC.
 
 ### `test_units.py` — logic thuần từng module
 
@@ -71,6 +75,7 @@ một lần là fail.
 | Nửa sân thứ tự nhà máy đảo | Vẫn 12/12 |
 | Cấu hình chiều sai + probe đúng | Tự nạp lại bản đồ, vẫn 12/12 |
 | **Reset giữa trận** | Về ô xuất phát, chạy tiếp, không lấy lại kiện đã lấy |
+| **Kiện thứ 13 (NV2)** | Giao đủ 13/13; không làm NV2 khi NV1 chưa xong; thử lại khi nhấc hỏng; hết giờ thì bỏ |
 
 ---
 
@@ -108,6 +113,9 @@ sudo systemctl stop robot        # tránh tranh chấp GPIO
 | 12 | Shared SPI: line + IR | Bus dùng chung |
 | 13 | **Tự dò nửa sân** | `probe_side_branch` tại giao lộ Kệ 3 |
 | 14 | **Vượt khoảng đứt line** | Calibrate `LINE_GAP_COAST_TIME` |
+| 15 | Lùi ra khỏi kệ (`back`) | Kiểm dấu PD khi lùi TRƯỚC khi tin dùng |
+| 16 | **A/B đếm giao lộ: dừng vs chạy liền** | Đòn bẩy 240s lớn nhất — đo rồi mới bật |
+| 17 | **Giới hạn tốc độ** | Đo trước khi tăng `SPEED_DEFAULT` — trượt giao lộ là lỗi im lặng |
 | d | Chẩn đoán motor từng bánh | Bánh nào ngược chiều |
 | e | Xung encoder real-time | Kiểm dây/kênh encoder |
 | f | **Calibrate `PWM_COMPENSATION`** | Tự tính & lưu |
@@ -189,7 +197,7 @@ python3 -m tools.test_right_wheel    # cô lập lỗi bánh chạy mãi sau sto
 
 ## E. Thứ tự khi lên sân
 
-**0. Trước khi đi:** `python3 -m pytest tests/ -q` trên PC → phải `124 passed`.
+**0. Trước khi đi:** `python3 -m pytest tests/ -q` trên PC → phải `176 passed`.
 
 **1. Bản đồ — làm TRƯỚC, mọi thứ khác dựa lên nó**
 ```bash
@@ -203,7 +211,12 @@ tắc theo kết quả bốc thăm, dán nhãn.
 
 **3. Cảm biến line** — `tools.calibrate_line` → `test_motion` #5 #4.
 
-**4. Động cơ** — `test_motion` #10 (`TURN_TIME`) → #f (`PWM_COMPENSATION`) → #7 → #14.
+**4. Động cơ** — `test_motion` #10 (`TURN_TIME`) → #f (`PWM_COMPENSATION`) → #7 → #14 → #15.
+
+**4b. Tăng tốc (ĐÒN BẨY LỚN NHẤT cho 240s)** — `SPEED_DEFAULT` đang để 50 (mức bring-up).
+Tăng từng nấc +10 theo quy trình trong `config.py`, mỗi nấc chạy lại #7 và #11 xem có
+trượt giao lộ không. Riêng việc này gỡ ~80s. Xong rồi chạy #16 để cân nhắc bật
+`CONTINUOUS_INTERSECTIONS`.
 
 **5. Nâng hạ** — `test_lift` #a → #8 → **#b #c (từng càng riêng)** → **#e (so 2 càng)**
 → #d (calibrate, chỉnh `l+/l-` `r+/r-` cho tới khi #e thấy bằng nhau) → #9 → #1..#7.

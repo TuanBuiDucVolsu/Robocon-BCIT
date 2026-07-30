@@ -18,6 +18,7 @@ từ START đến DONE, đồng thời mô phỏng vật lý robot đi trên b�
 
 import os
 import random
+import time
 import sys
 import unittest
 from unittest.mock import MagicMock
@@ -95,25 +96,16 @@ def run_match(seed: int, hw_fail_rate: float = 0.0, line_loss_rate: float = 0.0,
     robot.motion = MagicMock()
     robot.lift = MagicMock()
     robot.vision = MagicMock()
-    robot.packages_delivered = 0
-    robot.pickup_count = 0
-    robot.current_shelf = 0
-    robot.current_tier = 1
-    robot._tier_retries = 0
-    robot._side_detected = False
     # Reset giữa trận chờ đội viên đặt robot xong rồi bấm nút xác nhận
     # (main._wait_for_placement) — mock trả về ngay, không chặn mô phỏng.
     robot._start_button = MagicMock()
-    robot.pose = nav.START_POSE
-    robot.carried_labels = [None, None]
-    robot.delivery_queue = []
-    robot._last_delivered_label = None
+
+    # Dùng CHÍNH hàm reset của Robot thay vì chép tay danh sách field: thêm field
+    # mới vào state machine mà quên thêm ở đây thì test sẽ nổ AttributeError giữa
+    # chừng (đã xảy ra với task2_done — kiện thứ 13 không được khởi tạo).
+    robot._reset_for_new_run()
     robot.match_start_time = 1e18      # thời gian coi như vô hạn để chạy hết kịch bản
     robot.state = main_mod.State.START
-    robot._reset_requested = False
-    robot._reset_count = 0
-    robot._phase_times = {}
-    robot._phase_counts = {}
 
     physical = {"pose": nav.START_POSE}
     errors: list[str] = []
@@ -188,12 +180,17 @@ class TestFullMatch(unittest.TestCase):
     SEEDS = range(20)
 
     def test_clean_run_delivers_all_packages(self):
-        """Phần cứng hoàn hảo → phải giao đủ 12/12 kiện, mọi route hợp lệ."""
+        """Phần cứng hoàn hảo → phải giao đủ 13/13 kiện, mọi route hợp lệ.
+
+        13 = 12 kiện NV1 + 1 kiện hàng rời NV2. Chỉ kiểm 12 thì luồng NV2 (30 điểm)
+        có hỏng cũng không test nào báo.
+        """
         for seed in self.SEEDS:
             with self.subTest(seed=seed):
                 robot, errors = run_match(seed)
                 self.assertEqual(errors, [])
                 self.assertEqual(robot.packages_delivered, 12)
+                self.assertTrue(robot.task2_done, "không giao được kiện thứ 13 (NV2)")
                 self.assertEqual(robot.state, main_mod.State.DONE)
 
     def test_hardware_failures_terminate_cleanly(self):
@@ -261,6 +258,54 @@ class TestOtherHalfFactoryOrder(unittest.TestCase):
             with self.subTest(seed=seed):
                 _robot, errors = run_match(seed, hw_fail_rate=0.15, line_loss_rate=0.2)
                 self.assertEqual(errors, [])
+
+
+class TestTask2(unittest.TestCase):
+    """Kiện thứ 13 — hàng rời NV2, 30 điểm, chỉ được làm sau 100% NV1."""
+
+    def test_not_attempted_before_task1_complete(self):
+        """Luật: NV2 chỉ sau khi xong 100% NV1. Bỏ dở NV1 thì không được rẽ sang NV2."""
+        robot, errors = run_match(0, hw_fail_rate=0.35)
+        self.assertEqual(errors, [])
+        if robot.packages_delivered < 12:
+            self.assertFalse(robot.task2_done,
+                             "làm NV2 khi NV1 chưa xong 100% — sai luật")
+
+    def test_skipped_when_out_of_time(self):
+        """Còn ít giờ hơn TASK2_MIN_TIME → đứng yên, không chạy một chuyến vô ích."""
+        robot, _ = run_match(0)
+        robot.match_start_time = time.time() - (config.MATCH_DURATION
+                                                - config.TASK2_MIN_TIME + 5)
+        self.assertEqual(robot._handle_task2_navigate_to_loose(),
+                         main_mod.State.DONE)
+
+    def test_pickup_retries_before_giving_up(self):
+        """NV1 được retry còn NV2 thì không là bất đối xứng — 30 điểm mà bỏ ngay
+        lần hỏng đầu tiên."""
+        robot, _ = run_match(0)
+        robot.match_start_time = time.time()          # còn đủ giờ
+        robot.lift.pickup.side_effect = None
+        robot.lift.pickup.return_value = False        # luôn hỏng
+        robot.motion.approach_shelf.side_effect = None
+        robot.motion.approach_shelf.return_value = True
+        robot.lift.pickup.reset_mock()
+
+        self.assertEqual(robot._handle_task2_pickup(), main_mod.State.DONE)
+        self.assertGreaterEqual(robot.lift.pickup.call_count, 2,
+                                "phải thử lại ít nhất 1 lần trước khi bỏ 30 điểm")
+
+    def test_reset_during_task2_retries_it(self):
+        """Reset lúc đang mang kiện hàng rời → về ô xuất phát rồi LÀM LẠI NV2,
+        vì NV1 đã xong nên không có gì khác để làm."""
+        robot, _ = run_match(0)
+        robot.task2_done = False
+        robot._reset_requested = True
+        state = robot._handle_reset()
+        self.assertEqual(state, main_mod.State.START)
+        self.assertEqual(robot.packages_delivered, 12)
+        # NV1 đã xong → state machine phải quay lại nhánh NV2
+        self.assertEqual(robot._finish_task1_or_done(),
+                         main_mod.State.TASK2_NAVIGATE_TO_LOOSE)
 
 
 class TestMidMatchReset(unittest.TestCase):

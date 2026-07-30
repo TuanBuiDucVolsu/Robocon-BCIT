@@ -406,6 +406,121 @@ def test_back_out_of_shelf(m: Motion):
         print("  → Toàn 0 = lệch quá xa, phải chỉnh REVERSE_RECENTER_TIME.")
 
 
+def test_speed_limit(m: Motion):
+    """Giới hạn tốc độ THẬT — đo tần số đọc cảm biến rồi tính biên an toàn giao lộ.
+
+    Vòng lặp bám line đọc cảm biến rời rạc. Chạy càng nhanh thì mỗi lần đọc robot đi
+    được càng xa, tới lúc nào đó nó BAY QUA vạch giao lộ giữa 2 lần đọc mà không kịp
+    thấy. Lỗi này không hiện ra khi chạy thử vài mét — nó hiện ra giữa trận, dưới
+    dạng robot đếm thiếu giao lộ rồi rẽ sai chỗ.
+
+    Không đoán được bằng mắt, phải đo. Chạy bài này TRƯỚC khi tăng SPEED_DEFAULT.
+    """
+    print("\n[TEST] Giới hạn tốc độ — biên an toàn phát hiện giao lộ")
+
+    # --- 1. Đo tần số vòng lặp thật (gồm cả đọc SPI + sleep như lúc bám line) ---
+    print("\n  Bước 1: đo tần số đọc cảm biến (2 giây, robot đứng yên)...")
+    n, t0 = 0, time.time()
+    while time.time() - t0 < 2.0:
+        m.read_line_sensor_raw()
+        time.sleep(0.01)          # đúng nhịp sleep trong follow_line()
+        n += 1
+    hz = n / (time.time() - t0)
+    period_ms = 1000.0 / hz
+    print(f"    {hz:.0f} lần đọc/giây → mỗi lần cách nhau {period_ms:.1f}ms")
+
+    # --- 2. Tốc độ thật của robot ---
+    print(f"\n  Bước 2: đo tốc độ thật ở SPEED_DEFAULT={config.SPEED_DEFAULT}%")
+    print("    Đặt robot trên sàn phẳng, đánh dấu vạch xuất phát.")
+    if input("    Chạy thẳng 3 giây? (y/N): ").strip().lower() != "y":
+        print("    Bỏ qua — nhập tay tốc độ nếu đã biết.")
+        raw = input("    Tốc độ đã biết (mm/giây), Enter để thoát: ").strip()
+        if not raw:
+            return
+        speed_mm = float(raw)
+    else:
+        m.forward(config.SPEED_DEFAULT)
+        time.sleep(3.0)
+        m.stop()
+        dist = input("    Đo bằng thước: robot đi được bao nhiêu mm? ").strip()
+        if not dist:
+            return
+        speed_mm = float(dist) / 3.0
+    print(f"    → {speed_mm:.0f} mm/giây ở mức {config.SPEED_DEFAULT}%")
+
+    # --- 3. Biên an toàn ---
+    lw = input("\n  Bước 3: bề rộng vạch line (mm) [20]: ").strip() or "20"
+    line_w = float(lw)
+    print(f"\n  {'Tốc độ':>7} {'mm/giây':>9} {'mm mỗi lần đọc':>16} {'số lần đọc trên vạch':>22}")
+    print("  " + "-" * 60)
+    safe_max = 0
+    for pct in range(40, 101, 10):
+        v = speed_mm * pct / config.SPEED_DEFAULT
+        per_read = v * period_ms / 1000.0
+        samples = line_w / per_read if per_read else 999
+        if samples >= 3.0:
+            safe_max = pct
+        flag = "✅" if samples >= 3.0 else ("⚠ sát" if samples >= 2.0 else "❌ TRƯỢT")
+        mark = "  ← đang dùng" if pct == config.SPEED_DEFAULT else ""
+        print(f"  {pct:>6}% {v:>9.0f} {per_read:>16.1f} {samples:>18.1f}  {flag}{mark}")
+
+    print(f"\n  → Cần ≥3 lần đọc rơi trên vạch mới chắc chắn không trượt giao lộ.")
+    print(f"  → Mức cao nhất còn an toàn theo phép đo này: {safe_max}%")
+    if safe_max < 80:
+        print(f"  ⚠ Muốn chạy trên {safe_max}% thì phải làm vòng lặp nhanh hơn trước:")
+        print("     bỏ time.sleep(0.01) trong follow_line, hoặc đọc SPI thô "
+              "(xem tools/raw_spi_test.py), hoặc dùng vạch line rộng hơn.")
+    print("  ⚠ Đây là biên LÝ THUYẾT. Vẫn phải chạy option 11 và đếm tay để xác nhận.")
+
+
+def test_continuous_intersections(m: Motion):
+    """A/B chế độ đếm giao lộ: dừng-từng-cái vs chạy liền.
+
+    Đây là đòn bẩy phần mềm lớn nhất cho ngân sách 240s, nhưng đụng vào vòng lặp
+    quan trọng nhất — phải tự tay đo trên sa bàn rồi mới bật, đừng tin số ước tính.
+    """
+    import importlib
+
+    print("\n[TEST] A/B: đếm giao lộ DỪNG-TỪNG-CÁI vs CHẠY LIỀN")
+    n = input(f"  Đi qua mấy giao lộ? [3]: ").strip() or "3"
+    if not n.isdigit() or int(n) < 1:
+        print("  Số không hợp lệ.")
+        return
+    n = int(n)
+
+    results = {}
+    for mode, label in ((False, "DỪNG từng giao lộ (hiện tại)"),
+                        (True, "CHẠY LIỀN (chỉ dừng ở cái cuối)")):
+        config.CONTINUOUS_INTERSECTIONS = mode
+        print(f"\n  --- {label} ---")
+        print(f"  Đặt robot lên line, cách giao lộ đầu tiên vài chục cm.")
+        input("  Nhấn Enter để chạy...")
+        t0 = time.time()
+        ok = m.navigate_intersections(n)
+        dt = time.time() - t0
+        results[label] = (ok, dt)
+        print(f"  {'✅' if ok else '❌'} {dt:.2f}s cho {n} giao lộ ({dt/n:.2f}s/giao lộ)")
+        real = input(f"  ĐẾM TAY: robot thật sự qua mấy giao lộ? [{n}]: ").strip() or str(n)
+        if real != str(n):
+            print(f"  ⚠ ĐẾM SAI: robot báo {n} nhưng thực tế {real} giao lộ!")
+            print("    → chỉnh INTERSECTION_THRESHOLD / INTERSECTION_CLEAR_THRESHOLD")
+            results[label] = (False, dt)
+
+    importlib.reload(config)      # trả cờ về đúng giá trị trong file
+    print("\n  === KẾT QUẢ ===")
+    for label, (ok, dt) in results.items():
+        print(f"    {label:38s} {dt:6.2f}s  {'OK' if ok else 'ĐẾM SAI'}")
+    vals = list(results.values())
+    if all(ok for ok, _ in vals):
+        saved = vals[0][1] - vals[1][1]
+        print(f"    → Chạy liền tiết kiệm {saved:.2f}s cho {n} giao lộ "
+              f"({saved/n:.2f}s mỗi giao lộ)")
+        print(f"    → Cả trận đi ~65 giao lộ ⇒ tiết kiệm ~{saved/n*65:.0f}s")
+        print("    Đếm đúng cả 2 lần thì đặt CONTINUOUS_INTERSECTIONS = True trong config.py")
+    else:
+        print("    Có lần đếm sai — CHƯA được bật chế độ chạy liền.")
+
+
 def test_probe_board_side(m: Motion):
     """Dò nửa sân: đứng TẠI giao lộ Kệ 3, xoay phải thử xem có nhánh line không."""
     import navigation as nav
@@ -454,6 +569,8 @@ def main():
         "12": ("Shared SPI: line + IR cùng lúc", test_spi_line_and_ir),
         "13": ("Tự dò NỬA SÂN tại giao lộ Kệ 3", test_probe_board_side),
         "14": ("Vượt khoảng đứt line ô xuất phát", test_cross_line_gap),
+        "16": ("A/B đếm giao lộ: dừng từng cái vs chạy liền", test_continuous_intersections),
+        "17": ("Giới hạn tốc độ (đo trước khi tăng SPEED_DEFAULT)", test_speed_limit),
         "15": ("LÙI ra khỏi kệ tới giao lộ (lệnh back)", test_back_out_of_shelf),
         "d": ("Chẩn đoán motor từng bánh riêng", test_motor_diagnosis),
         "e": ("Đọc xung encoder real-time (Ctrl+C để thoát)", test_encoder_live),
@@ -465,12 +582,12 @@ def main():
     for key, (name, _) in tests.items():
         print(f"  {key}. {name}")
 
-    choice = input("\nNhập số (0-15, d-f): ").strip()
+    choice = input("\nNhập số (0-17, d-f): ").strip()
 
     try:
         if choice == "0":
             for key, (name, func) in tests.items():
-                if func and key not in ("5", "10", "11", "12", "13", "14", "15", "e"):
+                if func and key not in ("5", "10", "11", "12", "13", "14", "15", "16", "17", "e"):
                     func(m)
         elif choice in tests and tests[choice][1]:
             tests[choice][1](m)
