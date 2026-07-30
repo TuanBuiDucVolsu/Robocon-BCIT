@@ -427,6 +427,14 @@ class Robot:
     def _handle_start(self) -> State:
         logger.info("Trạng thái: START — bắt đầu trận đấu (240s)")
 
+        # Hết giờ thì KHÔNG được xuất phát nữa. Đường vào đây sau RESET bỏ qua lần
+        # kiểm giờ của _run_state_machine (nó `continue` ngay sau _handle_reset), nên
+        # reset lúc 239s mà không ai bấm xác nhận thì robot sẽ lao ra khỏi ô xuất
+        # phát đúng lúc trọng tài đã tính giờ xong.
+        if self.match_start_time > 0 and not self.is_time_safe():
+            logger.warning("Hết giờ — không xuất phát lại (còn %.0fs)", self.time_remaining())
+            return State.DONE
+
         # Thoát ô start → tìm line R0 → căn giữa (KHÔNG đếm giao lộ; bộ tìm đường lo)
         # Thử lại như các lỗi navigation khác — 1 lần glitch cảm biến ngay lúc
         # xuất phát không nên khiến cả trận kết thúc ngay lập tức.

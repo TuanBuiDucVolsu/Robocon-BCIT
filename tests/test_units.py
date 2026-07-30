@@ -262,6 +262,33 @@ class TestShapeMatcherDecision(unittest.TestCase):
         m._templates = {}
         self.assertEqual(m.classify(MagicMock()), (None, 0))
 
+    def test_unverified_matches_never_count_as_inliers(self):
+        """Dưới MIN_MATCHES_FOR_HOMOGRAPHY thì KHÔNG chạy được RANSAC → phải trả 0.
+
+        MIN_INLIERS đã hạ xuống 6 còn MIN_MATCHES_FOR_HOMOGRAPHY vẫn 8, nên cửa sổ
+        6-7 match từng lọt thẳng qua ngưỡng mà chưa hề được kiểm nhất quán hình học.
+        """
+        from vision.shape_match import (ShapeMatcher, MIN_INLIERS,
+                                        MIN_MATCHES_FOR_HOMOGRAPHY)
+        m = object.__new__(ShapeMatcher)
+        for n in range(MIN_MATCHES_FOR_HOMOGRAPHY):
+            with self.subTest(matches=n):
+                self.assertEqual(m._inlier_count(None, None, [MagicMock()] * n), 0)
+        # tiền đề của test: cửa sổ nguy hiểm thật sự tồn tại
+        self.assertLess(MIN_INLIERS, MIN_MATCHES_FOR_HOMOGRAPHY,
+                        "hai hằng số đã nhất quán thì test này hết ý nghĩa")
+
+    def test_single_template_is_not_ready(self):
+        """1 ảnh mẫu → second_score luôn 0 → kiểm cách biệt vô hiệu → MỌI kiện đều
+        bị gán đúng cái nhãn đó và robot chở tất cả về một nhà máy."""
+        from vision.shape_match import ShapeMatcher
+        m = object.__new__(ShapeMatcher)
+        m._orb = MagicMock()
+        m._templates = {"samsung": (MagicMock(), MagicMock())}
+        self.assertFalse(m.ready, "1 ảnh mẫu thì phải rơi hẳn về HSV")
+        m._templates["foxconn"] = (MagicMock(), MagicMock())
+        self.assertTrue(m.ready)
+
     def test_inliers_to_confidence_is_bounded(self):
         from vision.shape_match import inliers_to_confidence, CONFIDENCE_NORM
         self.assertEqual(inliers_to_confidence(0), 0.0)
@@ -343,6 +370,34 @@ class TestClassifyPair(unittest.TestCase):
         v = object.__new__(Vision)
         v._camera = None
         self.assertEqual(v.classify_pair(), (None, None))
+
+    def test_pair_rois_are_what_classify_pair_actually_reads(self):
+        """Công cụ calibrate/chẩn đoán phải soi ĐÚNG 2 vùng này.
+
+        Cắt ROI trên NGUYÊN khung ra một vùng khác hẳn — phủ lên khe giữa 2 kiện,
+        chỗ robot không bao giờ nhìn tới. Calibrate ở đó = chốt màu của cái nền.
+        """
+        from vision.vision import Vision
+        v = object.__new__(Vision)
+        frame = _np.zeros((480, 640, 3), dtype=_np.uint8)
+
+        left, right = v.pair_rois(frame)
+        half_w = 640 // 2
+        want_w = half_w - 2 * int(half_w * config.ROI_MARGIN)
+        self.assertEqual(left.shape[1], want_w)
+        self.assertEqual(right.shape[1], want_w)
+
+        # ...và phải KHÁC hẳn ROI cắt trên nguyên khung
+        full = v._crop_roi(frame)
+        self.assertGreater(full.shape[1], left.shape[1] * 1.5,
+                           "ROI nguyên khung rộng hơn hẳn — không thể thay thế nhau")
+
+    def test_split_pair_halves_do_not_overlap(self):
+        from vision.vision import Vision
+        v = object.__new__(Vision)
+        frame = _np.zeros((480, 640, 3), dtype=_np.uint8)
+        left, right = v.split_pair(frame)
+        self.assertEqual(left.shape[1] + right.shape[1], 640)
 
 
 # ==========================================================
@@ -462,9 +517,8 @@ class TestFollowLineReverse(unittest.TestCase):
         self.assertTrue(at_intersection, "lùi vẫn phải nhận ra giao lộ")
 
 
-
 class TestBackToIntersection(unittest.TestCase):
-    """Lệnh ("back", N) — lùi ra khỏi kệ/nhà máy, vẫn bám line."""
+    """back_to_intersection — vòng lặp lùi tới giao lộ."""
 
     @classmethod
     def setUpClass(cls):
@@ -475,43 +529,49 @@ class TestBackToIntersection(unittest.TestCase):
         cls.m.cleanup()
 
     def setUp(self):
-        self.m.abort_check = None
+        n = config.LINE_SENSOR_COUNT
+        # Mọi mắt thấy line = giao lộ ngay lập tức → vòng lặp thoát tức thì
+        self.m.read_line_sensor_raw = lambda: [0.0] * n
 
-    def tearDown(self):
-        self.m.abort_check = None
+    def test_stale_pd_error_is_cleared_before_and_after(self):
+        """`_last_error` mang từ pha TIẾN sang sẽ tạo đạo hàm giả → giật một cái
+        ngay lúc bắt đầu lùi (LINE_KD × chênh lệch). Và ngược lại khi quay về tiến."""
+        seen = []
+        real_follow = self.m.follow_line
+        self.m.follow_line = lambda *a, **k: (seen.append(self.m._last_error),
+                                              real_follow(*a, **k))[1]
+        try:
+            self.m._last_error = 2.5              # sai số còn lại của pha tiến
+            self.assertTrue(self.m.back_to_intersection(1))
+        finally:
+            self.m.follow_line = real_follow
 
-    def test_zero_count_is_noop(self):
+        self.assertEqual(seen[0], 0.0, "phải xoá sai số cũ TRƯỚC nhịp lùi đầu tiên")
+        self.assertEqual(self.m._last_error, 0.0,
+                         "phải trả về 0 để pha TIẾN kế tiếp không thừa hưởng dấu ngược")
+
+    def test_multi_hop_escapes_intersection_between_hops(self):
+        """Đứng ngay trên giao lộ vừa tới mà bám line tiếp thì nhận lại chính nó,
+        chặng thứ 2 'xong' tức thì mà robot chưa đi đâu cả."""
+        calls = []
+        real_escape = self.m._escape_intersection
+        self.m._escape_intersection = lambda speed=None, reverse=False: calls.append(reverse)
+        try:
+            self.assertTrue(self.m.back_to_intersection(2))
+        finally:
+            self.m._escape_intersection = real_escape
+        self.assertEqual(calls, [True],
+                         "chặng 2 phải LÙI khỏi giao lộ trước, chặng 1 thì không")
+
+    def test_zero_count_is_a_noop(self):
         self.assertTrue(self.m.back_to_intersection(0))
 
     def test_abort_stops_immediately(self):
         self.m.abort_check = lambda: True
-        self.assertFalse(self.m.back_to_intersection(1))
-
-    def test_counts_each_intersection_once(self):
-        """REGRESSION: sau khi đếm 1 giao lộ, robot đang ĐỨNG TRÊN nó — phải lùi ra
-        khỏi vùng đó trước, nếu không lần lặp sau nhận lại chính giao lộ đó."""
-        seen = {"n": 0}
-        real_follow = self.m.follow_line
-
-        def fake_follow(base_speed=0, reverse=False):
-            # luôn báo "đang ở trên giao lộ" — nếu hàm không thoát ra trước khi
-            # đếm tiếp thì 3 giao lộ sẽ được đếm xong tức thì mà robot không hề đi
-            seen["n"] += 1
-            return True, [1] * config.LINE_SENSOR_COUNT
-
-        moved = {"n": 0}
-        real_backward = self.m.backward
-        self.m.backward = lambda *a, **k: moved.__setitem__("n", moved["n"] + 1)
-        self.m.follow_line = fake_follow
         try:
-            ok = self.m.back_to_intersection(3)
+            self.assertFalse(self.m.back_to_intersection(1))
         finally:
-            self.m.follow_line = real_follow
-            self.m.backward = real_backward
-
-        self.assertTrue(ok)
-        self.assertEqual(moved["n"], 2,
-                         "phải lùi thoát giao lộ trước mỗi lần đếm tiếp (n-1 lần)")
+            self.m.abort_check = None
 
 
 class TestContinuousIntersections(unittest.TestCase):

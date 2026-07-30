@@ -22,12 +22,12 @@
 ## A. Test tự động (PC, không cần GPIO)
 
 ```bash
-python3 -m pytest tests/ -q          # tất cả — 176 test + 230 subtest
+python3 -m pytest tests/ -q          # tất cả — 187 test + 394 subtest
 python3 -m unittest tests.test_logic -v
 python3 -m unittest tests.test_match_sim -v
 ```
 
-Kết quả mong đợi: `176 passed`. Cảnh báo `PinFactoryFallback` là **bình thường** trên PC.
+Kết quả mong đợi: `187 passed`. Cảnh báo `PinFactoryFallback` là **bình thường** trên PC.
 
 ### `test_units.py` — logic thuần từng module
 
@@ -69,7 +69,7 @@ một lần là fail.
 
 | Kịch bản | Kiểm gì |
 |---|---|
-| Chạy sạch (20 seed) | Giao đủ 12/12 kiện |
+| Chạy sạch (20 seed) | Giao đủ **13/13 kiện** (12 NV1 + NV2) |
 | 15% thao tác phần cứng lỗi | Vẫn kết thúc, không kẹt vòng lặp |
 | 20% route mất line giữa chừng | Vị trí vẫn khớp thực tế |
 | Nửa sân thứ tự nhà máy đảo | Vẫn 12/12 |
@@ -197,7 +197,7 @@ python3 -m tools.test_right_wheel    # cô lập lỗi bánh chạy mãi sau sto
 
 ## E. Thứ tự khi lên sân
 
-**0. Trước khi đi:** `python3 -m pytest tests/ -q` trên PC → phải `176 passed`.
+**0. Trước khi đi:** `python3 -m pytest tests/ -q` trên PC → phải `187 passed`.
 
 **1. Bản đồ — làm TRƯỚC, mọi thứ khác dựa lên nó**
 ```bash

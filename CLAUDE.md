@@ -97,7 +97,14 @@ vision/shape_match.py — ShapeMatcher: ORB + BFMatcher (Lowe's ratio test) + RA
                         không chỉ màu — xem lịch sử debug HSV bị nền "ăn" ở dưới.
                         Ảnh mẫu tạo bằng `python3 -m tools.capture_templates` (ảnh
                         chụp THẬT, KHÔNG dùng ảnh PDF thể lệ — vector sạch khác nhiều
-                        ảnh chụp thật, so khớp kém chính xác hơn)
+                        ảnh chụp thật, so khớp kém chính xác hơn).
+                        ⚠️ Ảnh mẫu phải là MỘT kiện, cắt sát decal: thi đấu dùng
+                        `classify_pair()` = chia đôi khung, so từng nửa 1 kiện. Mẫu
+                        chụp cả 2 kiện + kệ + pallet thì phần khớp được lại rơi vào
+                        NỀN DÙNG CHUNG (giống hệt ở cả 4 mẫu) → không mẫu nào trội,
+                        MARGIN_RATIO chặn lại, ORB im lặng rơi hết về HSV.
+                        Kiểm bằng `tests/test_vision.py` option 9 (in inlier từng
+                        nửa khung + lý do bị loại)
                         HSV màu (_classify_by_color, dự phòng): điểm có trọng số tâm ROI
                         (_center_weight_map, config.CENTER_WEIGHT_SIGMA) để nền kệ/pallet
                         ở rìa ảnh hưởng ít hơn — TRỪ Hana (ngoặc đỏ ở góc,
@@ -263,6 +270,8 @@ tại điểm giao, line cắt ngang nằm dọc thanh cảm biến nên xoay ki
   thay vì xoay 180° rồi tiến. Bỏ được **28/70 lần xoay** mỗi trận (~32s) — xoay là
   chi phí cố định lớn nhất. Bộ tìm đường tự chọn: chặng kế đi vuông góc thì lùi,
   đi thẳng tiếp thì vẫn quay đầu (`config.EDGE_COST_REVERSE` để cân).
+  ⚠️ KHÔNG lùi ra khỏi ô xuất phát được (`navigation.NO_REVERSE_TERMINALS`) — chỗ đó
+  là khoảng ĐỨT 245mm, không có line để bám.
   ⚠️ **Khi lùi phải ĐẢO DẤU hiệu chỉnh PD.** Thanh cảm biến ở đầu xe, lùi thì thành
   đuôi; ma trận trạng thái `(y, θ)` có `det = v·k` nên `k` phải cùng dấu vận tốc.
   Giữ nguyên dấu = robot ngoáy đuôi tăng dần rồi văng khỏi line. Kiểm trên robot
@@ -272,17 +281,20 @@ tại điểm giao, line cắt ngang nằm dọc thanh cảm biến nên xoay ki
 
 | Script | Mục đích |
 |--------|----------|
-| `tests/test_logic.py` | 88 unit test — PC, không GPIO (bản đồ + mô phỏng route tới đúng chỗ + polarity + phân loại màu + reset + resume) |
-| `tests/test_units.py` | 35 unit test — PC (bám line, lift, ShapeMatcher, classify_pair) |
-| `tests/test_match_sim.py` | Mô phỏng TRỌN trận với phần cứng giả lập: 12/12 kiện, lỗi phần cứng, mất line giữa route — kiểm vị trí main.py tin tưởng có khớp vị trí thật không |
-| `tests/test_tools.py` | 16 unit test — PC (regex của `measure_phases` phải khớp chuỗi log CÓ THẬT trong source + round-trip; `dry_run` chạy hết được và mọi bước đi đều có line thật) |
+| `tests/test_logic.py` | 100 unit test — PC, không GPIO (bản đồ + mô phỏng route tới đúng chỗ + polarity + phân loại màu + reset + resume) |
+| `tests/test_units.py` | 52 unit test — PC (bám line, lift, ShapeMatcher, classify_pair) |
+| `tests/test_match_sim.py` | Mô phỏng TRỌN trận với phần cứng giả lập: **13/13 kiện** (12 NV1 + hàng rời NV2), reset giữa trận, lỗi phần cứng, mất line giữa route — kiểm vị trí main.py tin tưởng có khớp vị trí thật không |
+| `tests/test_tools.py` | 21 unit test — PC (regex của `measure_phases` phải khớp chuỗi log CÓ THẬT trong source + round-trip; `dry_run` chạy hết được và mọi bước đi đều có line thật) |
 | `tools/show_routes.py` | In toàn bộ route sinh ra để đối chiếu tay trên sa bàn |
 | `tools/dry_run.py` | **Chạy khô trọn trận** — in từng bước robot sẽ đi kèm mốc giây. Cầm đi bộ trên sa bàn để đối chiếu tay |
 | `tools/measure_phases.py` | Đọc `robot_log.txt` → 6 tham số cho `estimate_time` + dự báo điểm. Chạy sau mỗi lượt `practice.sh` |
 | `tools/estimate_time.py` | "Worst case giao được mấy kiện trong 240s" — nạp số đo từ `measure_phases` |
-| `tests/test_motion.py` | 12 option (1-12) + `d` chẩn đoán — motor, line, route, exit start |
-| `tests/test_lift.py` | 8 option (1-8) + `a-d` calibrate/độc lập — nâng/hạ, IR, drop từng càng, NV2 |
-| `tests/test_vision.py` | 7 option — camera, HSV, classify_pair |
+| `tools/sim_ui.py` | Xuất trang HTML **mô phỏng robot chạy** — phát lại các bước state machine thật sinh ra, đổi tốc độ ngay trên trang |
+| `tests/LO_TRINH_TEST.md` | **Lộ trình test đánh số theo thứ tự phải làm** — bắt đầu từ đây |
+| `tests/DIEN_TAP.md` | 9 bài diễn tập sát thi đấu: ngân sách 240s, kiện xấu nhất, reset, pin, ánh sáng |
+| `tests/test_motion.py` | 17 option (1-17) + `d/e/f` — motor, line, route, dò nửa sân, lùi, giới hạn tốc độ |
+| `tests/test_lift.py` | 9 option (1-9) + `a-e` — nâng/hạ, IR, home, từng càng riêng, so 2 càng, calibrate |
+| `tests/test_vision.py` | 9 option + `l` — camera, BGR, ORB, HSV, classify_pair, ánh xạ trái/phải |
 | `tests/test_smoke.py` | Smoke tích hợp trên sa bàn |
 
 Scenario calibrate quan trọng: **Kệ3 T1 → giao foxconn → samsung → return → Kệ3 T2**

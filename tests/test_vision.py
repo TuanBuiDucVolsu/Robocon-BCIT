@@ -46,25 +46,50 @@ def test_shape_analysis(vision: Vision):
         return
 
     import cv2
-    from vision.shape_match import MIN_INLIERS
+    from vision.shape_match import MIN_INLIERS, MARGIN_RATIO, MIN_MATCHES_FOR_HOMOGRAPHY
 
-    roi = vision._crop_roi(frame)
-    gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-    kp, des = vision._shape_matcher._orb.detectAndCompute(gray, None)
-    print(f"  ROI: {roi.shape[1]}x{roi.shape[0]} — {len(kp) if kp else 0} keypoint")
-    print(f"  Ngưỡng nhận diện (MIN_INLIERS): {MIN_INLIERS}\n")
+    matcher = vision._shape_matcher
+    for label, (tkp, _tdes) in matcher._templates.items():
+        print(f"  Ảnh mẫu {label:12s}: {len(tkp)} keypoint")
+    print(f"\n  Ngưỡng: >={MIN_INLIERS} inlier VÀ >={MARGIN_RATIO}x kiện đứng thứ 2")
+    print(f"  (dưới {MIN_MATCHES_FOR_HOMOGRAPHY} match thì không chạy được RANSAC → tính 0)\n")
 
-    scores = {}
-    for label, (tkp, tdes) in vision._shape_matcher._templates.items():
-        good = vision._shape_matcher._good_matches(des, tdes)
-        inliers = vision._shape_matcher._inlier_count(kp, tkp, good)
-        scores[label] = inliers
+    # Phải soi ĐÚNG cái mà lúc thi đấu robot soi: main.py dùng classify_pair(), tức
+    # là CHIA ĐÔI khung rồi nhận diện từng nửa MỘT kiện. Bản cũ ở đây soi nguyên
+    # khung (2 kiện) nên số inlier đẹp hơn hẳn thực tế — kiểm xong yên tâm mà vào
+    # trận vẫn trượt.
+    h, w = frame.shape[:2]
+    mid = w // 2
+    for side, half in (("TRÁI", frame[:, :mid]), ("PHẢI", frame[:, mid:])):
+        roi = vision._crop_roi(half)
+        gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+        kp, des = matcher._orb.detectAndCompute(gray, None)
+        print(f"  --- Nửa {side}: ROI {roi.shape[1]}x{roi.shape[0]}, "
+              f"{len(kp) if kp else 0} keypoint ---")
 
-    for label, inliers in sorted(scores.items(), key=lambda x: -x[1]):
-        factory = config.LABEL_TO_FACTORY.get(label, "?")
-        flag = "✅" if inliers >= MIN_INLIERS else "  "
-        bar = "█" * min(inliers, 50)
-        print(f"  {flag} {label:12s} ({factory:18s}): {inliers:3d} inlier {bar}")
+        scores, raw = {}, {}
+        for label, (tkp, tdes) in matcher._templates.items():
+            good = matcher._good_matches(des, tdes)
+            raw[label] = len(good)
+            scores[label] = matcher._inlier_count(kp, tkp, good)
+
+        ranked = sorted(scores.items(), key=lambda x: -x[1])
+        for label, inliers in ranked:
+            factory = config.LABEL_TO_FACTORY.get(label, "?")
+            flag = "✅" if inliers >= MIN_INLIERS else "  "
+            bar = "█" * min(inliers, 40)
+            print(f"   {flag} {label:12s} ({factory:18s}): {inliers:3d} inlier "
+                  f"/ {raw[label]:3d} match {bar}")
+
+        best, second = ranked[0][1], (ranked[1][1] if len(ranked) > 1 else 0)
+        decided, _ = matcher.classify(roi)
+        print(f"   → Kết luận ORB: {decided or 'KHÔNG ĐỦ TỰ TIN (rơi về HSV)'}")
+        if decided is None and best >= MIN_INLIERS:
+            print(f"     Lý do: cách biệt chưa đủ ({best} vs {second}, cần >= "
+                  f"{MARGIN_RATIO * max(second, 1):.1f}).")
+            print("     Thường là do ảnh mẫu dính NỀN GIỐNG NHAU (kệ/pallet/tường):")
+            print("     mọi mẫu cùng khớp vào phần nền nên không cái nào trội hẳn.")
+        print()
 
 
 def test_color_order(vision: Vision):
@@ -120,11 +145,12 @@ def test_color_analysis(vision: Vision):
     import numpy as np
     from vision.vision import _center_weight_map
 
-    h, w = frame.shape[:2]
-    margin = getattr(config, "ROI_MARGIN", 0.2)
-    margin_x = int(w * margin)
-    margin_y = int(h * margin)
-    roi = frame[margin_y:h - margin_y, margin_x:w - margin_x]
+    # Soi ĐÚNG vùng classify_pair() soi (nửa trái + nửa phải), không phải giữa
+    # nguyên khung — chỗ đó là khe giữa 2 kiện, robot không bao giờ nhìn tới.
+    side = input("  Xem nửa nào? (t=TRÁI / p=PHẢI, mặc định TRÁI): ").strip().lower()
+    roi_left, roi_right = vision.pair_rois(frame)
+    roi = roi_right if side == "p" else roi_left
+    print(f"  Đang xem nửa {'PHẢI' if side == 'p' else 'TRÁI'} của khung hình")
 
     hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
     total = roi.shape[0] * roi.shape[1]

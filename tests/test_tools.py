@@ -13,6 +13,7 @@ chuỗi logger.* ra khỏi source rồi đối chiếu, nên hỏng là biết n
 import ast
 import os
 import re
+import statistics
 import sys
 import tempfile
 import unittest
@@ -110,9 +111,9 @@ class TestPatternsMatchRealLogStrings(unittest.TestCase):
 # Round-trip: nhúng thời gian ĐÃ BIẾT vào log rồi đo lại
 # ============================================================
 
-TRUTH = dict(forward=1.80, turn=0.90, advance=1.50, approach=1.40,
-             retreat=0.80, pickup=4.00, drop=2.20, raise_=0.70, scan=0.60,
-             reverse=2.60)      # lùi chậm hơn tiến — chạy ở REVERSE_SPEED
+# reverse > forward: lệnh back chạy ở config.REVERSE_SPEED, chậm hơn tiến
+TRUTH = dict(forward=1.80, reverse=2.30, turn=0.90, advance=1.50, approach=1.40,
+             retreat=0.80, pickup=4.00, drop=2.20, raise_=0.70, scan=0.60)
 
 
 def _build_log(laps: int = 3) -> str:
@@ -159,7 +160,7 @@ def _build_log(laps: int = 3) -> str:
         log("Xác nhận: CẢ 2 pallet trên càng", TRUTH["pickup"])
         undock(); back()
         for side, other in (("TRÁI", "trái"), ("PHẢI", "phải")):
-            turn(2); go(3); dock()
+            turn(1); go(3); dock()
             log(f"Đặt hàng — chỉ càng {side}", 0.01)
             log(f"Xác nhận: pallet {other} đã rời càng", TRUTH["drop"])
             log(f"Nâng lại càng {other} (0.75s)", 0.01)
@@ -218,6 +219,9 @@ class TestMeasureRoundTrip(unittest.TestCase):
         expected = {
             "forward": TRUTH["forward"],
             "turn": TRUTH["turn"],
+            # `reverse` LÀ một tham số riêng của estimate_time (--reverse): lùi chạy
+            # ở REVERSE_SPEED nên chậm hơn tiến, gộp chung là dự báo lạc quan.
+
             "advance": TRUTH["advance"],
             # estimate_time gộp tiếp cận + lùi ra vào một tham số
             "approach": TRUTH["approach"] + TRUTH["retreat"],
@@ -229,6 +233,17 @@ class TestMeasureRoundTrip(unittest.TestCase):
             with self.subTest(param=key):
                 self.assertAlmostEqual(self.params[key], want, delta=0.05)
                 self.assertIn("đo", self.source[key], f"{key} bị rơi về số mặc định")
+
+    def test_reverse_hop_is_measured_separately_from_forward(self):
+        """Lùi ra khỏi kệ là chi phí THẬT — không đo thì nó vô hình trong bảng giờ."""
+        samples, dropped = self.measured["reverse"]
+        self.assertTrue(samples, "không đo được chặng lùi")
+        self.assertEqual(dropped, 0)
+        self.assertAlmostEqual(statistics.median(samples), TRUTH["reverse"], delta=0.05)
+        # ...và KHÔNG được lẫn vào mẫu của chặng tiến (2 chặng dùng chung dòng
+        # "Phát hiện giao lộ" làm mốc kết thúc)
+        fwd, _ = self.measured["forward"]
+        self.assertAlmostEqual(statistics.median(fwd), TRUTH["forward"], delta=0.05)
 
     def test_drop_approach_is_not_counted_as_a_failed_scan(self):
         """'Đã đến vị trí kệ' dùng chung cho tiếp cận-để-quét và tiếp cận-để-thả."""

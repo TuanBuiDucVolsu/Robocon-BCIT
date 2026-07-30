@@ -125,6 +125,25 @@ class Vision:
         margin_y = int(h * margin)
         return frame[margin_y:h - margin_y, margin_x:w - margin_x]
 
+    @staticmethod
+    def split_pair(frame):
+        """Chia khung thành nửa TRÁI / nửa PHẢI — đúng cách classify_pair() làm."""
+        mid = frame.shape[1] // 2
+        return frame[:, :mid], frame[:, mid:]
+
+    def pair_rois(self, frame):
+        """2 vùng ảnh mà classify_pair() THẬT SỰ phân tích: (roi_trái, roi_phải).
+
+        MỌI công cụ calibrate/chẩn đoán phải soi đúng 2 vùng này. Cắt ROI trên
+        NGUYÊN khung cho ra một vùng khác hẳn: với 640x480 và ROI_MARGIN=0.2 thì
+        nguyên khung là x 128..512 (tâm 50%), còn lúc thi đấu là x 64..256 (tâm
+        25%) và x 384..576 (tâm 75%). Dải 128px giữa khung nằm trong vùng
+        calibrate nhưng KHÔNG nằm trong vùng nào lúc quét thật — đó là khe giữa 2
+        kiện hàng. Chốt dải HSV bằng vùng robot không bao giờ nhìn tới là cách chắc
+        chắn nhất để "calibrate xong vẫn nhận sai".
+        """
+        return tuple(self._crop_roi(half) for half in self.split_pair(frame))
+
     # ----------------------------------------------------------
     # Nhận diện bằng hình dạng (ORB) — phương pháp CHÍNH
     # ----------------------------------------------------------
@@ -286,10 +305,7 @@ class Vision:
                 time.sleep(config.SCAN_RETRY_DELAY)
                 continue
 
-            h, w = frame.shape[:2]
-            mid = w // 2
-            frame_left = frame[:, :mid]
-            frame_right = frame[:, mid:]
+            frame_left, frame_right = self.split_pair(frame)
 
             label_l, conf_l, from_orb_l = self._classify_frame(frame_left)
             label_r, conf_r, from_orb_r = self._classify_frame(frame_right)

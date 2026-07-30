@@ -22,7 +22,7 @@ Ký hiệu: 🔒 = **chặn** các bước sau, không đạt thì dừng lại 
 
 ## GIAI ĐOẠN 0 — Trên PC (10 phút, không rủi ro)
 
-- [ ] **0.1** `python3 -m pytest tests/ -q` → phải **`176 passed`** 🔒
+- [ ] **0.1** `python3 -m pytest tests/ -q` → phải **`187 passed`** 🔒
 - [ ] **0.2** `python3 -m tools.show_routes > routes.txt` — **in ra giấy, mang theo**
 - [ ] **0.3** `python3 -m tools.dry_run > kichban.txt` — **in ra giấy**, đây là kịch bản
       robot sẽ chạy, dùng để đối chiếu ở giai đoạn 4

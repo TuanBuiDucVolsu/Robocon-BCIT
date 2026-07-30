@@ -95,11 +95,25 @@ class ShapeMatcher:
                                 path, len(kp) if kp else 0)
                 continue
             self._templates[label] = (kp, des)
-        logger.info("Đã nạp %d/%d ảnh mẫu ORB", len(self._templates), len(config.LABEL_TO_FACTORY))
+
+        total = len(config.LABEL_TO_FACTORY)
+        loaded = len(self._templates)
+        logger.info("Đã nạp %d/%d ảnh mẫu ORB", loaded, total)
+        if 0 < loaded < total:
+            missing = [l for l in config.LABEL_TO_FACTORY if l not in self._templates]
+            logger.warning("THIẾU ảnh mẫu %s — những kiện đó sẽ không bao giờ khớp ORB "
+                           "và phải trông cậy hoàn toàn vào HSV màu", missing)
 
     @property
     def ready(self) -> bool:
-        return self._orb is not None and len(self._templates) > 0
+        """Cần ÍT NHẤT 2 ảnh mẫu.
+
+        Với đúng 1 ảnh mẫu thì `second_score` luôn = 0, phép kiểm cách biệt
+        (MARGIN_RATIO) thành `best >= 1.8` — tức là vô hiệu. Mọi kiện hàng đưa vào
+        khung đều được gán chính cái nhãn duy nhất đó, và robot chở tất cả về một
+        nhà máy. Thà rơi hẳn về HSV màu (phân biệt được cả 4) còn hơn.
+        """
+        return self._orb is not None and len(self._templates) >= 2
 
     # ----------------------------------------------------------
     # So khớp
@@ -123,9 +137,19 @@ class ShapeMatcher:
 
     def _inlier_count(self, kp_query, kp_train, good_matches) -> int:
         """RANSAC homography — đếm inlier (khớp hình học nhất quán, không phải trùng hợp
-        ngẫu nhiên vài keypoint rời rạc từ nền lộn xộn)."""
+        ngẫu nhiên vài keypoint rời rạc từ nền lộn xộn).
+
+        Không đủ điểm để chạy RANSAC → trả 0, KHÔNG trả len(good_matches).
+
+        Trước đây trả nguyên số good match với ghi chú "rất thấp" — đúng khi
+        MIN_INLIERS còn là 10, nhưng ngưỡng đã hạ xuống 6 (config.SHAPE_MIN_INLIERS)
+        trong khi MIN_MATCHES_FOR_HOMOGRAPHY vẫn là 8. Cửa sổ 6-7 match vì thế lọt
+        thẳng qua ngưỡng mà CHƯA HỀ được kiểm nhất quán hình học — đúng loại trùng
+        hợp ngẫu nhiên mà RANSAC sinh ra để loại. Nhận nhầm nhà máy thì mất 20 điểm
+        và log vẫn báo thành công; quét trượt thì chỉ tốn 1 lần retry.
+        """
         if len(good_matches) < MIN_MATCHES_FOR_HOMOGRAPHY:
-            return len(good_matches)  # quá ít để tính homography, trả nguyên số good match (rất thấp)
+            return 0
 
         src_pts = np.float32([kp_query[m.queryIdx].pt for m in good_matches]).reshape(-1, 1, 2)
         dst_pts = np.float32([kp_train[m.trainIdx].pt for m in good_matches]).reshape(-1, 1, 2)
