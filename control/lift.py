@@ -29,6 +29,9 @@ from control.mcp3008_bus import Mcp3008Bus, get_mcp3008_bus
 
 logger = logging.getLogger(__name__)
 
+#: Tầng cao nhất của kệ (kệ 2 tầng). Dùng để suy ra thời gian home tối thiểu.
+MAX_LEVEL = 2
+
 
 class PalletSensors:
     """Đọc 2 cảm biến IR pallet (trái/phải) qua MCP3008 SPI CH6+CH7."""
@@ -116,8 +119,6 @@ class Lift:
         self.pallet = PalletSensors(self._mcp_bus)
 
         self._current_level = 0
-        self._left_dropped = False
-        self._right_dropped = False
 
     # ----------------------------------------------------------
     # Điều khiển motor — riêng từng bên
@@ -178,6 +179,16 @@ class Lift:
         """Thời gian chạy càng `side` giữa 2 tầng (hiệu 2 mốc tuyệt đối)."""
         return abs(self._level_time(to_level, side, raising)
                    - self._level_time(from_level, side, raising))
+
+    def min_home_duration(self) -> float:
+        """Thời gian hạ TỐI THIỂU để càng CHẬM NHẤT chắc chắn chạm đáy từ tầng cao nhất.
+
+        KHÔNG phải `LIFT_TIME_SHELF_2`: hạ còn cộng `LIFT_*_LOWER_EXTRA`, mà bù của
+        2 càng khác nhau. Với giá trị hiện tại càng trái cần 4.2s trong khi
+        LIFT_TIME_SHELF_2 chỉ 3.9s — so với 3.9s thì thấy "đạt" nhưng vẫn còn hở.
+        """
+        return max(self._move_duration(side, MAX_LEVEL, 0, raising=False)
+                   for side in ("left", "right"))
 
     # ----------------------------------------------------------
     # Điều khiển motor — cả 2 bên đồng bộ
@@ -244,9 +255,6 @@ class Lift:
         Nâng pallet từ kệ. Retry nếu cảm biến không thấy.
         require_both=True (NV1): cần cả 2 IR. require_both=False (NV2): 1 IR là đủ.
         """
-        self._left_dropped = False
-        self._right_dropped = False
-
         for attempt in range(1, config.PICKUP_MAX_RETRIES + 1):
             logger.info("Nhấc hàng tầng %d — lần %d/%d (require_both=%s)",
                         shelf_level, attempt, config.PICKUP_MAX_RETRIES, require_both)
@@ -318,8 +326,6 @@ class Lift:
         logger.info("Đặt hàng — cả 2 càng")
         self._move_both(self._current_level, 0)
         self._current_level = 0
-        self._left_dropped = True
-        self._right_dropped = True
         time.sleep(0.3)
         return self._verify_released()
 
@@ -332,7 +338,6 @@ class Lift:
         logger.info("Đặt hàng — chỉ càng TRÁI")
         duration = self._move_duration("left", self._current_level, 0, raising=False)
         self._lower_left(duration)
-        self._left_dropped = True
         time.sleep(0.2)
         return self._verify_released("left")
 
@@ -341,7 +346,6 @@ class Lift:
         logger.info("Đặt hàng — chỉ càng PHẢI")
         duration = self._move_duration("right", self._current_level, 0, raising=False)
         self._lower_right(duration)
-        self._right_dropped = True
         time.sleep(0.2)
         return self._verify_released("right")
 
@@ -366,8 +370,6 @@ class Lift:
             logger.info("Gập càng — hạ càng trái về sàn (%.2fs)", duration)
             self._lower_left(duration)
         self._current_level = 0
-        self._left_dropped = False
-        self._right_dropped = False
 
     def home_to_floor(self, duration: float | None = None):
         """Ép hạ CẢ 2 càng chạm đáy cơ khí. KHÔNG có limit switch nên không có
@@ -378,6 +380,13 @@ class Lift:
         đã là 0), không xác minh vị trí thật — dùng home_to_floor() khi vị trí
         thật sự không chắc (đầu trận, sau lỗi/mất điện)."""
         duration = duration if duration is not None else config.LIFT_HOME_DURATION
+        needed = self.min_home_duration()
+        if duration < needed:
+            logger.warning(
+                "LIFT_HOME_DURATION=%.2fs THIẾU — càng chậm nhất cần %.2fs để hạ từ "
+                "tầng %d về sàn (đã tính LIFT_*_LOWER_EXTRA). Dùng %.2fs; sửa config lại.",
+                duration, needed, MAX_LEVEL, needed)
+            duration = needed
         logger.info("Home: hạ cả 2 càng liên tục %.1fs để ép chạm đáy cơ khí", duration)
         self._left_en.on(); self._left_up.off(); self._left_down.on()
         self._right_up.off(); self._right_down.on()
@@ -388,8 +397,6 @@ class Lift:
 
     def reset(self):
         self.home_to_floor()
-        self._left_dropped = False
-        self._right_dropped = False
 
     # ----------------------------------------------------------
     # Cleanup

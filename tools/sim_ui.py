@@ -201,7 +201,11 @@ def main():
 
     here = os.path.dirname(os.path.abspath(__file__))
     template = open(os.path.join(here, "sim_ui.html"), encoding="utf-8").read()
-    body = template.replace("/*__DATA__*/null", json.dumps(data, ensure_ascii=False))
+    # Kiểm mốc có thật: thay thế im lặng không khớp thì trang ra với data=null,
+    # mở lên chỉ thấy TRẮNG mà không lỗi nào — đã bị đúng một lần.
+    marker = "/*__DATA__*/null"
+    assert marker in template, f"tools/sim_ui.html thiếu mốc {marker!r}"
+    body = template.replace(marker, json.dumps(data, ensure_ascii=False))
 
     # Khuôn KHÔNG có <!doctype>/<html>/<body> (đúng yêu cầu của hệ xuất bản Artifact,
     # nơi phần vỏ được thêm tự động). Nhưng file mở CỤC BỘ mà thiếu doctype thì trình

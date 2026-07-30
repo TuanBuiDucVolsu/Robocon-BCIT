@@ -22,12 +22,12 @@
 ## A. Test tự động (PC, không cần GPIO)
 
 ```bash
-python3 -m pytest tests/ -q          # tất cả — 187 test + 394 subtest
+python3 -m pytest tests/ -q          # tất cả — 197 test + 401 subtest
 python3 -m unittest tests.test_logic -v
 python3 -m unittest tests.test_match_sim -v
 ```
 
-Kết quả mong đợi: `187 passed`. Cảnh báo `PinFactoryFallback` là **bình thường** trên PC.
+Kết quả mong đợi: `197 passed`. Cảnh báo `PinFactoryFallback` là **bình thường** trên PC.
 
 ### `test_units.py` — logic thuần từng module
 
@@ -122,22 +122,26 @@ sudo systemctl stop robot        # tránh tranh chấp GPIO
 
 ### `test_lift.py` — cơ cấu nâng
 
+Menu **LẶP** (chọn xong về menu, không thoát). **Home lúc vào và sau mỗi option** —
+càng không có limit switch nên `_current_level` chỉ khớp thực tế sau khi home; ngắt
+giữa lúc càng đang lên mà không home thì lần nâng sau đội cữ cơ khí, kẹt motor.
+
 | # | Test |
 |---|---|
-| 1 | Nâng/Hạ cơ bản |
-| 2 | Các tầng kệ (1 và 2) |
-| 3 | Pickup/Dropoff tầng 1 |
-| 4 | Pickup/Dropoff tầng 2 |
+| 1 | **Diễn tập TRỌN 1 lượt giao** — pickup → thả càng 1 → nâng lại → thả càng 2 → gập, đếm điểm theo đúng quy tắc `packages_delivered` của main.py |
+| 2 | Chạy hết dải hành trình SÀN → T1 → SÀN → T2 → SÀN |
+| 3 | Pickup/Dropoff (**chọn tầng 1 hoặc 2** — gộp option 4 cũ) |
 | 5 | Thả từng càng NV1 (**luôn nâng lại/gập, giống main.py**) |
 | 6 | Pickup NV2 (`require_both=False`) |
 | 7 | `dropoff()` 2 kiện cùng nhà máy |
 | 8 | IR real-time |
-| 9 | **`home_to_floor`** — chạy đầu mỗi trận, phải hạ hết cỡ từ tầng 2 |
+| 9 | **`home_to_floor`** — chạy đầu mỗi trận, phải hạ hết cỡ từ tầng 2. So `LIFT_HOME_DURATION` với **`min_home_duration()`** (đã tính `LIFT_*_LOWER_EXTRA`), không phải với `LIFT_TIME_SHELF_2` suông |
 | a | Scan 8 channel MCP3008 (chốt `PALLET_THRESHOLD`) |
 | b | **Càng TRÁI riêng** — nâng + hạ (càng phải đứng yên) |
 | c | **Càng PHẢI riêng** — nâng + hạ (càng trái đứng yên) |
 | e | **So sánh 2 càng cùng tầng** — nâng riêng từng bên rồi giữ nguyên để so độ cao |
-| d | **Calibrate độ cao + bù lệch** (lưu `config.py`) |
+| d | **Calibrate độ cao + bù lệch** (lưu `config.py`). `find1/find2` chạy **MỘT càng** do người chọn rồi **trừ lại `LIFT_*_EXTRA`** trước khi lưu mốc gốc — chạy cả 2 càng cùng số giây thì 2 bên dừng ở 2 độ cao khác nhau, không biết đang canh theo bên nào |
+| h | Home lại giữa phiên |
 
 > b/c/e dùng ĐÚNG thời gian đã bù (`_move_duration`) chứ không bật GPIO thô — nên cái
 > quan sát được chính là cái xảy ra trong trận. Trước đây b/c bật chân trực tiếp với
@@ -197,7 +201,7 @@ python3 -m tools.test_right_wheel    # cô lập lỗi bánh chạy mãi sau sto
 
 ## E. Thứ tự khi lên sân
 
-**0. Trước khi đi:** `python3 -m pytest tests/ -q` trên PC → phải `187 passed`.
+**0. Trước khi đi:** `python3 -m pytest tests/ -q` trên PC → phải `197 passed`.
 
 **1. Bản đồ — làm TRƯỚC, mọi thứ khác dựa lên nó**
 ```bash
@@ -218,7 +222,7 @@ Tăng từng nấc +10 theo quy trình trong `config.py`, mỗi nấc chạy l�
 trượt giao lộ không. Riêng việc này gỡ ~80s. Xong rồi chạy #16 để cân nhắc bật
 `CONTINUOUS_INTERSECTIONS`.
 
-**5. Nâng hạ** — `test_lift` #a → #8 → **#b #c (từng càng riêng)** → **#e (so 2 càng)**
+**5. Nâng hạ** — `test_lift` #a → #8 → **#b #c (từng càng riêng)** → **#e (so 2 càng)** → **#1 (diễn tập trọn lượt giao)**
 → #d (calibrate, chỉnh `l+/l-` `r+/r-` cho tới khi #e thấy bằng nhau) → #9 → #1..#7.
 > ⚠️ Mô hình bù lệch đã đổi sang **vị trí tuyệt đối** — số cũ của tầng 2 không còn đúng.
 

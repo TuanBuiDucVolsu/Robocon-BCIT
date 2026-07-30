@@ -22,7 +22,7 @@ Ký hiệu: 🔒 = **chặn** các bước sau, không đạt thì dừng lại 
 
 ## GIAI ĐOẠN 0 — Trên PC (10 phút, không rủi ro)
 
-- [ ] **0.1** `python3 -m pytest tests/ -q` → phải **`187 passed`** 🔒
+- [ ] **0.1** `python3 -m pytest tests/ -q` → phải **`197 passed`** 🔒
 - [ ] **0.2** `python3 -m tools.show_routes > routes.txt` — **in ra giấy, mang theo**
 - [ ] **0.3** `python3 -m tools.dry_run > kichban.txt` — **in ra giấy**, đây là kịch bản
       robot sẽ chạy, dùng để đối chiếu ở giai đoạn 4
@@ -64,14 +64,18 @@ Ký hiệu: 🔒 = **chặn** các bước sau, không đạt thì dừng lại 
 ## GIAI ĐOẠN 3 — Cơ cấu nâng (kê lên đế)
 
 - [ ] **3.1** `test_lift` **d** → gõ `find1` rồi `find2` — đo thật `LIFT_TIME_SHELF_1/2`
-      bằng cách nâng từng xung 0.05s cho tới khi càng khít dưới pallet
+      bằng cách nâng từng xung 0.05s cho tới khi càng khít dưới pallet.
+      *Nó hỏi canh theo càng nào và chỉ chạy càng đó, rồi trừ `LIFT_*_EXTRA` ra mốc gốc*
 - [ ] **3.2** `test_lift` **e** → thấy lệch thì sang **d** chỉnh `l+/l-` `r+/r-` → quay lại **e**.
       Lặp tới khi 2 càng ngang nhau
       *Mô hình bù vừa đổi sang vị trí tuyệt đối — số cũ của tầng 2 không còn đúng*
-- [ ] **3.3** `test_lift` **9** — nâng lên tầng 2 rồi home. *Đạt:* cả 2 càng chạm đáy hẳn
-- [ ] **3.4** `test_lift` **3** → **4** — pickup/dropoff tầng 1 và 2, IR xác nhận
+- [ ] **3.3** `test_lift` **9** — nâng lên tầng 2 rồi home. *Đạt:* cả 2 càng chạm đáy hẳn,
+      và dòng "Cần tối thiểu" ≤ `LIFT_HOME_DURATION`
+- [ ] **3.4** `test_lift` **3** (tầng 1) → **3** (tầng 2) — pickup/dropoff, IR xác nhận
 - [ ] **3.5** `test_lift` **5** — thả từng càng, nâng lại / gập càng
 - [ ] **3.6** `test_lift` **6** — pickup NV2 (chỉ cần 1 IR)
+- [ ] **3.7** `test_lift` **1** — diễn tập TRỌN 1 lượt giao, chạy 2 lần: 2 kiện khác
+      nhà máy và 2 kiện cùng nhà máy. *Đạt:* in "main.py sẽ cộng 2/2 kiện" cả 2 lần
 
 ---
 

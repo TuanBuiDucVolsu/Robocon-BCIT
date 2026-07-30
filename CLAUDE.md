@@ -112,7 +112,9 @@ vision/shape_match.py — ShapeMatcher: ORB + BFMatcher (Lowe's ratio test) + RA
 debug/server.py      — Flask web debug UI (MJPEG stream, line sensor, classify_pair)
 scripts/             — install.sh, start.sh, robot.service (systemd auto-start)
 docs/                — CAC_BUOC_HOAT_DONG.md, PHAN_CUNG.md, ...
-tests/               — test_motion/lift/vision/smoke + test_logic (45 unit test)
+tests/               — test_motion/lift/vision/smoke + test_logic/units/match_sim/tools
+                        (197 unit test). config_editor.save_config: ghi hằng số vào
+                        config.py cho 2 menu calibrate, TỪ CHỐI khi regex không khớp
 ```
 
 ## State machine (luồng chính)
@@ -282,7 +284,7 @@ tại điểm giao, line cắt ngang nằm dọc thanh cảm biến nên xoay ki
 | Script | Mục đích |
 |--------|----------|
 | `tests/test_logic.py` | 100 unit test — PC, không GPIO (bản đồ + mô phỏng route tới đúng chỗ + polarity + phân loại màu + reset + resume) |
-| `tests/test_units.py` | 52 unit test — PC (bám line, lift, ShapeMatcher, classify_pair) |
+| `tests/test_units.py` | 62 unit test — PC (bám line, lift, ShapeMatcher, classify_pair) |
 | `tests/test_match_sim.py` | Mô phỏng TRỌN trận với phần cứng giả lập: **13/13 kiện** (12 NV1 + hàng rời NV2), reset giữa trận, lỗi phần cứng, mất line giữa route — kiểm vị trí main.py tin tưởng có khớp vị trí thật không |
 | `tests/test_tools.py` | 21 unit test — PC (regex của `measure_phases` phải khớp chuỗi log CÓ THẬT trong source + round-trip; `dry_run` chạy hết được và mọi bước đi đều có line thật) |
 | `tools/show_routes.py` | In toàn bộ route sinh ra để đối chiếu tay trên sa bàn |
@@ -293,7 +295,7 @@ tại điểm giao, line cắt ngang nằm dọc thanh cảm biến nên xoay ki
 | `tests/LO_TRINH_TEST.md` | **Lộ trình test đánh số theo thứ tự phải làm** — bắt đầu từ đây |
 | `tests/DIEN_TAP.md` | 9 bài diễn tập sát thi đấu: ngân sách 240s, kiện xấu nhất, reset, pin, ánh sáng |
 | `tests/test_motion.py` | 17 option (1-17) + `d/e/f` — motor, line, route, dò nửa sân, lùi, giới hạn tốc độ |
-| `tests/test_lift.py` | 9 option (1-9) + `a-e` — nâng/hạ, IR, home, từng càng riêng, so 2 càng, calibrate |
+| `tests/test_lift.py` | Menu LẶP, **home đầu phiên + sau mỗi option** (không limit switch → `_current_level` chỉ đúng sau khi home). Option **1 = diễn tập trọn 1 lượt giao** như main.py; còn lại: nâng/hạ, IR, home, từng càng riêng, so 2 càng, calibrate |
 | `tests/test_vision.py` | 9 option + `l` — camera, BGR, ORB, HSV, classify_pair, ánh xạ trái/phải |
 | `tests/test_smoke.py` | Smoke tích hợp trên sa bàn |
 
@@ -391,7 +393,10 @@ Phân tích màu HSV (OpenCV), không cần model AI.
 - `TURN_TIME = 0.5s` (fast-profile, CHƯA calibrate thật) cần đo lại trên robot thật
 - `LIFT_TIME_SHELF_1/2` cần calibrate riêng cho từng càng; `LIFT_*_EXTRA` là bù theo
   **vị trí tuyệt đối** (thời gian từ sàn lên tầng n), không phải bù mỗi lần chạy
-- `LIFT_HOME_DURATION` phải **> `LIFT_TIME_SHELF_2`**, nếu không home không chạm đáy
+- `LIFT_HOME_DURATION` phải **≥ `Lift.min_home_duration()`** = `LIFT_TIME_SHELF_2` **+**
+  `LIFT_*_LOWER_EXTRA` lớn hơn trong 2 bên (hiện 4.2s). So với `LIFT_TIME_SHELF_2`
+  suông là SAI ngưỡng — thấy "đạt" mà càng vẫn còn hở. `home_to_floor()` tự kẹp lên
+  ngưỡng thật + ghi WARNING, nên không còn hạ thiếu âm thầm được
 - **3 chế độ chạy** (`main()`):
   - `ROBOT_LOOP=1` (`scripts/practice.sh`) → **luyện tập lặp**: `run_practice_loop()` chạy
     state machine → `_reset_for_new_run()` → chờ nút → lặp; KHÔNG dọn phần cứng giữa lượt;

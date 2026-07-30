@@ -20,11 +20,13 @@ import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+ROOT = os.path.join(os.path.dirname(__file__), "..")
+sys.path.insert(0, ROOT)
 
 import config
-from control.lift import Lift, PalletSensors
+from control.lift import MAX_LEVEL, Lift, PalletSensors
 from control.motion import Motion
+from tests.config_editor import save_config
 
 try:
     import cv2 as _cv2
@@ -37,8 +39,6 @@ def _lift_stub() -> Lift:
     """Lift không đụng GPIO — chỉ dùng phần tính thời gian."""
     lift = object.__new__(Lift)
     lift._current_level = 0
-    lift._left_dropped = False
-    lift._right_dropped = False
     return lift
 
 
@@ -118,6 +118,119 @@ class TestLiftTiming(unittest.TestCase):
 # ==========================================================
 # 2. Cảm biến IR pallet — quyết định CỘNG ĐIỂM hay không
 # ==========================================================
+
+class TestHomeDuration(unittest.TestCase):
+    """LIFT_HOME_DURATION phải đủ để hạ từ tầng cao nhất — kể cả phần bù HẠ.
+
+    Càng không có limit switch: home là cách DUY NHẤT chuẩn lại mốc 0, và không có
+    tín hiệu nào báo "đã chạm đáy". Hạ thiếu thì `_current_level` khai SÀN trong khi
+    càng còn treo → mọi phép tính tầng sau đó lệch, không báo lỗi gì.
+
+    Trước đây test tay + CLAUDE.md so với `LIFT_TIME_SHELF_2` suông. Sai: hạ còn
+    cộng `LIFT_*_LOWER_EXTRA`, mà bù 2 càng khác nhau. Với số hiện tại càng trái
+    cần 4.2s trong khi LIFT_TIME_SHELF_2 chỉ 3.9s → so với 3.9s thấy "đạt" mà vẫn hở.
+    """
+
+    def setUp(self):
+        self.lift = _lift_stub()
+
+    def test_covers_slowest_fork_lowering_from_top(self):
+        need = self.lift.min_home_duration()
+        for side in ("left", "right"):
+            self.assertLessEqual(
+                self.lift._move_duration(side, MAX_LEVEL, 0, raising=False),
+                need + 1e-9,
+                f"min_home_duration() không đủ cho càng {side}")
+
+    def test_stricter_than_shelf2_alone(self):
+        """Ngưỡng đúng phải ≥ LIFT_TIME_SHELF_2 — nếu bù hạ dương thì lớn hơn hẳn."""
+        self.assertGreaterEqual(self.lift.min_home_duration(), config.LIFT_TIME_SHELF_2)
+        with patch.object(config, "LIFT_LEFT_LOWER_EXTRA", 0.9):
+            self.assertAlmostEqual(self.lift.min_home_duration(),
+                                   config.LIFT_TIME_SHELF_2 + 0.9)
+
+    def test_config_value_is_enough(self):
+        """config.py hiện tại phải ĐẠT — chốt lại giá trị thật, không chỉ công thức."""
+        need = self.lift.min_home_duration()
+        self.assertGreaterEqual(
+            config.LIFT_HOME_DURATION, need,
+            f"LIFT_HOME_DURATION={config.LIFT_HOME_DURATION} < {need} cần để hạ hết cỡ")
+
+    def test_home_clamps_up_when_config_too_small(self):
+        """Config thiếu thì home_to_floor() phải tự chạy ĐỦ, không hạ thiếu âm thầm."""
+        lift = _lift_stub()
+        for name in ("_left_en", "_left_up", "_left_down", "_right_up", "_right_down"):
+            setattr(lift, name, MagicMock())
+        need = lift.min_home_duration()
+        with patch.object(config, "LIFT_HOME_DURATION", need - 1.0), \
+             patch("control.lift.time.sleep") as slept:
+            lift.home_to_floor()
+        self.assertAlmostEqual(slept.call_args[0][0], need)
+        self.assertEqual(lift._current_level, 0)
+
+
+class TestSaveConfig(unittest.TestCase):
+    """`save_config` phải BÁO khi không khớp, không im lặng không làm gì.
+
+    Đây là hàm mà menu calibrate của test_motion/test_lift dùng để ghi config.py.
+    Bản cũ (một bản trong mỗi file) gọi `re.sub` rồi ghi lại luôn: đổi tên hằng số
+    hay viết giá trị bằng biểu thức là gõ `t1+`/`c+` mãi mà số không đổi, không lỗi.
+    """
+
+    def _tmp(self, text: str) -> str:
+        import tempfile
+        fd, path = tempfile.mkstemp(suffix=".py")
+        os.close(fd)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+        self.addCleanup(os.unlink, path)
+        return path
+
+    def test_writes_value_and_keeps_comment(self):
+        path = self._tmp("A = 1\nTURN_TIME = 0.5   # chú thích\nB = 2\n")
+        self.assertTrue(save_config("TURN_TIME", 0.62, path))
+        self.assertIn("TURN_TIME = 0.620   # chú thích", open(path).read())
+
+    def test_handles_negative_values(self):
+        path = self._tmp("LIFT_LEFT_EXTRA = -0.450\n")
+        self.assertTrue(save_config("LIFT_LEFT_EXTRA", -0.5, path))
+        self.assertIn("LIFT_LEFT_EXTRA = -0.500", open(path).read())
+
+    def test_refuses_when_key_absent(self):
+        path = self._tmp("A = 1\n")
+        before = open(path).read()
+        self.assertFalse(save_config("KHONG_CO", 1.0, path))
+        self.assertEqual(open(path).read(), before, "không khớp thì KHÔNG được ghi")
+
+    def test_refuses_when_key_duplicated(self):
+        """2 chỗ khai cùng tên → không biết sửa chỗ nào, phải từ chối."""
+        path = self._tmp("X = 1.0\nX = 2.0\n")
+        before = open(path).read()
+        self.assertFalse(save_config("X", 3.0, path))
+        self.assertEqual(open(path).read(), before)
+
+    def test_does_not_match_prefix_of_longer_name(self):
+        path = self._tmp("LIFT_TIME_SHELF_1_BIS = 9.0\nLIFT_TIME_SHELF_1 = 1.2\n")
+        self.assertTrue(save_config("LIFT_TIME_SHELF_1", 1.5, path))
+        text = open(path).read()
+        self.assertIn("LIFT_TIME_SHELF_1_BIS = 9.0", text)
+        self.assertIn("LIFT_TIME_SHELF_1 = 1.500", text)
+
+    def test_every_key_the_calibrate_menus_write_exists_in_config(self):
+        """Mọi hằng số 2 menu calibrate ghi phải khớp ĐÚNG 1 chỗ trong config.py thật."""
+        import re
+        keys = set()
+        for f in ("tests/test_lift.py", "tests/test_motion.py"):
+            src = open(os.path.join(ROOT, f), encoding="utf-8").read()
+            keys |= set(re.findall(r'save_config\(\s*"([A-Z_0-9]+)"', src))
+            keys |= set(re.findall(r'"([A-Z_0-9]+)",\s*[+-]?step_', src))
+        self.assertTrue(keys, "không tìm thấy hằng số nào — regex của test đã lạc hậu")
+        cfg = open(os.path.join(ROOT, "config.py"), encoding="utf-8").read()
+        for key in sorted(keys):
+            with self.subTest(key=key):
+                n = len(re.findall(rf"^{re.escape(key)}\s*=\s*[\d.+-]+", cfg, re.M))
+                self.assertEqual(n, 1, f"{key} khớp {n} chỗ trong config.py (cần 1)")
+
 
 class TestPalletSensors(unittest.TestCase):
     def _sensors(self, left_raw, right_raw, read_ok=True, available=True):

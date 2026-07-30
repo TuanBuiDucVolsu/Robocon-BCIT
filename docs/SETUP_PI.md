@@ -279,7 +279,7 @@ python3 tests/test_motion.py    # Option 10, 11
 python3 tests/test_motion.py    # Option 12
 
 # 6. Cơ cấu nâng/hạ + IR + drop từng càng + NV2
-python3 tests/test_lift.py      # Option 1–8
+python3 tests/test_lift.py      # Option 1 (diễn tập trọn lượt) → 2, 3, 5, 6, 8, 9
 
 # 7. Camera + ORB (chính) + HSV (dự phòng) + classify_pair (2 kiện)
 python3 -m tools.capture_templates   # Chụp ảnh mẫu ORB 4 kiện hàng trước (bắt buộc)

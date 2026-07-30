@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import config
 from control import Motion
+from tests.config_editor import save_config
 from control.mcp3008_bus import reset_mcp3008_bus
 
 
@@ -267,19 +268,6 @@ def _run_right(m: Motion, speed: float, forward: bool):
         m._right_rev.value = speed / 100
 
 
-def _save_config(key: str, value: float):
-    """Ghi đè giá trị một hằng số float trong config.py."""
-    import re
-    path = os.path.join(os.path.dirname(__file__), "..", "config.py")
-    text = open(path).read()
-    text = re.sub(
-        rf"^({re.escape(key)}\s*=\s*)[\d.+-]+",
-        lambda m: f"{m.group(1)}{value:.3f}",
-        text, flags=re.MULTILINE
-    )
-    open(path, "w").write(text)
-
-
 def test_encoder_live(m: Motion):
     """Đọc xung encoder 2 bánh real-time trong khi tiến — kiểm tra dây/đấu đúng kênh."""
     if not (m._encoder_left.available and m._encoder_right.available):
@@ -333,7 +321,7 @@ def test_calibrate_pwm_by_encoder(m: Motion):
         print(f"  Đề xuất PWM_COMPENSATION = {suggested:.3f} (hiện {config.PWM_COMPENSATION:.3f})")
 
         if input("  Lưu giá trị đề xuất vào config.py? (y/N): ").strip().lower() == "y":
-            _save_config("PWM_COMPENSATION", suggested)
+            save_config("PWM_COMPENSATION", suggested)
             print("  Đã lưu.")
 
 
