@@ -286,7 +286,16 @@ EDGE_COST_START_GAP = 3      # Phụ phí đoạn ngang R0 (trôi qua khoảng �
 # Chi phí đo trên Pi 4: classify_pair 360ms → 585ms, tức +225ms mỗi lần quét, cả trận
 # 6 lượt ≈ +1.4s trên ngân sách 240s.
 CAMERA_RESOLUTION = (1296, 972)
-CONFIDENCE_THRESHOLD = 0.20  # Tỷ lệ pixel tối thiểu (đường HSV)
+# Hạ 0.20 → 0.12 để HANA đủ tư cách lên tiếng. Decal hana nền TRẮNG nên dải amkor
+# ("vô sắc và sáng") luôn ăn nhiều pixel hơn — trên kiện hana thật: amkor 47.0% còn
+# hana chỉ 15.4%. Hana không cần thắng amkor về SỐ pixel, vì màu đỏ của nó là đặc
+# trưng RIÊNG, sạch hơn hẳn mọi thứ khác:
+#     điểm dải hana trên kiện hana 15.4%, trên 3 loại kia chỉ 0.6-0.9% → chênh >20x
+# Nó chỉ cần vượt ngưỡng để cơ chế ưu tiên nhãn chromatic (CHROMATIC_LABELS) kích
+# hoạt và chặn amkor lại.
+# ⚠️ PHẢI đi kèm việc nâng sàn S của samsung lên 90. Hạ ngưỡng một mình thì samsung
+# (31.1% trên kiện AMKOR) sẽ thắng ở ô đó — chữa ô này hỏng ô kia.
+CONFIDENCE_THRESHOLD = 0.12  # Tỷ lệ pixel tối thiểu (đường HSV)
 MAX_SCAN_RETRIES = 3         # Số lần chụp lại trong 1 lượt quét
 MAX_PAIR_SCAN_ATTEMPTS = 2   # Số lần quét lại cả cặp sau khi tiếp cận kệ
 SCAN_RETRY_DELAY = 0.05      # Giây chờ giữa 2 lần chụp
@@ -353,8 +362,16 @@ NO_CENTER_WEIGHT_LABELS = ("hana_micron",)   # Hana đếm đều toàn ROI (ngo
 # sau khi ROI đã dịch theo tầng (commit 01e023a) — bộ số trước đó chốt trên vùng
 # vắt ngang 2 tầng nên không dùng lại được.
 COLOR_RANGES = {
+    # ⚠️ Sàn S nâng 52 → 90 BẰNG TAY. Decal "Al Aluminum" của amkor có nền xanh xám
+    # nhạt, rơi đúng dải hue này — đo trên kiện amkor thật: dải samsung ăn 31.1% còn
+    # dải amkor chỉ 18.5%, tức HSV gọi kiện amkor thành samsung. Chip xanh của samsung
+    # là màu IN ĐẬM còn ánh xanh trên nhôm thì nhạt, nên tách được bằng độ bão hoà:
+    #     S>=52 : samsung thật 33.3% / amkor giả 16.7%  → 2.0x  ❌
+    #     S>=90 : samsung thật 23.4% / amkor giả  5.7%  → 4.1x  ✅
+    # Đừng nâng quá 110: samsung thật tụt còn 20.3%, sát ngưỡng, thiếu dư địa khi
+    # ánh sáng tối đi.
     "samsung": [                                # chip xanh dương
-        ([85, 52, 21], [116, 255, 226]),
+        ([85, 90, 21], [116, 255, 226]),
     ],
     "foxconn": [                                # chip vàng đồng
         ([11, 49, 29], [42, 206, 232]),
