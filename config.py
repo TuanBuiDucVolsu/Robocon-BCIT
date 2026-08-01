@@ -277,7 +277,13 @@ EDGE_COST_REVERSE = 1        # Phụ phí so với tiến 1 giao lộ → hoà t
 # Sau khi lùi tới giao lộ, thân xe nằm QUÁ giao lộ một đoạn bằng khoảng cách từ trục
 # bánh tới thanh cảm biến (tiến thì thân nằm trước giao lộ đúng bấy nhiêu). Nếu xoay
 # xong hay bị trượt line thì đặt số giây tiến bù ở đây (đo bằng test_motion option 15).
-REVERSE_RECENTER_TIME = 0.0
+# Đo trên robot: sau khi lùi tới giao lộ, trục bánh dẫn động nằm QUÁ vạch ngang
+# 12cm — đúng bằng khoảng cách trục → thanh cảm biến. Cần tiến bù đoạn đó để tâm
+# xoay về đúng giao lộ.
+# Dò trên robot: 1.5s thì tiến QUÁ vạch một chút → 35% duty đi hơn 12cm trong 1.5s,
+# tức ~90mm/s (nội suy lý thuyết cho 65mm/s, thực tế nhanh hơn). 12cm ÷ 90mm/s ≈ 1.3s.
+# Tiến bù là tiến VỀ PHÍA KỆ nên thà thiếu còn hơn thừa.
+REVERSE_RECENTER_TIME = 1.3
 
 # ============================================================
 # CHI PHÍ TÌM ĐƯỜNG (navigation.py) — quy đổi ra "1 giao lộ đi thẳng"
@@ -437,7 +443,14 @@ SAFETY_MARGIN = 10           # Giây dừng sớm trước khi hết giờ
 # lúc đang chạy giữa sân thay vì đứng yên. Đo lại bằng tools.measure_phases rồi
 # chỉnh cho khớp thời gian NV2 thật.
 TASK2_MIN_TIME = 30          # Giây tối thiểu còn lại thì mới bắt đầu NV2
-TURN_TIME = 0.5              # ⚠️ CHƯA đo cho JGA25-370 — ƯU TIÊN #1, test_motion op.10
+TURN_TIME = 0.95             # 0.5 (số của motor CŨ) chỉ quay được 45° trên JGA25-370
+                             # → nhân đôi, trừ hao phần tăng tốc đầu mỗi lượt xoay
+                             # (kéo dài gấp đôi cho HƠN gấp đôi góc).
+                             # ⚠️ Mới xác nhận xoay TRÁI đạt 90° (test_motion op.10);
+                             # xoay PHẢI chưa kiểm riêng. TURN_TIME dùng CHUNG cho cả
+                             # 2 chiều nên nếu 2 chiều lệch nhau thì không giá trị nào
+                             # đúng cả hai — lúc đó vấn đề ở bù PWM, không ở đây.
+                             # SPEED_TURN phải CHỐT trước, đổi sau là sai lại toàn bộ.
 
 # Mốc bắt đầu trận: lỗi giữa trận → thoát mã 1 → systemd restart → đọc lại file này
 # để chạy NỐT thời gian còn lại. Ở /tmp nên tự mất sau reboot.
