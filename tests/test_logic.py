@@ -15,6 +15,11 @@ from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+# ⚠️ PHẢI đặt TRƯỚC khi import control.* — chạy file này TRÊN PI mà không có dòng này
+# thì Motion() gắn vào chân GPIO thật. Xem giải thích đầy đủ ở tests/test_units.py.
+os.environ.setdefault("GPIOZERO_PIN_FACTORY", "mock")
+os.environ.setdefault("GPIOZERO_MOCK_PIN_CLASS", "mockpwmpin")
+
 import config
 import navigation as nav
 from control.motion import LineSensor, Motion

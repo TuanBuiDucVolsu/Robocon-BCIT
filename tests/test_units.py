@@ -23,6 +23,16 @@ from unittest.mock import MagicMock, patch
 ROOT = os.path.join(os.path.dirname(__file__), "..")
 sys.path.insert(0, ROOT)
 
+# ⚠️ PHẢI đặt TRƯỚC khi import control.* — nếu không, chạy file này TRÊN PI sẽ điều
+# khiển phần cứng THẬT. TestFollowLine gọi Motion.follow_line() để đọc ngược duty
+# cycle 4 chân motor; chỉ cảm biến được giả lập, còn chân ra là PWMOutputDevice thật
+# → BÁNH XE QUAY, và follow_line() không dừng motor nên nó quay tới tận cleanup().
+# mockpwmpin là bắt buộc: MockPin thường không hỗ trợ PWM (PinPWMUnsupported).
+# Dùng setdefault để test_motion.py / test_lift.py / tools.measure_pickup vẫn đặt đè
+# được khi cần phần cứng thật.
+os.environ.setdefault("GPIOZERO_PIN_FACTORY", "mock")
+os.environ.setdefault("GPIOZERO_MOCK_PIN_CLASS", "mockpwmpin")
+
 import config
 from control.lift import MAX_LEVEL, Lift, PalletSensors
 from control.motion import Motion
