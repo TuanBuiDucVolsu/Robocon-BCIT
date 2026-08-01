@@ -205,7 +205,9 @@ APPROACH_FAST_SPEED = 60     # Pha xa
 # giữa đường, báo "càng đã chạm kệ" trong khi còn cách kệ rất xa (đã gặp thật ở
 # test_motion option 9: khựng ở 18.9cm trong khi mục tiêu 11.9cm).
 # Vùng ~25% là chỗ đường đặc tính duty–tốc độ dựng đứng, không bao giờ ổn định.
-APPROACH_SLOW_SPEED = 32     # Pha gần — 25 quá chậm (bò từng tí), 40 vọt quá đà
+APPROACH_SLOW_SPEED = 32     # Pha gần — ĐÃ XÁC NHẬN trên robot (test_motion #9).
+                             # 25 quá chậm (bò từng tí, bị cơ chế chống húc kệ dừng
+                             # oan), 40 vọt quá đà. 32 chạy sạch.
 # PHẢI LỚN HƠN ①, không thì pha chậm không bao giờ chạy và robot lao hết tốc độ
 # tới tận lúc dừng.
 # Hạ 35 → 20 vì ① đã tụt từ 25.0 xuống 11.9: giữ 35 là bắt robot bò suốt 23cm thay

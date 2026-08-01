@@ -263,10 +263,12 @@ tại điểm giao, line cắt ngang nằm dọc thanh cảm biến nên xoay ki
   hơi lệch, đặt lại đúng line thì chạy sạch. Lúc thi đấu robot tới kệ bằng bám line,
   nên nếu bám line để nó dừng hơi lệch thì cùng lỗi đó xảy ra giữa trận, mà lúc ấy
   không có tay ai đỡ. Cân nhắc thêm một bước căn thẳng trước khi tiếp cận.
-  ⚠️ `APPROACH_SLOW_SPEED` nằm sát VÙNG CHẾT của JGA25-370 qua L298N: 25 thì robot
-  chỉ nhích từng tí (chậm hơn ngưỡng 0.83cm/s của cơ chế chống húc kệ → bị dừng oan
-  giữa đường và báo nhầm "càng đã chạm kệ"), 40 thì vọt quá đà. Hiện để 32, CHƯA
-  chạy thử. Vẫn nhích → nâng 36; vẫn vọt → hạ 28.
+  ⚠️ `APPROACH_SLOW_SPEED` nằm sát VÙNG CHẾT của JGA25-370 qua L298N — dải dùng được
+  rất hẹp: 25 thì robot chỉ nhích từng tí (chậm hơn ngưỡng 0.83cm/s của cơ chế chống
+  húc kệ → bị dừng oan giữa đường và báo nhầm "càng đã chạm kệ"), 40 thì vọt quá đà.
+  **32 đã xác nhận chạy sạch trên robot** (test_motion #9). Nếu thay motor, đổi pin
+  hay đổi mặt sàn thì đo lại — đây là số bám vào phần cứng cụ thể, không phải hằng
+  số vật lý.
   **Chặn chạy mù**: nếu sau `APPROACH_BLIND_TIMEOUT` chưa lần nào thấy vật trong
   `APPROACH_DETECT_DISTANCE` → dừng + trả `False` (trước đây chạy hết 5s ở 60% tốc độ
   = lao ra khỏi sa bàn / sang sân đối phương khi mất echo).
