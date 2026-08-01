@@ -14,6 +14,17 @@ import config
 from vision import Vision
 
 
+def _ask_tier() -> int:
+    """Hỏi TẦNG đang soi. Bắt buộc vì camera gắn cố định vào thân robot: tầng 1 và
+    tầng 2 rơi vào 2 độ cao khác nhau trong khung, nên vùng quét dịch theo tầng
+    (config.ROI_Y_CENTER). Soi nhầm tầng là soi một vùng khung hình khác hẳn cái mà
+    main.py soi lúc thi đấu — đúng loại sai lầm khiến 'kiểm xong vẫn trượt'."""
+    raw = input("  Đang soi TẦNG mấy? (1/2, mặc định 2): ").strip()
+    tier = 1 if raw == "1" else 2
+    print(f"  → Dùng vùng quét của TẦNG {tier}")
+    return tier
+
+
 def test_camera_capture(vision: Vision):
     print("\n[TEST] Chụp ảnh từ camera...")
     frame = vision._capture_frame()
@@ -58,10 +69,11 @@ def test_shape_analysis(vision: Vision):
     # là CHIA ĐÔI khung rồi nhận diện từng nửa MỘT kiện. Bản cũ ở đây soi nguyên
     # khung (2 kiện) nên số inlier đẹp hơn hẳn thực tế — kiểm xong yên tâm mà vào
     # trận vẫn trượt.
+    tier = _ask_tier()
     h, w = frame.shape[:2]
     mid = w // 2
     for side, half in (("TRÁI", frame[:, :mid]), ("PHẢI", frame[:, mid:])):
-        roi = vision._crop_roi(half)
+        roi = vision._crop_roi(half, tier)
         gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
         kp, des = matcher._orb.detectAndCompute(gray, None)
         print(f"  --- Nửa {side}: ROI {roi.shape[1]}x{roi.shape[0]}, "
@@ -90,6 +102,53 @@ def test_shape_analysis(vision: Vision):
             print("     Thường là do ảnh mẫu dính NỀN GIỐNG NHAU (kệ/pallet/tường):")
             print("     mọi mẫu cùng khớp vào phần nền nên không cái nào trội hẳn.")
         print()
+
+
+def test_classify_both_tiers(vision: Vision):
+    """Quét CẢ 2 TẦNG liên tiếp — bài kiểm sát điều kiện thi đấu nhất.
+
+    Đầu trận kệ có hàng ở CẢ 2 tầng. Đây là lúc lỗi vùng quét lộ ra: nếu ROI không
+    dịch theo tầng thì nó vắt ngang cả 2, ôm 2 loại kiện cùng lúc và nhận diện sai
+    theo kiểu rất khó lần ra. Quét từng tầng riêng rồi đối chiếu với thực tế.
+    """
+    print("\n[TEST] Nhận diện CẢ 2 TẦNG (sát điều kiện thi đấu)")
+    print("  Kệ phải có đủ 2 kiện ở CẢ tầng 1 lẫn tầng 2 — đúng như đầu trận.")
+    print(f"  Nhãn hợp lệ: {', '.join(config.LABEL_TO_FACTORY)}\n")
+
+    expect = {}
+    for tier in (2, 1):
+        raw = input(f"  Tầng {tier} thực tế đang đặt gì? (trái,phải — Enter để bỏ đối chiếu): ")
+        parts = [x.strip() for x in raw.strip().lower().split(",")]
+        expect[tier] = tuple(parts) if len(parts) == 2 and all(parts) else None
+
+    input("\n  Đặt robot đúng vị trí quét rồi nhấn Enter...")
+
+    got, all_ok = {}, True
+    for tier in (2, 1):
+        label_l, label_r = vision.classify_pair(tier)
+        got[tier] = (label_l, label_r)
+        print(f"\n  --- TẦNG {tier} ---")
+        print(f"    Robot đọc : trái={label_l or '?'}  phải={label_r or '?'}")
+        if expect[tier] is None:
+            if label_l is None or label_r is None:
+                all_ok = False
+                print("    ⚠ Không nhận đủ 2 kiện")
+            continue
+        exp_l, exp_r = expect[tier]
+        print(f"    Thực tế   : trái={exp_l}  phải={exp_r}")
+        ok = (label_l == exp_l and label_r == exp_r)
+        all_ok = all_ok and ok
+        print(f"    {'✅ KHỚP' if ok else '❌ SAI'}")
+
+    # Hai tầng ra CÙNG kết quả trong khi hàng thật khác nhau = vùng quét không dịch
+    # theo tầng (level bị đánh rơi ở đâu đó) — triệu chứng khác hẳn "nhận sai nhãn".
+    if got[1] == got[2] and got[1] != (None, None) and expect[1] != expect[2]:
+        all_ok = False
+        print("\n  ❌ 2 tầng cho KẾT QUẢ GIỐNG HỆT nhau trong khi hàng thật khác nhau.")
+        print("     Nhiều khả năng vùng quét KHÔNG dịch theo tầng — kiểm config.ROI_Y_CENTER")
+        print("     và xem `level` có bị đánh rơi trên đường classify_pair → _crop_roi không.")
+
+    print("\n  " + ("✅ CẢ 2 TẦNG ĐỀU ĐÚNG" if all_ok else "❌ CÒN SAI — xem lại ở trên"))
 
 
 def test_color_order(vision: Vision):
@@ -148,7 +207,8 @@ def test_color_analysis(vision: Vision):
     # Soi ĐÚNG vùng classify_pair() soi (nửa trái + nửa phải), không phải giữa
     # nguyên khung — chỗ đó là khe giữa 2 kiện, robot không bao giờ nhìn tới.
     side = input("  Xem nửa nào? (t=TRÁI / p=PHẢI, mặc định TRÁI): ").strip().lower()
-    roi_left, roi_right = vision.pair_rois(frame)
+    tier = _ask_tier()
+    roi_left, roi_right = vision.pair_rois(frame, tier)
     roi = roi_right if side == "p" else roi_left
     print(f"  Đang xem nửa {'PHẢI' if side == 'p' else 'TRÁI'} của khung hình")
 
@@ -231,8 +291,9 @@ def test_stability(vision: Vision):
 def test_classify_pair(vision: Vision):
     print("\n[TEST] Nhận diện CẶP kiện (classify_pair — dùng trong NV1)...")
     print("  Hướng camera vào tầng kệ có 2 kiện cạnh nhau.")
+    tier = _ask_tier()
     input("  Nhấn Enter để quét...")
-    label_l, label_r = vision.classify_pair()
+    label_l, label_r = vision.classify_pair(tier)
     if label_l and label_r:
         factory_l = vision.get_factory_name(label_l)
         factory_r = vision.get_factory_name(label_r)
@@ -266,8 +327,9 @@ def test_left_right_mapping(vision: Vision):
         print("  ⚠ Phải dùng 2 kiện KHÁC LOẠI thì mới phát hiện được lật trái/phải.")
         return
 
+    tier = _ask_tier()
     input("  Đặt robot đúng vị trí quét rồi nhấn Enter...")
-    label_l, label_r = vision.classify_pair()
+    label_l, label_r = vision.classify_pair(tier)
     print(f"\n  Robot đọc được : trái={label_l}  phải={label_r}")
     print(f"  Thực tế        : trái={expect_l}  phải={expect_r}")
 
@@ -284,8 +346,9 @@ def test_left_right_mapping(vision: Vision):
 
 def test_classify_pair_repeat(vision: Vision):
     print("\n[TEST] classify_pair liên tục 5 lần (độ ổn định cặp)...")
+    tier = _ask_tier()
     for i in range(5):
-        label_l, label_r = vision.classify_pair()
+        label_l, label_r = vision.classify_pair(tier)
         ok = label_l is not None and label_r is not None
         print(f"  Lần {i+1}: trái={label_l or '?'}  phải={label_r or '?'}  "
               f"{'OK' if ok else 'THIẾU'}")
@@ -309,6 +372,7 @@ def main():
         "5": ("Đánh giá độ ổn định (10 lần)", test_stability),
         "6": ("Nhận diện cặp 2 kiện (classify_pair)", test_classify_pair),
         "7": ("classify_pair liên tục 5 lần", test_classify_pair_repeat),
+        "t": ("Nhận diện CẢ 2 TẦNG (sát thi đấu nhất)", test_classify_both_tiers),
         "8": ("Kiểm tra thứ tự kênh BGR/RGB (chạy TRƯỚC khi tinh chỉnh màu)", test_color_order),
         "9": ("So khớp ORB với ảnh mẫu (chẩn đoán template)", test_shape_analysis),
         "l": ("Kiểm ánh xạ TRÁI/PHẢI ảnh ↔ càng robot", test_left_right_mapping),
@@ -319,7 +383,7 @@ def main():
     for key, (name, _) in tests.items():
         print(f"  {key}. {name}")
 
-    choice = input("\nNhập số (0-9, l): ").strip()
+    choice = input("\nNhập số (0-9, l, t): ").strip()
 
     try:
         if choice == "0":

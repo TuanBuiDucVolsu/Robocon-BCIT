@@ -568,7 +568,9 @@ class Robot:
 
         label_left, label_right = None, None
         for attempt in range(1, config.MAX_PAIR_SCAN_ATTEMPTS + 1):
-            label_left, label_right = self.vision.classify_pair()
+            # Truyền TẦNG: camera cố định vào thân nên vùng quét phải dịch theo tầng,
+            # không thì ROI vắt ngang 2 tầng và ôm 2 loại kiện cùng lúc (config.ROI_Y_CENTER).
+            label_left, label_right = self.vision.classify_pair(self.current_tier)
             if label_left is not None and label_right is not None:
                 logger.info("Nhận diện OK (lần %d): trái=%s, phải=%s",
                             attempt, label_left, label_right)

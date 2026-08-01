@@ -307,6 +307,24 @@ CHROMATIC_LABELS = ("samsung", "foxconn", "hana_micron")
 ACHROMATIC_LABEL = "amkor"
 ROI_MARGIN = 0.2             # Tỉ lệ cắt mỗi cạnh lấy vùng giữa. Giảm (vd 0.12) nếu
                              # Hana hay bị nhầm Amkor — ngoặc đỏ của Hana nằm ở GÓC.
+                             # CHỈ dùng cho đường CŨ không biết tầng (classify_package
+                             # không truyền level). Đường quét cặp dùng bộ 3 dưới đây.
+
+# --- VÙNG QUÉT THEO TẦNG — ⚠️ SAI LÀ NHẬN DIỆN KHÔNG BAO GIỜ ĐÚNG ---------------
+# Camera gắn CỐ ĐỊNH vào thân robot, nên tầng 1 và tầng 2 rơi vào hai độ cao KHÁC
+# NHAU trong khung hình. Kệ lúc thi đấu có hàng ở CẢ HAI tầng, nên một khung cắt
+# giữa cố định sẽ ôm trọn hai loại kiện khác nhau cùng lúc → HSV trộn màu 2 kiện,
+# ORB so một vùng chứa 2 decal với ảnh mẫu 1 decal. Không ngưỡng nào cứu được.
+#
+# Đo trên robot thật (khung 640x480, siêu âm 10.8cm, càng sát kệ):
+#     kiện tầng 2: y ≈  75..215, tâm 145  → 145/480 = 0.30
+#     kiện tầng 1: y ≈ 300..430, tâm 365  → 365/480 = 0.76
+# ĐO LẠI khi đổi góc camera / chiều cao lắp / khoảng cách dừng: chụp bằng
+# `tests/test_vision.py` option 1 rồi đọc toạ độ kiện trong khung.
+ROI_Y_CENTER = {1: 0.76, 2: 0.30}   # tâm dọc vùng quét theo tầng (tỉ lệ chiều cao)
+ROI_HEIGHT = 0.375           # chiều cao vùng quét (tỉ lệ) ≈ 180px — ôm kiện 40mm + biên
+ROI_MARGIN_X = 0.10          # cắt ngang mỗi bên của NỬA khung. 0.2 xén hụt cả 2 mép:
+                             # kiện trong nửa trái trải x≈20..270 mà ROI chỉ lấy 64..256
 CENTER_WEIGHT_SIGMA = 0.85   # Trọng số Gauss theo khoảng cách tới tâm ROI: pixel nền
                              # ở rìa tính nhẹ hơn. Giảm → tập trung tâm mạnh hơn.
 NO_CENTER_WEIGHT_LABELS = ("hana_micron",)   # Hana đếm đều toàn ROI (ngoặc đỏ ở góc)

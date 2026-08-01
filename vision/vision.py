@@ -117,13 +117,33 @@ class Vision:
     # Cắt ROI (dùng chung cho cả ORB lẫn HSV)
     # ----------------------------------------------------------
 
-    def _crop_roi(self, frame):
-        """Cắt vùng trung tâm (bỏ viền ngoài). ROI_MARGIN tinh chỉnh trong config."""
+    def _crop_roi(self, frame, level=None):
+        """Cắt vùng phân tích.
+
+        `level=None` → vùng giữa ĐỐI XỨNG theo `ROI_MARGIN` (đường cũ, dùng cho
+        `classify_package()` vốn không biết tầng).
+
+        `level=1/2` → vùng theo TẦNG: dọc bám `ROI_Y_CENTER[level]` với chiều cao
+        `ROI_HEIGHT`, ngang cắt `ROI_MARGIN_X` mỗi bên. BẮT BUỘC cho đường quét cặp:
+        camera cố định vào thân nên 2 tầng nằm ở 2 độ cao khác nhau, mà kệ thì có
+        hàng ở cả 2 tầng — khung cắt giữa cố định sẽ ôm 2 loại kiện cùng lúc.
+
+        Lưu ý: trong `pair_rois()` hàm này nhận NỬA khung, nên `h` vẫn là chiều cao
+        đầy đủ (tỉ lệ dọc tính trên khung gốc) còn `w` là bề rộng NỬA khung.
+        """
         h, w = frame.shape[:2]
-        margin = getattr(config, "ROI_MARGIN", 0.2)
-        margin_x = int(w * margin)
-        margin_y = int(h * margin)
-        return frame[margin_y:h - margin_y, margin_x:w - margin_x]
+        centers = getattr(config, "ROI_Y_CENTER", None)
+        if level is None or not centers or level not in centers:
+            margin = getattr(config, "ROI_MARGIN", 0.2)
+            margin_x = int(w * margin)
+            margin_y = int(h * margin)
+            return frame[margin_y:h - margin_y, margin_x:w - margin_x]
+
+        margin_x = int(w * getattr(config, "ROI_MARGIN_X", 0.10))
+        roi_h = int(h * getattr(config, "ROI_HEIGHT", 0.375))
+        center_y = int(h * centers[level])
+        y0 = max(0, min(h - roi_h, center_y - roi_h // 2))
+        return frame[y0:y0 + roi_h, margin_x:w - margin_x]
 
     @staticmethod
     def split_pair(frame):
@@ -131,8 +151,12 @@ class Vision:
         mid = frame.shape[1] // 2
         return frame[:, :mid], frame[:, mid:]
 
-    def pair_rois(self, frame):
+    def pair_rois(self, frame, level=None):
         """2 vùng ảnh mà classify_pair() THẬT SỰ phân tích: (roi_trái, roi_phải).
+
+        ⚠️ PHẢI truyền `level` = tầng đang quét, đúng cái mà main.py truyền. Bỏ trống
+        thì rơi về khung cắt giữa cố định — vùng nằm VẮT NGANG giữa 2 tầng, không
+        trọn tầng nào. Calibrate/chụp mẫu trên vùng đó là calibrate nhầm chỗ.
 
         MỌI công cụ calibrate/chẩn đoán phải soi đúng 2 vùng này. Cắt ROI trên
         NGUYÊN khung cho ra một vùng khác hẳn: với 640x480 và ROI_MARGIN=0.2 thì
@@ -142,16 +166,16 @@ class Vision:
         kiện hàng. Chốt dải HSV bằng vùng robot không bao giờ nhìn tới là cách chắc
         chắn nhất để "calibrate xong vẫn nhận sai".
         """
-        return tuple(self._crop_roi(half) for half in self.split_pair(frame))
+        return tuple(self._crop_roi(half, level) for half in self.split_pair(frame))
 
     # ----------------------------------------------------------
     # Nhận diện bằng hình dạng (ORB) — phương pháp CHÍNH
     # ----------------------------------------------------------
 
-    def _classify_by_shape(self, frame) -> tuple[str | None, float]:
+    def _classify_by_shape(self, frame, level=None) -> tuple[str | None, float]:
         """So khớp ROI với ảnh mẫu bằng ORB. Trả về (label, confidence quy đổi 0-1)
         hoặc (None, confidence) nếu không đủ tự tin (xem shape_match.MIN_INLIERS)."""
-        roi = self._crop_roi(frame)
+        roi = self._crop_roi(frame, level)
         label, inliers = self._shape_matcher.classify(roi)
         return label, inliers_to_confidence(inliers)
 
@@ -159,7 +183,7 @@ class Vision:
     # Phân tích màu HSV — phương pháp DỰ PHÒNG
     # ----------------------------------------------------------
 
-    def _classify_by_color(self, frame) -> tuple[str | None, float]:
+    def _classify_by_color(self, frame, level=None) -> tuple[str | None, float]:
         """
         Phân tích màu HSV vùng trung tâm ảnh.
         Trả về (label, confidence), hoặc (None, 0.0) nếu KHÔNG có pixel nào
@@ -168,7 +192,7 @@ class Vision:
         CLAUDE.md). Caller vẫn nên lọc theo CONFIDENCE_THRESHOLD như bình
         thường; đây chỉ chặn ca biên confidence=0.0 tuyệt đối.
         """
-        roi = self._crop_roi(frame)
+        roi = self._crop_roi(frame, level)
 
         # picamera2 format="RGB888" (xem _init_camera) trả về đúng thứ tự BGR mà OpenCV cần
         hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
@@ -222,7 +246,7 @@ class Vision:
     # Kết hợp ORB + HSV
     # ----------------------------------------------------------
 
-    def _classify_frame(self, frame) -> tuple[str | None, float, bool]:
+    def _classify_frame(self, frame, level=None) -> tuple[str | None, float, bool]:
         """Nhận diện 1 frame: ORB trước (nếu đã có ảnh mẫu), rơi về HSV màu nếu ORB
         không đủ tự tin hoặc chưa có ảnh mẫu (xem shape_match.MIN_INLIERS).
         Trả về (label, confidence, from_orb). from_orb=True nghĩa là ORB đã TỰ quyết
@@ -230,17 +254,17 @@ class Vision:
         nên chấp nhận ngay, KHÔNG so confidence quy đổi với CONFIDENCE_THRESHOLD nữa
         (ngưỡng đó chỉ có ý nghĩa với thang % pixel của HSV, không phải thang ORB)."""
         if self._shape_matcher.ready:
-            label, confidence = self._classify_by_shape(frame)
+            label, confidence = self._classify_by_shape(frame, level)
             if label is not None:
                 return label, confidence, True
-        label, confidence = self._classify_by_color(frame)
+        label, confidence = self._classify_by_color(frame, level)
         return label, confidence, False
 
     # ----------------------------------------------------------
     # API chính
     # ----------------------------------------------------------
 
-    def classify_package(self) -> tuple[str | None, float]:
+    def classify_package(self, level=None) -> tuple[str | None, float]:
         """
         Chụp ảnh và nhận diện kiện hàng bằng phân tích màu.
         Retry nếu confidence thấp.
@@ -264,7 +288,7 @@ class Vision:
                 time.sleep(config.SCAN_RETRY_DELAY)
                 continue
 
-            label, confidence, from_orb = self._classify_frame(frame)
+            label, confidence, from_orb = self._classify_frame(frame, level)
             logger.info("Lần %d: label=%s, confidence=%.1f%% (nguồn=%s)",
                         attempt, label, confidence * 100, "ORB" if from_orb else "HSV")
 
@@ -285,7 +309,7 @@ class Vision:
             return best_label, best_conf
         return None, best_conf
 
-    def classify_pair(self) -> tuple[str | None, str | None]:
+    def classify_pair(self, level=None) -> tuple[str | None, str | None]:
         """
         Quét 2 kiện hàng cạnh nhau trên cùng tầng kệ.
         Chia ảnh thành nửa trái + nửa phải, phân tích màu riêng.
@@ -307,8 +331,8 @@ class Vision:
 
             frame_left, frame_right = self.split_pair(frame)
 
-            label_l, conf_l, from_orb_l = self._classify_frame(frame_left)
-            label_r, conf_r, from_orb_r = self._classify_frame(frame_right)
+            label_l, conf_l, from_orb_l = self._classify_frame(frame_left, level)
+            label_r, conf_r, from_orb_r = self._classify_frame(frame_right, level)
             logger.info("Lần %d: trái=%s (%.1f%%, %s), phải=%s (%.1f%%, %s)",
                         attempt, label_l, conf_l * 100, "ORB" if from_orb_l else "HSV",
                         label_r, conf_r * 100, "ORB" if from_orb_r else "HSV")

@@ -323,12 +323,22 @@ def create_app() -> Flask:
             return jsonify({"ok": False, "left": None, "right": None,
                             "error": "Vision chưa sẵn sàng"})
 
+        # Tầng quyết định vùng quét (config.ROI_Y_CENTER) — camera cố định vào thân
+        # nên 2 tầng nằm ở 2 độ cao khác nhau trong khung. Không truyền thì rơi về
+        # khung cắt giữa cố định, vắt ngang 2 tầng.
+        data = request.get_json(force=True, silent=True) or {}
+        try:
+            tier = int(data.get("tier", 2))
+        except (TypeError, ValueError):
+            tier = 2
+
         with _lock:
-            label_l, label_r = _vision.classify_pair()
+            label_l, label_r = _vision.classify_pair(tier)
         factory_l = _vision.get_factory_name(label_l) if label_l else None
         factory_r = _vision.get_factory_name(label_r) if label_r else None
         return jsonify({
             "ok": label_l is not None and label_r is not None,
+            "tier": tier,          # trả về để biết vùng quét nào đã dùng
             "left": {"label": label_l, "factory": factory_l},
             "right": {"label": label_r, "factory": factory_r},
         })

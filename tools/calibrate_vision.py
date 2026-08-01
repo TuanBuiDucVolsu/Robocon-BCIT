@@ -87,13 +87,17 @@ def _prompt(msg: str):
         raise SystemExit(0)
 
 
-def _roi_hsv_pixels(vision: Vision, seconds: float):
+def _roi_hsv_pixels(vision: Vision, seconds: float, level: int):
     """Chụp nhiều frame, lấy pixel HSV của ĐÚNG 2 vùng mà classify_pair() phân tích.
 
     Trước đây hàm này cắt ROI trên NGUYÊN khung và tự nhận là "mô phỏng chính xác
     khung hình lúc quét thật" — sai. Lúc thi đấu main.py gọi classify_pair(): chia
     đôi khung TRƯỚC rồi mới cắt ROI từng nửa. Vùng nguyên khung (tâm 50%) phủ lên
     khe giữa 2 kiện, chỗ mà robot không bao giờ nhìn tới (xem Vision.pair_rois).
+
+    `level` = TẦNG đang calibrate, bắt buộc: camera cố định vào thân nên vùng quét
+    dịch theo tầng (config.ROI_Y_CENTER). Calibrate ở tầng này rồi đem dùng cho tầng
+    kia là chốt màu trên một vùng khung hình khác hẳn.
     """
     pixels = []
     end = time.time() + seconds
@@ -102,7 +106,7 @@ def _roi_hsv_pixels(vision: Vision, seconds: float):
         if frame is None:
             time.sleep(SAMPLE_INTERVAL)
             continue
-        for roi in vision.pair_rois(frame):
+        for roi in vision.pair_rois(frame, level):
             hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
             pixels.append(hsv.reshape(-1, 3))
         time.sleep(SAMPLE_INTERVAL)
@@ -277,17 +281,23 @@ def main():
     print("QUAN TRỌNG: dùng phông trắng/xám trơn chắn hết bàn/ghế/đồ vật phía sau —")
     print("nền lẫn vào ROI sẽ làm range tính sai (xem CLAUDE.md).\n")
 
-    _prompt("  → Bước 0: dọn TRỐNG kệ (không đặt kiện hàng nào), hướng camera vào đúng\n"
-            "     vị trí/khoảng cách quét thật (chỉ thấy kệ + pallet thật, màu gì cũng được),\n"
-            "     nhấn Enter...")
-    bg_pixels = _roi_hsv_pixels(vision, SAMPLE_SECONDS)
+    print("Vùng quét DỊCH THEO TẦNG (config.ROI_Y_CENTER) vì camera gắn cố định vào")
+    print("thân robot. Calibrate cho tầng nào thì đặt hàng đúng tầng đó.\n")
+    raw_tier = input("  Calibrate cho TẦNG mấy? (1/2, mặc định 2): ").strip()
+    level = 1 if raw_tier == "1" else 2
+    print(f"  → Dùng vùng quét của TẦNG {level}\n")
+
+    _prompt(f"  → Bước 0: dọn TRỐNG kệ (không đặt kiện hàng nào), hướng camera vào đúng\n"
+            f"     vị trí/khoảng cách quét thật (chỉ thấy kệ + pallet thật, màu gì cũng được),\n"
+            f"     nhấn Enter...")
+    bg_pixels = _roi_hsv_pixels(vision, SAMPLE_SECONDS, level)
     print(f"    Đã lấy {len(bg_pixels)} pixel mẫu nền.\n")
 
     results = {}
     for label in config.LABEL_TO_FACTORY:
         factory = config.LABEL_TO_FACTORY[label]
-        _prompt(f"  → Đặt 2 kiện '{label}' ({factory}) lên tầng kệ, nhấn Enter...")
-        pixels = _roi_hsv_pixels(vision, SAMPLE_SECONDS)
+        _prompt(f"  → Đặt 2 kiện '{label}' ({factory}) lên tầng {level}, nhấn Enter...")
+        pixels = _roi_hsv_pixels(vision, SAMPLE_SECONDS, level)
         print(f"    Đã lấy {len(pixels)} pixel mẫu.")
         if label == config.ACHROMATIC_LABEL:
             ranges = _calibrate_achromatic(pixels)

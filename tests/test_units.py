@@ -436,7 +436,10 @@ class TestClassifyPair(unittest.TestCase):
         seq = iter(frames_results)
         state = {"pair": None, "which": 0}
 
-        def fake_classify(frame):
+        def fake_classify(frame, level=None):
+            # `level` = tầng đang quét, classify_pair() truyền xuống để chọn vùng
+            # quét theo tầng (config.ROI_Y_CENTER). Stub bỏ qua giá trị nhưng PHẢI
+            # nhận, không thì test này che mất chữ ký thật.
             if state["which"] % 2 == 0:
                 state["pair"] = next(seq)
             res = state["pair"][state["which"] % 2]
@@ -514,6 +517,57 @@ class TestClassifyPair(unittest.TestCase):
         full = v._crop_roi(frame)
         self.assertGreater(full.shape[1], left.shape[1] * 1.5,
                            "ROI nguyên khung rộng hơn hẳn — không thể thay thế nhau")
+
+    def test_tier_roi_windows_do_not_overlap(self):
+        """Vùng quét 2 tầng phải TÁCH HẲN nhau.
+
+        Camera gắn cố định vào thân robot nên tầng 1 và tầng 2 nằm ở 2 độ cao khác
+        nhau trong khung. Kệ lúc thi đấu có hàng ở CẢ HAI tầng, nên nếu 2 vùng này
+        chồng lấn thì ROI ôm 2 loại kiện cùng lúc → HSV trộn màu 2 kiện, ORB so một
+        vùng 2 decal với ảnh mẫu 1 decal. Đây là lỗi ĐÃ GẶP THẬT: ROI cắt giữa cố
+        định (y 96..384) vắt ngang cả 2 tầng, nhận diện không bao giờ đúng.
+        """
+        from vision.vision import Vision
+        v = object.__new__(Vision)
+        frame = _np.zeros((480, 640, 3), dtype=_np.uint8)
+
+        rois = {}
+        for tier in (1, 2):
+            left, right = v.pair_rois(frame, tier)
+            self.assertEqual(left.shape, right.shape, f"2 nửa tầng {tier} phải cùng cỡ")
+            rois[tier] = left.shape[0]
+
+        # Chiều cao vùng quét đúng ROI_HEIGHT, và 2 tầng phải cho ra 2 vùng KHÁC nhau
+        want_h = int(480 * config.ROI_HEIGHT)
+        self.assertEqual(rois[1], want_h)
+        self.assertEqual(rois[2], want_h)
+
+        # Kiểm 2 cửa sổ dọc không đè lên nhau (tính lại đúng công thức _crop_roi)
+        def window(tier):
+            c = int(480 * config.ROI_Y_CENTER[tier])
+            y0 = max(0, min(480 - want_h, c - want_h // 2))
+            return y0, y0 + want_h
+
+        top2, bot2 = window(2)
+        top1, bot1 = window(1)
+        self.assertLess(bot2, top1,
+                        f"vùng tầng 2 ({top2}..{bot2}) phải KẾT THÚC trước vùng tầng 1 "
+                        f"({top1}..{bot1}) — chồng nhau là ôm 2 loại kiện cùng lúc")
+        self.assertLessEqual(bot1, 480, "vùng tầng 1 không được tràn khỏi khung")
+
+    def test_tier_roi_differs_from_legacy_center_crop(self):
+        """Truyền tầng phải cho vùng KHÁC hẳn lúc không truyền.
+
+        Nếu giống nhau nghĩa là `level` bị bỏ qua ở đâu đó trên đường
+        classify_pair → pair_rois → _crop_roi, và mọi thứ lại quay về lỗi cũ.
+        """
+        from vision.vision import Vision
+        v = object.__new__(Vision)
+        frame = _np.zeros((480, 640, 3), dtype=_np.uint8)
+        legacy, _ = v.pair_rois(frame)
+        tiered, _ = v.pair_rois(frame, 2)
+        self.assertNotEqual(legacy.shape, tiered.shape,
+                            "ROI theo tầng phải khác ROI cắt giữa cố định")
 
     def test_split_pair_halves_do_not_overlap(self):
         from vision.vision import Vision

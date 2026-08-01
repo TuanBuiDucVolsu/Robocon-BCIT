@@ -102,7 +102,8 @@ def smoke_pickup_cycle(m: Motion, lift: Lift, vision: Vision, tier: int = 1, **_
 
     print("  ✅ approach_shelf OK")
 
-    label_l, label_r = vision.classify_pair()
+    # Truyền tầng như main.py — vùng quét dịch theo tầng (config.ROI_Y_CENTER)
+    label_l, label_r = vision.classify_pair(tier)
     print(f"  classify_pair: trái={label_l}, phải={label_r}")
     if label_l is None or label_r is None:
         print("  ❌ classify_pair không đủ 2 kiện")
