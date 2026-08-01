@@ -60,8 +60,6 @@ def test_shape_analysis(vision: Vision):
     from vision.shape_match import MIN_INLIERS, MARGIN_RATIO, MIN_MATCHES_FOR_HOMOGRAPHY
 
     matcher = vision._shape_matcher
-    for label, (tkp, _tdes) in matcher._templates.items():
-        print(f"  Ảnh mẫu {label:12s}: {len(tkp)} keypoint")
     print(f"\n  Ngưỡng: >={MIN_INLIERS} inlier VÀ >={MARGIN_RATIO}x kiện đứng thứ 2")
     print(f"  (dưới {MIN_MATCHES_FOR_HOMOGRAPHY} match thì không chạy được RANSAC → tính 0)\n")
 
@@ -72,15 +70,21 @@ def test_shape_analysis(vision: Vision):
     tier = _ask_tier()
     h, w = frame.shape[:2]
     mid = w // 2
-    for side, half in (("TRÁI", frame[:, :mid]), ("PHẢI", frame[:, mid:])):
+    for ten, side, half in (("TRÁI", "left", frame[:, :mid]),
+                            ("PHẢI", "right", frame[:, mid:])):
         roi = vision._crop_roi(half, tier)
         gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
         kp, des = matcher._orb.detectAndCompute(gray, None)
-        print(f"  --- Nửa {side}: ROI {roi.shape[1]}x{roi.shape[0]}, "
-              f"{len(kp) if kp else 0} keypoint ---")
+        # ĐÚNG bộ ảnh mẫu mà classify_pair() sẽ dùng cho tổ hợp này — soi bộ khác
+        # là số inlier ở đây không liên quan gì tới lúc chạy thật
+        templates = matcher.templates_for(tier, side)
+        print(f"  --- Nửa {ten}: ROI {roi.shape[1]}x{roi.shape[0]}, "
+              f"{len(kp) if kp else 0} keypoint, {len(templates)} ảnh mẫu ---")
+        for label, (tkp, _t) in templates.items():
+            print(f"        mẫu {label:12s}: {len(tkp)} keypoint")
 
         scores, raw = {}, {}
-        for label, (tkp, tdes) in matcher._templates.items():
+        for label, (tkp, tdes) in templates.items():
             good = matcher._good_matches(des, tdes)
             raw[label] = len(good)
             scores[label] = matcher._inlier_count(kp, tkp, good)
@@ -94,7 +98,7 @@ def test_shape_analysis(vision: Vision):
                   f"/ {raw[label]:3d} match {bar}")
 
         best, second = ranked[0][1], (ranked[1][1] if len(ranked) > 1 else 0)
-        decided, _ = matcher.classify(roi)
+        decided, _ = matcher.classify(roi, tier, side)
         print(f"   → Kết luận ORB: {decided or 'KHÔNG ĐỦ TỰ TIN (rơi về HSV)'}")
         if decided is None and best >= MIN_INLIERS:
             print(f"     Lý do: cách biệt chưa đủ ({best} vs {second}, cần >= "

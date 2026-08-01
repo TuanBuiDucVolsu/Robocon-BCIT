@@ -331,19 +331,33 @@ NO_CENTER_WEIGHT_LABELS = ("hana_micron",)   # Hana đếm đều toàn ROI (ngo
 
 # Dải HSV (OpenCV H=0-179, S/V=0-255). Nhiều dải nếu màu wrap qua 0.
 # Calibrate: python3 -m tools.calibrate_vision (chạy lại nếu đổi ánh sáng/camera).
+# Chốt bằng `python3 -m tools.calibrate_vision` chạy ở TẦNG 2, trên robot thật,
+# sau khi ROI đã dịch theo tầng (commit 01e023a) — bộ số trước đó chốt trên vùng
+# vắt ngang 2 tầng nên không dùng lại được.
 COLOR_RANGES = {
     "samsung": [                                # chip xanh dương
-        ([90, 53, 44], [112, 255, 172]),
+        ([85, 52, 21], [116, 255, 226]),
     ],
     "foxconn": [                                # chip vàng đồng
-        ([19, 51, 48], [49, 200, 193]),
+        ([11, 49, 29], [42, 206, 232]),
     ],
+    # ⚠️ V bị SIẾT BẰNG TAY 44→130 và 231→230, KHÔNG dùng nguyên số tool đề xuất.
+    # Amkor là nhãn ACHROMATIC nên dải của nó phủ mọi hue ở S thấp — mà khung kệ
+    # đen và mặt bàn trắng cũng vô sắc. Với dải gốc [0,0,44]-[179,52,231] thì
+    # KỆ TRỐNG khớp 41.6%, tự nó vượt CONFIDENCE_THRESHOLD=0.20 → ô trống bị đọc
+    # thành amkor (chính tool cũng cảnh báo).
+    # Đo trên ROI tầng 2 nửa trái, so khung kệ trống với khung có kiện amkor:
+    #     kệ trống : V p5=36  p25=97  p50=159 p75=246 p95=254  (đen ở dưới, bàn trắng ở trên)
+    #     có amkor : V p5=42  p25=141 p50=170 p75=190 p95=221  (decal nhôm nằm giữa)
+    #     V 44..231 → trống 41.6% / amkor 79.5%   ❌
+    #     V 130..230 → trống 14.8% / amkor 68.9%  ✅ dưới ngưỡng
+    # Đo lại bằng cùng cách nếu đổi ánh sáng hoặc đổi màu kệ.
     "amkor": [                                  # khối nhôm xám bạc
-        ([0, 4, 128], [179, 49, 240]),
+        ([0, 0, 130], [179, 52, 230]),
     ],
     "hana_micron": [                            # QR viền đỏ (wrap qua 0)
-        ([0, 52, 53], [15, 167, 184]),
-        ([170, 52, 53], [179, 167, 184]),
+        ([0, 51, 32], [17, 189, 239]),
+        ([165, 51, 32], [179, 189, 239]),
     ],
 }
 

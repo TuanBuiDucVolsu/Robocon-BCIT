@@ -337,7 +337,7 @@ class TestShapeMatcherDecision(unittest.TestCase):
         m = object.__new__(ShapeMatcher)
         m._orb = MagicMock()
         m._matcher = MagicMock()
-        m._templates = {k: (MagicMock(), MagicMock()) for k in scores}
+        m._sets = {None: {k: (MagicMock(), MagicMock()) for k in scores}}
         m._orb.detectAndCompute.return_value = ([MagicMock()] * 20, MagicMock())
         m._good_matches = lambda *a: []
         m._inlier_count = lambda kp, tkp, good: 0
@@ -382,7 +382,7 @@ class TestShapeMatcherDecision(unittest.TestCase):
         from vision.shape_match import ShapeMatcher
         m = object.__new__(ShapeMatcher)
         m._orb = None
-        m._templates = {}
+        m._sets = {}
         self.assertEqual(m.classify(MagicMock()), (None, 0))
 
     def test_unverified_matches_never_count_as_inliers(self):
@@ -407,10 +407,43 @@ class TestShapeMatcherDecision(unittest.TestCase):
         from vision.shape_match import ShapeMatcher
         m = object.__new__(ShapeMatcher)
         m._orb = MagicMock()
-        m._templates = {"samsung": (MagicMock(), MagicMock())}
+        m._sets = {None: {"samsung": (MagicMock(), MagicMock())}}
         self.assertFalse(m.ready, "1 ảnh mẫu thì phải rơi hẳn về HSV")
-        m._templates["foxconn"] = (MagicMock(), MagicMock())
+        m._sets[None]["foxconn"] = (MagicMock(), MagicMock())
         self.assertTrue(m.ready)
+
+    def test_variant_set_chosen_by_tier_and_side(self):
+        """classify() phải dùng ĐÚNG bộ ảnh mẫu của (tầng, ô) đang quét.
+
+        Đo trên robot: khớp đúng tổ hợp được 65-172 inlier, khớp lệch tổ hợp chỉ
+        0-6. Nếu `level`/`side` bị đánh rơi ở đâu đó trên đường
+        classify_pair → _classify_by_shape → ShapeMatcher.classify thì mọi ô đều
+        dùng chung một bộ và ta quay lại đúng mức 0-6 inlier đó.
+        """
+        from vision.shape_match import ShapeMatcher
+        m = object.__new__(ShapeMatcher)
+        m._orb = MagicMock()
+        flat = {"a": (MagicMock(), MagicMock()), "b": (MagicMock(), MagicMock())}
+        t2l = {"c": (MagicMock(), MagicMock()), "d": (MagicMock(), MagicMock())}
+        m._sets = {None: flat, (2, "left"): t2l}
+
+        self.assertIs(m.templates_for(2, "left"), t2l, "phải lấy bộ của tổ hợp")
+        self.assertIs(m.templates_for(2, "right"), flat, "thiếu biến thể → bộ phẳng")
+        self.assertIs(m.templates_for(1, "left"), flat, "sai tầng → bộ phẳng")
+        self.assertIs(m.templates_for(), flat, "không truyền gì → bộ phẳng")
+
+    def test_incomplete_variant_falls_back_to_flat(self):
+        """Bộ biến thể chỉ có 1 ảnh mẫu thì KHÔNG được dùng.
+
+        1 ảnh mẫu làm phép kiểm cách biệt vô hiệu (second_score luôn 0) — mọi kiện
+        đều bị gán đúng nhãn đó. Thà rơi về bộ phẳng còn hơn.
+        """
+        from vision.shape_match import ShapeMatcher
+        m = object.__new__(ShapeMatcher)
+        m._orb = MagicMock()
+        flat = {"a": (MagicMock(), MagicMock()), "b": (MagicMock(), MagicMock())}
+        m._sets = {None: flat, (1, "right"): {"a": (MagicMock(), MagicMock())}}
+        self.assertIs(m.templates_for(1, "right"), flat)
 
     def test_inliers_to_confidence_is_bounded(self):
         from vision.shape_match import inliers_to_confidence, CONFIDENCE_NORM
@@ -436,10 +469,10 @@ class TestClassifyPair(unittest.TestCase):
         seq = iter(frames_results)
         state = {"pair": None, "which": 0}
 
-        def fake_classify(frame, level=None):
-            # `level` = tầng đang quét, classify_pair() truyền xuống để chọn vùng
-            # quét theo tầng (config.ROI_Y_CENTER). Stub bỏ qua giá trị nhưng PHẢI
-            # nhận, không thì test này che mất chữ ký thật.
+        def fake_classify(frame, level=None, side=None):
+            # `level` = tầng (chọn vùng quét, config.ROI_Y_CENTER) và `side` = ô
+            # trái/phải (chọn bộ ảnh mẫu ORB). classify_pair() truyền cả hai xuống.
+            # Stub bỏ qua giá trị nhưng PHẢI nhận đủ, không thì test che mất chữ ký thật.
             if state["which"] % 2 == 0:
                 state["pair"] = next(seq)
             res = state["pair"][state["which"] % 2]

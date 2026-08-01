@@ -10,7 +10,23 @@ luyện, đúng tinh thần "Camera AI xử lý cục bộ" của thể lệ.
 ảnh PDF thể lệ — ảnh PDF là đồ hoạ vector sạch, khác nhiều so với ảnh chụp thật dưới
 ánh sáng/độ phân giải camera, so khớp sẽ kém chính xác hơn). Tạo bằng:
     python3 -m tools.capture_templates
-Lưu tại vision/templates/{label}.png.
+
+⚠️ ẢNH MẪU PHẢI CHIA THEO (TẦNG, Ô) — đo trên robot thật:
+    khớp ĐÚNG ô/tầng đã chụp mẫu : 65, 140, 172 inlier
+    khớp ở ô hoặc tầng KHÁC      : 0, 4, 6 inlier
+Chênh hơn một bậc độ lớn. Camera gắn cố định giữa thân nên kiện ô TRÁI được nhìn từ
+sườn phải, ô PHẢI nhìn từ sườn trái, còn 2 tầng thì 2 góc chúc khác nhau — bốn tổ
+hợp là bốn phối cảnh, một ảnh mẫu không phủ nổi. Ở cả 4 ô nhãn đúng vẫn đứng đầu
+bảng, tức ORB không nhầm, chỉ là không đủ mạnh để qua ngưỡng ở vị trí lạ.
+
+Bố cục thư mục:
+    vision/templates/t2_left/{label}.png    ← bộ theo tổ hợp, ưu tiên dùng
+    vision/templates/t2_right/{label}.png
+    vision/templates/t1_left/{label}.png
+    vision/templates/t1_right/{label}.png
+    vision/templates/{label}.png            ← bộ PHẲNG cũ, chỉ dùng khi thiếu biến thể
+
+Thiếu biến thể nào thì tự rơi về bộ phẳng — hệ thống vẫn chạy trong lúc chụp dần.
 """
 
 import glob
@@ -32,6 +48,14 @@ import config
 logger = logging.getLogger(__name__)
 
 TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "templates")
+
+SIDES = ("left", "right")
+TIERS = (1, 2)
+
+
+def variant_dirname(level: int, side: str) -> str:
+    """Tên thư mục con của một tổ hợp (tầng, ô) — dùng chung với capture_templates."""
+    return f"t{int(level)}_{side}"
 
 # Số keypoint tối đa trích xuất mỗi ảnh — nhiều hơn thì chính xác hơn nhưng chậm hơn trên Pi.
 ORB_FEATURES = 500
@@ -63,7 +87,9 @@ class ShapeMatcher:
 
     def __init__(self):
         self._orb = None
-        self._templates = {}  # label -> (keypoints, descriptors)
+        # key -> {label: (keypoints, descriptors)}
+        #   key = (tầng, ô) cho bộ biến thể, hoặc None cho bộ phẳng dự phòng
+        self._sets = {}
         if cv2 is None or np is None:
             logger.warning("OpenCV/numpy không khả dụng — ShapeMatcher vô hiệu hoá")
             return
@@ -75,45 +101,87 @@ class ShapeMatcher:
     # Nạp ảnh mẫu
     # ----------------------------------------------------------
 
+    def _load_dir(self, path, what):
+        """Nạp một thư mục ảnh mẫu → {label: (kp, des)}. Thiếu file thì bỏ qua lặng lẽ
+        với bộ biến thể (đang chụp dần), nhưng cảnh báo với bộ phẳng."""
+        loaded = {}
+        if not os.path.isdir(path):
+            return loaded
+        for label in config.LABEL_TO_FACTORY:
+            fp = os.path.join(path, f"{label}.png")
+            if not os.path.isfile(fp):
+                continue
+            img = cv2.imread(fp, cv2.IMREAD_GRAYSCALE)
+            if img is None:
+                logger.warning("Không đọc được ảnh mẫu: %s", fp)
+                continue
+            kp, des = self._orb.detectAndCompute(img, None)
+            if des is None or len(kp) < MIN_MATCHES_FOR_HOMOGRAPHY:
+                logger.warning("Ảnh mẫu %s quá ít đặc trưng (%d keypoint) — chụp lại nét hơn/gần hơn",
+                                fp, len(kp) if kp else 0)
+                continue
+            loaded[label] = (kp, des)
+
+        total = len(config.LABEL_TO_FACTORY)
+        if loaded:
+            logger.info("Đã nạp %d/%d ảnh mẫu ORB [%s]", len(loaded), total, what)
+        if 0 < len(loaded) < total:
+            missing = [l for l in config.LABEL_TO_FACTORY if l not in loaded]
+            logger.warning("[%s] THIẾU ảnh mẫu %s — những kiện đó không khớp được ORB "
+                           "ở tổ hợp này", what, missing)
+        return loaded
+
     def _load_templates(self):
         if not os.path.isdir(TEMPLATE_DIR):
             logger.warning("Chưa có thư mục ảnh mẫu (%s) — chạy "
                             "`python3 -m tools.capture_templates` trên Pi trước", TEMPLATE_DIR)
             return
-        for label in config.LABEL_TO_FACTORY:
-            path = os.path.join(TEMPLATE_DIR, f"{label}.png")
-            if not os.path.isfile(path):
-                logger.warning("Thiếu ảnh mẫu: %s", path)
-                continue
-            img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
-            if img is None:
-                logger.warning("Không đọc được ảnh mẫu: %s", path)
-                continue
-            kp, des = self._orb.detectAndCompute(img, None)
-            if des is None or len(kp) < MIN_MATCHES_FOR_HOMOGRAPHY:
-                logger.warning("Ảnh mẫu %s quá ít đặc trưng (%d keypoint) — chụp lại nét hơn/gần hơn",
-                                path, len(kp) if kp else 0)
-                continue
-            self._templates[label] = (kp, des)
 
-        total = len(config.LABEL_TO_FACTORY)
-        loaded = len(self._templates)
-        logger.info("Đã nạp %d/%d ảnh mẫu ORB", loaded, total)
-        if 0 < loaded < total:
-            missing = [l for l in config.LABEL_TO_FACTORY if l not in self._templates]
-            logger.warning("THIẾU ảnh mẫu %s — những kiện đó sẽ không bao giờ khớp ORB "
-                           "và phải trông cậy hoàn toàn vào HSV màu", missing)
+        flat = self._load_dir(TEMPLATE_DIR, "bộ phẳng")
+        if flat:
+            self._sets[None] = flat
+
+        for tier in TIERS:
+            for side in SIDES:
+                name = variant_dirname(tier, side)
+                s = self._load_dir(os.path.join(TEMPLATE_DIR, name), name)
+                if s:
+                    self._sets[(tier, side)] = s
+
+        variants = [k for k in self._sets if k is not None]
+        if not variants:
+            logger.warning("Chưa có bộ ảnh mẫu theo (tầng, ô) — đang dùng bộ PHẲNG cho mọi "
+                           "vị trí. Đo thật cho thấy khớp sai vị trí chỉ được 0-6 inlier so "
+                           "với 65-172 khi đúng vị trí; chạy `python3 -m tools.capture_templates` "
+                           "cho từng tổ hợp để hết trượt.")
+        elif len(variants) < len(TIERS) * len(SIDES):
+            thieu = [variant_dirname(t, s) for t in TIERS for s in SIDES
+                     if (t, s) not in self._sets]
+            logger.warning("Mới có %d/%d bộ theo (tầng, ô) — còn thiếu %s, những tổ hợp đó "
+                           "rơi về bộ phẳng", len(variants), len(TIERS) * len(SIDES), thieu)
+
+    def _set_for(self, level=None, side=None):
+        """Chọn bộ ảnh mẫu cho một (tầng, ô). Thiếu biến thể thì rơi về bộ phẳng."""
+        if level is not None and side is not None:
+            s = self._sets.get((int(level), side))
+            if s and len(s) >= 2:
+                return s
+        return self._sets.get(None) or {}
+
+    def templates_for(self, level=None, side=None):
+        """Bộ ảnh mẫu THẬT SỰ dùng cho (tầng, ô) — công cụ chẩn đoán phải soi đúng bộ này."""
+        return self._set_for(level, side)
 
     @property
     def ready(self) -> bool:
-        """Cần ÍT NHẤT 2 ảnh mẫu.
+        """Cần ÍT NHẤT 2 ảnh mẫu trong một bộ nào đó.
 
         Với đúng 1 ảnh mẫu thì `second_score` luôn = 0, phép kiểm cách biệt
         (MARGIN_RATIO) thành `best >= 1.8` — tức là vô hiệu. Mọi kiện hàng đưa vào
         khung đều được gán chính cái nhãn duy nhất đó, và robot chở tất cả về một
         nhà máy. Thà rơi hẳn về HSV màu (phân biệt được cả 4) còn hơn.
         """
-        return self._orb is not None and len(self._templates) >= 2
+        return self._orb is not None and any(len(s) >= 2 for s in self._sets.values())
 
     # ----------------------------------------------------------
     # So khớp
@@ -158,8 +226,8 @@ class ShapeMatcher:
             return 0
         return int(mask.sum())
 
-    def classify(self, frame_bgr) -> tuple[str | None, int]:
-        """So khớp 1 ảnh (đã cắt ROI) với các ảnh mẫu.
+    def classify(self, frame_bgr, level=None, side=None) -> tuple[str | None, int]:
+        """So khớp 1 ảnh (đã cắt ROI) với các ảnh mẫu của ĐÚNG tổ hợp (tầng, ô).
         Trả về (label, số_inlier) hoặc (None, số_inlier_cao_nhất) nếu không đủ tự tin.
 
         Cần cả 2 điều kiện: (1) vượt MIN_INLIERS tuyệt đối, VÀ (2) cách biệt rõ với
@@ -168,7 +236,10 @@ class ShapeMatcher:
         cho 1 nhãn gần chạm ngưỡng trong khi nhãn thứ 2 sát nút ngay phía sau (vd 4
         so với 3) — dễ báo nhầm nếu ánh sáng đổi nhẹ đẩy qua ngưỡng. Kiện hàng thật
         luôn cách biệt rõ hơn hẳn (vd 7 so với 3)."""
-        if not self.ready:
+        if self._orb is None:
+            return None, 0
+        templates = self._set_for(level, side)
+        if len(templates) < 2:
             return None, 0
 
         gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
@@ -177,7 +248,7 @@ class ShapeMatcher:
             return None, 0
 
         scores = {}
-        for label, (tkp, tdes) in self._templates.items():
+        for label, (tkp, tdes) in templates.items():
             good = self._good_matches(des, tdes)
             scores[label] = self._inlier_count(kp, tkp, good)
 

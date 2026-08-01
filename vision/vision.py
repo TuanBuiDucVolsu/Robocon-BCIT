@@ -172,11 +172,11 @@ class Vision:
     # Nhận diện bằng hình dạng (ORB) — phương pháp CHÍNH
     # ----------------------------------------------------------
 
-    def _classify_by_shape(self, frame, level=None) -> tuple[str | None, float]:
+    def _classify_by_shape(self, frame, level=None, side=None) -> tuple[str | None, float]:
         """So khớp ROI với ảnh mẫu bằng ORB. Trả về (label, confidence quy đổi 0-1)
         hoặc (None, confidence) nếu không đủ tự tin (xem shape_match.MIN_INLIERS)."""
         roi = self._crop_roi(frame, level)
-        label, inliers = self._shape_matcher.classify(roi)
+        label, inliers = self._shape_matcher.classify(roi, level, side)
         return label, inliers_to_confidence(inliers)
 
     # ----------------------------------------------------------
@@ -246,7 +246,7 @@ class Vision:
     # Kết hợp ORB + HSV
     # ----------------------------------------------------------
 
-    def _classify_frame(self, frame, level=None) -> tuple[str | None, float, bool]:
+    def _classify_frame(self, frame, level=None, side=None) -> tuple[str | None, float, bool]:
         """Nhận diện 1 frame: ORB trước (nếu đã có ảnh mẫu), rơi về HSV màu nếu ORB
         không đủ tự tin hoặc chưa có ảnh mẫu (xem shape_match.MIN_INLIERS).
         Trả về (label, confidence, from_orb). from_orb=True nghĩa là ORB đã TỰ quyết
@@ -254,7 +254,7 @@ class Vision:
         nên chấp nhận ngay, KHÔNG so confidence quy đổi với CONFIDENCE_THRESHOLD nữa
         (ngưỡng đó chỉ có ý nghĩa với thang % pixel của HSV, không phải thang ORB)."""
         if self._shape_matcher.ready:
-            label, confidence = self._classify_by_shape(frame, level)
+            label, confidence = self._classify_by_shape(frame, level, side)
             if label is not None:
                 return label, confidence, True
         label, confidence = self._classify_by_color(frame, level)
@@ -331,8 +331,10 @@ class Vision:
 
             frame_left, frame_right = self.split_pair(frame)
 
-            label_l, conf_l, from_orb_l = self._classify_frame(frame_left, level)
-            label_r, conf_r, from_orb_r = self._classify_frame(frame_right, level)
+            # side quyết định bộ ảnh mẫu: kiện ô TRÁI được camera nhìn từ sườn phải
+            # và ngược lại — hai phối cảnh khác hẳn nhau (xem vision/shape_match.py)
+            label_l, conf_l, from_orb_l = self._classify_frame(frame_left, level, "left")
+            label_r, conf_r, from_orb_r = self._classify_frame(frame_right, level, "right")
             logger.info("Lần %d: trái=%s (%.1f%%, %s), phải=%s (%.1f%%, %s)",
                         attempt, label_l, conf_l * 100, "ORB" if from_orb_l else "HSV",
                         label_r, conf_r * 100, "ORB" if from_orb_r else "HSV")

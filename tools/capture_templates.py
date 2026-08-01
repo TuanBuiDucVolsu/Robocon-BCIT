@@ -53,7 +53,8 @@ except ImportError:
 
 import config
 from vision import Vision
-from vision.shape_match import ORB_FEATURES, MIN_MATCHES_FOR_HOMOGRAPHY, TEMPLATE_DIR
+from vision.shape_match import (ORB_FEATURES, MIN_MATCHES_FOR_HOMOGRAPHY, TEMPLATE_DIR,
+                                SIDES, TIERS, variant_dirname)
 
 # Ngưỡng chênh lệch pixel (0-255) để coi là "khác nền" — thấp hơn thì nhạy hơn
 # nhưng dễ bắt cả nhiễu ánh sáng/rung camera; cao hơn thì chắc ăn hơn nhưng có
@@ -168,7 +169,6 @@ def main():
         print("   Chạy lệnh này TRÊN Pi sau khi đã gắn camera CSI.")
         return
 
-    os.makedirs(TEMPLATE_DIR, exist_ok=True)
     orb = cv2.ORB_create(nfeatures=ORB_FEATURES)
     _lock_camera_settings(vision)
 
@@ -181,6 +181,22 @@ def main():
     print("=== CHỤP ẢNH MẪU CHO NHẬN DIỆN ORB ===\n")
     if len(target_labels) < len(config.LABEL_TO_FACTORY):
         print(f"Chỉ chụp lại: {target_labels}\n")
+
+    # Ảnh mẫu phải chia theo (TẦNG, Ô): camera gắn cố định giữa thân nên kiện ô trái
+    # được nhìn từ sườn phải, ô phải nhìn từ sườn trái, hai tầng lại hai góc chúc.
+    # Đo thật: khớp đúng tổ hợp được 65-172 inlier, khớp lệch tổ hợp chỉ 0-6.
+    print("Ảnh mẫu chia theo TỔ HỢP (tầng, ô) — mỗi tổ hợp một bộ 4 loại.")
+    print(f"Cần đủ {len(TIERS) * len(SIDES)} tổ hợp: "
+          + ", ".join(variant_dirname(t, sd) for t in TIERS for sd in SIDES) + "\n")
+    raw_t = input(f"  Chụp cho TẦNG mấy? ({'/'.join(str(t) for t in TIERS)}, mặc định 2): ").strip()
+    level = 1 if raw_t == "1" else 2
+    raw_s = input("  Ô nào? (t=TRÁI / p=PHẢI, mặc định TRÁI): ").strip().lower()
+    side = "right" if raw_s == "p" else "left"
+    out_dir = os.path.join(TEMPLATE_DIR, variant_dirname(level, side))
+    os.makedirs(out_dir, exist_ok=True)
+    print(f"  → Lưu vào {out_dir}")
+    print(f"  → Đặt kiện ở TẦNG {level}, ô {'PHẢI' if side == 'right' else 'TRÁI'} "
+          f"cho CẢ {len(target_labels)} loại. Đặt sai ô là bộ mẫu này vô dụng.\n")
     print("Tool tự tìm đúng vùng có kiện hàng bằng cách so khác biệt với ảnh nền")
     print("trống — không cần kiện hàng lấp đầy khung, nhưng BẮT BUỘC chụp nền trống")
     print("trước, và giữ camera/bệ đặt đứng yên suốt quá trình (không xê dịch giữa")
@@ -202,7 +218,8 @@ def main():
 
     for label in target_labels:
         factory = config.LABEL_TO_FACTORY[label]
-        _prompt(f"  → Đặt MỘT kiện '{label}' ({factory}) vào đúng vị trí trên bệ, nhấn Enter để chụp...")
+        o = "PHẢI" if side == "right" else "TRÁI"
+        _prompt(f"  → Đặt MỘT kiện '{label}' ({factory}) vào TẦNG {level} ô {o}, nhấn Enter để chụp...")
         time.sleep(0.3)  # 1 nhịp để tay/máy ổn định sau khi buông phím
 
         frame = vision._capture_frame()
@@ -254,7 +271,7 @@ def main():
         kp, des = orb.detectAndCompute(gray, None)
         n_kp = len(kp) if kp else 0
 
-        path = os.path.join(TEMPLATE_DIR, f"{label}.png")
+        path = os.path.join(out_dir, f"{label}.png")
         cv2.imwrite(path, gray)
         print(f"    Đã lưu: {path} ({gray.shape[1]}x{gray.shape[0]}, {n_kp} keypoint)")
         if n_kp < MIN_MATCHES_FOR_HOMOGRAPHY:
