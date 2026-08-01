@@ -229,7 +229,7 @@ APPROACH_NO_PROGRESS_CM = 1.0    # cm — giảm ít hơn mức này coi như đ
 # BÁM LINE (QTR-8A analog qua MCP3008)
 # ============================================================
 LINE_SENSOR_COUNT = 6        # CH0-CH5, bỏ 2 mắt ngoài cùng (dành CH6-7 cho IR)
-LINE_THRESHOLD = 400         # ADC 0-1023: < ngưỡng = trên line (đen)
+LINE_THRESHOLD = 200         # ADC 0-1023: < ngưỡng = trên line (đen)
 # ⚠️ Nhiều module QTR-8A đọc bề mặt ĐEN ra giá trị CAO (ngược giả định của code).
 # Chạy `python3 -m tools.calibrate_line` để chốt cờ này — code tự đảo tại nguồn.
 LINE_BLACK_IS_HIGH = True
