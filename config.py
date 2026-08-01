@@ -99,20 +99,23 @@ PWM_COMPENSATION_LEFT_REV = 1.00  # Bù bánh TRÁI khi lùi
 # CƠ CẤU NÂNG (giây)
 # ============================================================
 LIFT_TIME_FLOOR = 0.0
-LIFT_TIME_SHELF_1 = 1.2
+LIFT_TIME_SHELF_1 = 0.800
 LIFT_TIME_SHELF_2 = 3.9
 
 # Không có limit switch — home_to_floor() hạ liên tục bấy nhiêu giây để ép chạm đáy.
 # ⚠️ PHẢI > LIFT_TIME_SHELF_2, không thì đang ở tầng 2 sẽ không hạ hết và
 # _current_level bị khai sai = 0. Stall vài giây không sao, đừng để quá lâu.
-LIFT_HOME_DURATION = 4.5
+LIFT_HOME_DURATION = 4.0   # = min_home_duration() sau calibrate (3.9 + LOWER_EXTRA
+                           # trái 0.1). Hạ từ 4.5 vì motor là DigitalOutputDevice
+                           # (100% duty), kịch sàn rồi vẫn ghì → curoa trượt. Thấp
+                           # hơn nữa vô ích: home_to_floor() kẹp ngược lên 4.0.
 
 # Bù lệch 2 càng theo VỊ TRÍ TUYỆT ĐỐI: thời gian từ SÀN lên tầng n = LIFT_TIME_SHELF_n
 # + bù. Thời gian mỗi lần chạy = hiệu 2 mốc (Lift._level_time) → không cộng dồn khi đi
 # 0→1→2, và càng lẻ dùng chung hệ số với khi chạy cả 2 càng.
-LIFT_LEFT_EXTRA = -0.450          # Càng TRÁI khi nâng
-LIFT_RIGHT_EXTRA = -0.300         # Càng PHẢI khi nâng
-LIFT_LEFT_LOWER_EXTRA = 0.300     # Càng TRÁI khi hạ (tăng nếu bên đó khó hạ)
+LIFT_LEFT_EXTRA = -0.050          # Càng TRÁI khi nâng
+LIFT_RIGHT_EXTRA = 0.100         # Càng PHẢI khi nâng
+LIFT_LEFT_LOWER_EXTRA = 0.100     # Càng TRÁI khi hạ (tăng nếu bên đó khó hạ)
 LIFT_RIGHT_LOWER_EXTRA = 0.0      # Càng PHẢI khi hạ
 
 LIFT_SPEED = 80              # Duty cycle motor nâng — chỉ dùng trong web debug
@@ -151,14 +154,17 @@ PICKUP_VERIFY_DELAY = 0.2    # Giây chờ sau nâng trước khi đọc IR
 #   Đặt quá XA  → bước luồn phải bò lâu hơn, tốn giây (không nguy hiểm).
 # Giá trị cũ 4.0 là BẤT KHẢ THI (mũi càng chạm kệ khi cảm biến còn ~13.5cm) nên
 # robot húc kệ trọn 5 giây cho tới timeout.
-APPROACH_DISTANCE = 25.0     # ⚠️ CẦN ĐO — measure_pickup ①
+# ⚠️ Con số ~13.5cm ở dòng trên là ƯỚC LƯỢNG cũ, số đo thật bên dưới mâu thuẫn với
+#   nó (11.9 < 13.5) — đo lại nếu thấy càng chạm kệ lúc nâng.
+APPROACH_DISTANCE = 11.9     # ĐÃ ĐO — measure_pickup ① (APPROACH_STANDOFF_DISTANCE)
 
 # --- ② LÙI RA ----------------------------------------------------------------
 # Sau khi nhấc/thả xong, robot lùi tới khi đọc được ≥ số này thì dừng.
 # Phải đủ xa để CÀNG RỜI HẲN KỆ, còn chỗ xoay 180° hoặc lùi tiếp mà không vướng.
 #   ⚠️ PHẢI LỚN HƠN ① — nhỏ hơn thì retreat_from_shelf() thấy "đã đủ xa" ngay từ
 #   đầu, trả True mà KHÔNG lùi tí nào (đúng lỗi đã gặp: RETREAT=10 < đo được 21.8).
-RETREAT_DISTANCE = 40.0      # ⚠️ CẦN ĐO — measure_pickup ④
+# ⚠️ Biên hiện tại chỉ 1.0cm so với ① (12.9 vs 11.9) — mỏng so với nhiễu HC-SR04.
+RETREAT_DISTANCE = 12.9      # ĐÃ ĐO — measure_pickup ④
 
 # --- ③ CHẶN CỨNG KHI LUỒN CÀNG ----------------------------------------------
 # Bước luồn dừng theo CẢM BIẾN IR trên mặt càng (IR đo thẳng "pallet đã trên càng
@@ -166,14 +172,18 @@ RETREAT_DISTANCE = 40.0      # ⚠️ CẦN ĐO — measure_pickup ④
 # CHỈ làm phanh cuối: dù IR chưa báo cũng TUYỆT ĐỐI không tiến gần hơn số này.
 # Đặt nhỏ hơn khoảng cách lúc càng đã luồn hết, nhưng đủ lớn để robot không ủi kệ
 # khi càng trượt ra ngoài khe pallet.
-INSERT_MIN_DISTANCE = 4.0    # ⚠️ CẦN ĐO — suy từ ① và độ sâu luồn càng
+# Số đo luồn xong: TẦNG 1 = 3.6cm (②), TẦNG 2 = 4.9cm (③). Không bằng nhau nên
+# phanh phải đặt dưới cái NHỎ HƠN (3.6), nếu không tầng 1 bị chặn giữa chừng.
+# ⚠️ Giá trị cũ 4.0 LỚN HƠN 3.6 → phanh siêu âm cắt bước luồn tầng 1 trước khi càng
+#   vào hết khe pallet. Đó là lỗi thật, số đo mới vừa phơi ra.
+INSERT_MIN_DISTANCE = 3.0    # ĐÃ ĐO gián tiếp — dưới ② (3.6) một khoảng an toàn
 
 # --- ④ NHẤC BỔNG (giây, không phải cm) --------------------------------------
 # Càng đã luồn vào pallet rồi thì nâng THÊM bao nhiêu giây nữa để pallet rời hẳn
 # mặt kệ. Chỉ vài phần mười giây — đây là phần dôi ra NGOÀI thang tầng.
 #   Quá ngắn → pallet còn tì lên kệ, kéo ra là đổ.
 #   Quá dài  → càng đội lên tầng trên (tầng 1) hoặc nóc kệ (tầng 2).
-LIFT_PICKUP_RAISE_TIME = 0.30   # ⚠️ CẦN ĐO — measure_pickup ⑤
+LIFT_PICKUP_RAISE_TIME = 0.2    # ĐÃ ĐO — measure_pickup ⑤
 
 # --- Tốc độ & timeout của bước luồn ------------------------------------------
 INSERT_SPEED = 25            # % — bò chậm khi luồn càng
