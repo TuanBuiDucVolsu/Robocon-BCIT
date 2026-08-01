@@ -25,6 +25,7 @@ import config
 import navigation as nav
 from control import Motion, Lift
 from control.mcp3008_bus import reset_mcp3008_bus
+from control.handling import drop_both, drop_side, insert_and_lift_once
 from vision import Vision
 
 
@@ -111,11 +112,17 @@ def smoke_pickup_cycle(m: Motion, lift: Lift, vision: Vision, tier: int = 1, **_
     print("  ⚠ KIỂM BẰNG MẮT: nhãn TRÁI/PHẢI ở trên có khớp kiện thật trên càng "
           "trái/phải không? Lệch = cả 2 kiện đi nhầm nhà máy mà log vẫn báo OK.")
 
-    if not lift.pickup(shelf_level=tier, require_both=True):
-        print("  ❌ pickup THẤT BẠI (IR không xác nhận đủ 2 pallet)")
+    # Luồng THẬT của main.py: nâng ngang tầng → LUỒN càng vào pallet (IR dẫn) →
+    # nhấc bổng → xác nhận. Gọi lift.pickup() ở đây là sai: hàm đó nâng tại chỗ,
+    # không tiến vào, nên chỉ chạy được khi người test tự tay đặt càng vào pallet.
+    if not insert_and_lift_once(m, lift, tier, require_both=True):
+        print("  ❌ BỐC HÀNG THẤT BẠI (luồn càng hoặc IR không xác nhận)")
+        print("     Kiểm: càng có thẳng hàng khe pallet không? APPROACH_DISTANCE "
+              "(vị trí chờ) có quá gần/xa không?")
+        lift.go_to_level(0)
         m.retreat_from_shelf()
         return False, None
-    print("  ✅ pickup OK")
+    print("  ✅ bốc hàng OK (nâng → luồn → nhấc, IR xác nhận)")
 
     if not m.retreat_from_shelf():
         print("  ⚠ retreat timeout (vẫn coi pickup OK)")
@@ -143,11 +150,11 @@ def smoke_drop_single_side(lift: Lift, **_):
         print("  Lựa chọn không hợp lệ.")
         return False, None
 
-    dropped = lift.dropoff_left() if side == "left" else lift.dropoff_right()
-    print(f"  dropoff_{side}: {'✅ IR xác nhận đã rời càng' if dropped else '❌ IR vẫn thấy pallet / lỗi đọc'}")
-
-    lift.raise_after_drop(side)      # LUÔN nâng lại — giống main.py
-    print(f"  ✅ raise_after_drop({side}) — nâng lại dù IR {'OK' if dropped else 'FAIL'}")
+    # Chuỗi thả ở control/handling.py — CÙNG hàm main.py gọi, nên không thể lệch
+    dropped = drop_side(lift, side, last=False)
+    print(f"  drop_side({side}, last=False): "
+          f"{'✅ IR xác nhận đã rời càng' if dropped else '❌ IR vẫn thấy pallet / lỗi đọc'}")
+    print(f"  ✅ đã nâng lại càng {side} — chạy LUÔN dù IR {'OK' if dropped else 'FAIL'}")
     if not dropped:
         print("  ⚠ main.py sẽ KHÔNG cộng điểm kiện này (packages_delivered chỉ tăng khi IR xác nhận)")
 
@@ -155,10 +162,9 @@ def smoke_drop_single_side(lift: Lift, **_):
     if _ask(f"Thả nốt càng {other} + gập càng? (y/N): ") != "y":
         return dropped, None
 
-    dropped2 = lift.dropoff_left() if other == "left" else lift.dropoff_right()
-    print(f"  dropoff_{other}: {'✅' if dropped2 else '❌'}")
-    lift.stow_forks(other)           # LUÔN gập — giống main.py
-    print(f"  ✅ stow_forks({other}) — cả 2 càng về sàn, sẵn sàng di chuyển")
+    dropped2 = drop_side(lift, other, last=True)
+    print(f"  drop_side({other}, last=True): {'✅' if dropped2 else '❌'}")
+    print("  ✅ đã gập càng — cả 2 càng về sàn, sẵn sàng di chuyển")
     return dropped and dropped2, None
 
 
@@ -173,7 +179,7 @@ def smoke_nv2_pickup(m: Motion, lift: Lift, **_):
     if not m.approach_shelf():
         print("  ❌ approach THẤT BẠI")
         return False, None
-    ok = lift.pickup(shelf_level=1, require_both=False)
+    ok = insert_and_lift_once(m, lift, tier=1, require_both=False)
     print(f"  pickup NV2: {'✅' if ok else '❌'}")
     m.retreat_from_shelf()
     return ok, None
@@ -233,18 +239,14 @@ def smoke_full_lap(m: Motion, lift: Lift, vision: Vision, **_):
             print("  ⚠ Không tiếp cận được điểm thả (main.py sẽ thử lại 1 lần rồi thả tại chỗ)")
 
         if len(queue) == 1:
-            dropped = lift.dropoff()
-            print(f"  dropoff() cả 2 càng: {'✅' if dropped else '❌'}")
+            dropped = drop_both(lift)
+            print(f"  drop_both(): {'✅' if dropped else '❌'}")
         else:
             side = "left" if carried[0] == label else "right"
-            dropped = lift.dropoff_left() if side == "left" else lift.dropoff_right()
-            print(f"  dropoff_{side}: {'✅' if dropped else '❌'}")
-            if i < len(queue):
-                lift.raise_after_drop(side)
-                print(f"  raise_after_drop({side})")
-            else:
-                lift.stow_forks(side)
-                print(f"  stow_forks({side})")
+            last = i >= len(queue)          # kiện cuối → gập càng, còn nữa → nâng lại
+            dropped = drop_side(lift, side, last=last)
+            print(f"  drop_side({side}, last={last}): {'✅' if dropped else '❌'}"
+                  f" — đã {'gập càng' if last else 'nâng lại càng'}")
         m.retreat_from_shelf()
 
     # --- Quay về kho lấy TẦNG 2 cùng kệ ---
@@ -316,7 +318,7 @@ def smoke_task2_full(m: Motion, lift: Lift, **_):
     if not m.approach_shelf():
         print("  ❌ Không tiếp cận được Kệ 4")
         return False, None
-    if not lift.pickup(shelf_level=1, require_both=False):
+    if not insert_and_lift_once(m, lift, tier=1, require_both=False):
         print("  ❌ pickup NV2 THẤT BẠI")
         m.retreat_from_shelf()
         return False, None

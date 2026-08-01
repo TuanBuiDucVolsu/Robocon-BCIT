@@ -138,6 +138,10 @@ def run_match(seed: int, hw_fail_rate: float = 0.0, line_loss_rate: float = 0.0,
         robot.motion.probe_side_branch.side_effect = lambda *a, **k: probe_result
     robot.motion.approach_shelf.side_effect = lambda *a, **k: maybe_fail()
     robot.motion.retreat_from_shelf.return_value = True
+    # Luồng bốc hàng mới: raise_to_insert → creep_until (luồn, IR dẫn) →
+    # lift_off → confirm_pickup. Cho cả 2 bước có thể hỏng như phần cứng thật.
+    robot.motion.creep_until.side_effect = lambda *a, **k: maybe_fail()
+    robot.lift.confirm_pickup.side_effect = lambda *a, **k: maybe_fail()
     robot.lift.pickup.side_effect = lambda *a, **k: maybe_fail()
     robot.lift.dropoff.return_value = True
     robot.lift.dropoff_left.return_value = True
@@ -284,14 +288,14 @@ class TestTask2(unittest.TestCase):
         lần hỏng đầu tiên."""
         robot, _ = run_match(0)
         robot.match_start_time = time.time()          # còn đủ giờ
-        robot.lift.pickup.side_effect = None
-        robot.lift.pickup.return_value = False        # luôn hỏng
+        robot.motion.creep_until.side_effect = None
+        robot.motion.creep_until.return_value = False   # luôn không luồn được càng
         robot.motion.approach_shelf.side_effect = None
         robot.motion.approach_shelf.return_value = True
-        robot.lift.pickup.reset_mock()
+        robot.motion.creep_until.reset_mock()
 
         self.assertEqual(robot._handle_task2_pickup(), main_mod.State.DONE)
-        self.assertGreaterEqual(robot.lift.pickup.call_count, 2,
+        self.assertGreaterEqual(robot.motion.creep_until.call_count, 2,
                                 "phải thử lại ít nhất 1 lần trước khi bỏ 30 điểm")
 
     def test_reset_during_task2_retries_it(self):

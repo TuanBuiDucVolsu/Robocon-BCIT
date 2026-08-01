@@ -38,6 +38,16 @@ PALLET_THRESHOLD = 500       # ADC < ngưỡng = có pallet
 ULTRASONIC_TRIG_PIN = 19
 ULTRASONIC_ECHO_PIN = 20
 
+# Số mẫu gpiozero giữ trong hàng đợi trước khi lấy TRUNG VỊ trả về .distance.
+# HC-SR04 cần ~60ms giữa 2 lần phát sóng, nên đây cũng là ĐỘ TRỄ của số đo:
+#     queue_len × 60ms = bề rộng cửa sổ, độ trễ ≈ nửa cửa sổ
+# Mặc định của gpiozero là 9 → cửa sổ 540ms → trễ ~270ms. Ở APPROACH_FAST_SPEED
+# (~200mm/s) đó là 54mm — lớn hơn cả sai số cho phép khi dừng trước kệ, robot đi
+# quá vạch từ lâu trước khi con số kịp tụt xuống.
+# 3 mẫu vẫn đủ để trung vị loại được 1 giá trị nhiễu lẻ, mà chỉ trễ ~90mm/s → 18mm.
+# Xuống 1 thì hết trễ nhưng MẤT lọc nhiễu: một lần đo lỗi là robot dừng sớm ngay.
+ULTRASONIC_QUEUE_LEN = 3
+
 # Encoder JGA25-370 (kênh C1, chỉ đếm xung — không đọc chiều).
 # ⚠️ Cấp encoder VCC 3.3V cho xung ≤3.3V; bảng màu dây khác nhau theo lô.
 ENCODER_LEFT_PIN = 26
@@ -110,20 +120,59 @@ PICKUP_MAX_RETRIES = 2       # Số lần nâng lại nếu IR không thấy pal
 PICKUP_VERIFY_DELAY = 0.2    # Giây chờ sau nâng trước khi đọc IR
 
 # ============================================================
+# LUỒN CÀNG VÀO PALLET — thứ tự CHỜ → NÂNG → LUỒN → NHẤC
+# ============================================================
+# Cơ cấu là xe nâng thật: càng phải LUỒN VÀO pallet rồi mới nhấc. Nên phải nâng
+# càng lên NGANG TẦNG TRƯỚC, rồi mới tiến thêm để luồn — chứ không thể tiến vào
+# lúc càng còn ở sàn rồi nâng thẳng lên (càng sẽ đi lên trong không khí trước mặt
+# kệ, và với tầng 2 thì đội vào mặt tầng 1).
+#
+# Điểm dừng khi luồn KHÔNG dùng siêu âm mà dùng CẢM BIẾN IR trên mặt càng: IR đo
+# thẳng thứ ta cần biết ("pallet đã ở trên càng chưa"), miễn nhiễm với việc robot
+# lệch ngang hay pallet đặt lệch trên kệ — đã kiểm trên robot thật.
+LIFT_PICKUP_RAISE_TIME = 0.30   # ⚠️ CẦN ĐO — giây nâng thêm để pallet rời mặt kệ
+INSERT_SPEED = 25               # % — tiến chậm khi luồn càng
+INSERT_TIMEOUT = 4.0            # Giây, không thấy IR thì dừng (đừng đẩy đổ kệ)
+INSERT_MIN_DISTANCE = 4.0       # cm — chặn siêu âm, tuyệt đối không tiến gần hơn
+
+# ============================================================
 # TIẾP CẬN KỆ / NHÀ MÁY (siêu âm HC-SR04)
 # ============================================================
-APPROACH_DISTANCE = 4.0      # cm — khoảng cách dừng trước kệ
+# ⚠️ ĐO TỪ CẢM BIẾN, KHÔNG PHẢI TỪ MŨI CÀNG.
+# HC-SR04 lắp GIỮA 2 CÀNG (docs/PHAN_CUNG.md) nên càng chìa ra XA HƠN cảm biến.
+# Khi càng đã vào đúng khe pallet, cảm biến vẫn còn cách kệ một đoạn — đó mới là
+# con số phải điền ở đây. Đặt 4.0 (giá trị cũ) là đòi robot đẩy càng xuyên vào
+# trong kệ ~10cm: không bao giờ đạt được, nên nó húc kệ suốt 5s cho tới timeout.
+#
+# CÁCH ĐO: tắt nguồn motor, đẩy tay robot tới ĐÚNG vị trí nâng được hàng (càng lọt
+# khe pallet, đúng độ sâu), rồi chạy `tests/test_motion.py` option 8 và đọc số.
+# Vị trí CHỜ: robot dừng ở đây, càng còn ở SÀN. Phải đủ xa để nâng càng lên tầng 2
+# mà không chạm kệ. Từ đây trở đi việc luồn càng do IR dẫn (xem INSERT_SPEED).
+APPROACH_DISTANCE = 25.0     # ⚠️ CẦN ĐO — dùng làm vị trí CHỜ (tools.measure_pickup ①)
 APPROACH_TIMEOUT = 5.0       # Timeout tiếp cận / lùi ra (giây)
-RETREAT_DISTANCE = 10.0      # cm — lùi ra sau khi nâng/hạ (CHƯA calibrate)
+
+# Phải LỚN HƠN APPROACH_DISTANCE, nếu không retreat_from_shelf() thấy "đã đủ xa"
+# ngay từ đầu và trả True mà KHÔNG lùi tí nào. Đo cùng cách: đẩy robot lùi tới khi
+# càng rời hẳn kệ (đủ chỗ xoay/lùi tiếp), đọc option 8.
+RETREAT_DISTANCE = 40.0      # ⚠️ CẦN ĐO — phải > APPROACH (tools.measure_pickup ④)
 APPROACH_SPEED = 30          # Tốc độ lùi ra
 APPROACH_FAST_SPEED = 60     # Pha xa
 APPROACH_SLOW_SPEED = 25     # Pha gần (dừng chính xác)
-APPROACH_SLOW_DISTANCE = 10  # cm — dưới mức này thì chuyển sang chậm
+# Phải LỚN HƠN APPROACH_DISTANCE, không thì pha chậm không bao giờ chạy và robot
+# lao hết tốc độ tới lúc dừng.
+APPROACH_SLOW_DISTANCE = 35  # cm — dưới mức này thì chuyển sang chậm
 
 # Chặn chạy mù: mất echo (tường check-in chỉ cao 5cm) mà cứ tiến hết timeout ở tốc độ
 # cao là robot ra khỏi sa bàn / sang sân đối phương (reject −10 điểm).
-APPROACH_DETECT_DISTANCE = 30.0  # cm — coi là "đã thấy mục tiêu"
+APPROACH_DETECT_DISTANCE = 45.0  # cm — coi là "đã thấy mục tiêu" (> SLOW_DISTANCE)
 APPROACH_BLIND_TIMEOUT = 1.5     # Giây chạy mù tối đa khi chưa thấy gì
+
+# Chặn HÚC KỆ: cảm biến "thấy mục tiêu" KHÔNG có nghĩa là robot đang tiến lại gần.
+# Càng chạm kệ / cảm biến kẹt / bánh trượt đều cho số đo đứng yên ở một giá trị
+# hợp lý, và APPROACH_BLIND_TIMEOUT (chỉ bắt "không thấy gì") không cứu được.
+# Nếu qua bấy nhiêu giây mà khoảng cách không giảm nổi NO_PROGRESS_MIN_CM thì dừng.
+APPROACH_NO_PROGRESS_TIME = 1.2  # Giây không tiến lại gần được thì bỏ cuộc
+APPROACH_NO_PROGRESS_CM = 1.0    # cm — giảm ít hơn mức này coi như đứng yên
 
 # ============================================================
 # BÁM LINE (QTR-8A analog qua MCP3008)

@@ -80,6 +80,25 @@ def _home(lift: Lift, why: str, ask: bool = True) -> bool:
 # 1 — diễn tập trọn 1 lượt giao, y hệt main.py
 # ==============================================================
 
+def _manual_pickup(lift: Lift, level: int, require_both: bool) -> bool:
+    """Bốc hàng khi NGƯỜI đã đặt càng vào pallet sẵn — dùng cho test bàn.
+
+    ⚠️ ĐÂY KHÔNG PHẢI LUỒNG THI ĐẤU. Trong trận, `main._insert_and_lift()` còn
+    một bước nữa mà file này không làm được (không có đối tượng Motion): sau khi
+    nâng càng ngang tầng, robot phải TIẾN THÊM để luồn càng vào pallet, dừng theo
+    tín hiệu IR. Ở đây bước đó do bạn đẩy robot bằng tay.
+
+    Trước kia chỗ này gọi `Lift.pickup()` — một hàm nâng càng TỪ SÀN tại chỗ. Nó
+    che mất việc main.py thiếu hẳn bước luồn càng: test bàn luôn xanh vì người test
+    tự tay canh càng vào pallet. Hàm đó đã bị xoá; giờ test bàn và trận dùng CHUNG
+    bộ nguyên thuỷ raise_to_insert/lift_off/confirm_pickup.
+    """
+    lift.raise_to_insert(level)
+    input("  Đẩy robot vào cho càng LUỒN vào pallet (trong trận robot tự làm) → Enter...")
+    lift.lift_off()
+    return lift.confirm_pickup(require_both=require_both)
+
+
 def test_delivery_rehearsal(lift: Lift):
     """Chuỗi thao tác càng của MỘT lượt giao thật, gọi đúng các hàm main.py gọi.
 
@@ -100,7 +119,7 @@ def test_delivery_rehearsal(lift: Lift):
             return
 
     input(f"\n  Đặt 2 kiện lên kệ tầng {level}, càng vào đúng khe → Enter để PICKUP...")
-    if not lift.pickup(shelf_level=level, require_both=True):
+    if not _manual_pickup(lift, level, require_both=True):
         print(f"  ❌ PICKUP THẤT BẠI — {_ir(lift)}")
         print("     main.py sẽ gọi _retry_or_skip_tier('scan') và có thể BỎ TẦNG này.")
         return
@@ -163,7 +182,7 @@ def test_pickup_dropoff(lift: Lift):
         return
     print(f"\n[TEST] Pickup tầng {level} (cần CẢ 2 IR) → dropoff")
     input(f"  Đặt 2 kiện ở tầng {level} → Enter...")
-    ok = lift.pickup(shelf_level=level, require_both=True)
+    ok = _manual_pickup(lift, level, require_both=True)
     print(f"  pickup: {'✅ THÀNH CÔNG' if ok else '❌ THẤT BẠI'} — {_ir(lift)}")
     time.sleep(1)
     if not _yes("  Hạ xuống (dropoff)? (y/N): "):
@@ -210,7 +229,7 @@ def test_pickup_nv2(lift: Lift):
     print("\n[TEST] Pickup NV2 — require_both=False (chỉ cần 1 IR)")
     print("  Đặt 1 kiện trên càng (kho hàng rời).")
     input("  Enter để nâng...")
-    ok = lift.pickup(shelf_level=1, require_both=False)
+    ok = _manual_pickup(lift, 1, require_both=False)
     print(f"  Kết quả: {'✅ THÀNH CÔNG' if ok else '❌ THẤT BẠI'} — {_ir(lift)}")
     if ok and _yes("  Hạ thử (dropoff)? (y/N): "):
         print(f"  dropoff: {'✅ OK' if lift.dropoff() else '❌ THẤT BẠI'} — {_ir(lift)}")

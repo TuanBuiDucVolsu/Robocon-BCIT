@@ -34,6 +34,7 @@ import navigation
 from control import Motion, Lift
 from control.board_switch import BoardSideSwitch
 from control.mcp3008_bus import get_mcp3008_bus, reset_mcp3008_bus
+from control.handling import drop_both, drop_side, insert_and_lift_once
 from vision import Vision
 
 # ============================================================
@@ -313,6 +314,39 @@ class Robot:
                      context)
         return False
 
+    def _insert_and_lift(self, tier: int, require_both: bool = True) -> bool:
+        """NÂNG ngang tầng → LUỒN càng vào pallet → NHẤC bổng → xác nhận IR.
+
+        Cơ cấu là xe nâng thật: càng phải luồn vào pallet rồi mới nhấc được. Bản
+        trước gọi thẳng `lift.pickup()` — hàm đó nâng càng TỪ SÀN tại chỗ, không hề
+        tiến vào, nên càng chỉ đi lên trong không khí trước mặt kệ và không bao giờ
+        móc được pallet. Với tầng 2 còn tệ hơn: càng đội thẳng vào mặt tầng 1.
+
+        Điểm dừng khi luồn dùng IR trên mặt càng chứ không dùng siêu âm — xem
+        Motion.creep_until.
+        """
+        for attempt in range(1, config.PICKUP_MAX_RETRIES + 1):
+            logger.info("Bốc hàng tầng %d — lần %d/%d",
+                        tier, attempt, config.PICKUP_MAX_RETRIES)
+
+            # Chuỗi thao tác nằm ở control/pickup.py — MỘT cài đặt duy nhất dùng
+            # chung với test_smoke, để test và trận không bao giờ lệch nhau nữa.
+            if insert_and_lift_once(self.motion, self.lift, tier, require_both):
+                return True
+            logger.warning("Lần %d: bốc hàng chưa thành công", attempt)
+
+            # Rút ra rồi hạ càng về sàn trước khi thử lại — thử lại tại chỗ với
+            # càng đang lơ lửng trong kệ thì chỉ càng cào vào pallet.
+            if attempt < config.PICKUP_MAX_RETRIES:
+                self._retreat_from_shelf(f"bốc hàng lần {attempt}")
+                self.lift.go_to_level(0)
+                if not self._approach_shelf(f"bốc hàng lần {attempt + 1}"):
+                    break
+
+        logger.error("Bốc hàng THẤT BẠI sau %d lần", config.PICKUP_MAX_RETRIES)
+        self.lift.go_to_level(0)
+        return False
+
     def _retreat_from_shelf(self, context: str):
         if not self.motion.retreat_from_shelf():
             logger.warning("Lùi khỏi kệ thất bại (timeout) — %s", context)
@@ -550,7 +584,7 @@ class Robot:
         self.carried_labels = [label_left, label_right]
         self._plan_delivery(label_left, label_right)
 
-        success = self.lift.pickup(self.current_tier)
+        success = self._insert_and_lift(self.current_tier)
 
         # Lùi ra khỏi kệ — dừng khi đã lùi đủ xa
         self._retreat_from_shelf("PICKUP_PAIR")
@@ -607,15 +641,8 @@ class Robot:
         return None
 
     def _drop_single_side(self, side: str) -> bool:
-        """Thả 1 kiện và nâng lại càng vừa thả. Trả về True nếu IR xác nhận.
-        Luôn nâng lại càng dù IR không xác nhận — tránh càng cạ sàn/kệ khi
-        robot lùi và di chuyển tiếp sau đó."""
-        if side == "left":
-            dropped = self.lift.dropoff_left()
-        else:
-            dropped = self.lift.dropoff_right()
-        self.lift.raise_after_drop(side)
-        return dropped
+        """Thả 1 kiện rồi nâng lại càng — chuỗi ở control/handling.py."""
+        return drop_side(self.lift, side, last=False)
 
     def _handle_drop_first(self) -> State:
         """Hạ kiện hàng đầu tiên."""
@@ -629,7 +656,7 @@ class Robot:
         self._approach_for_drop(f"DROP_FIRST {label}")
 
         if same_factory:
-            if self.lift.dropoff():
+            if drop_both(self.lift):
                 self.packages_delivered += 2
             else:
                 logger.error("DROP_FIRST thất bại — IR vẫn thấy pallet hoặc lỗi cảm biến")
@@ -701,15 +728,9 @@ class Robot:
         else:
             self._approach_for_drop(f"DROP_SECOND {label}")
 
-            dropped = False
-            if side == "left":
-                dropped = self.lift.dropoff_left()
-            else:
-                dropped = self.lift.dropoff_right()
-
-            # Luôn gập càng còn lại về sàn dù IR không xác nhận — tránh 1 càng
-            # kẹt ở giữa chừng (khác tầng với càng kia) khi robot di chuyển tiếp.
-            self.lift.stow_forks(side)
+            # Chuỗi thả ở control/handling.py — gập càng chạy LUÔN, kể cả khi IR
+            # không xác nhận (càng nằm thấp mà robot chạy tiếp là cạ sàn/vướng kệ).
+            dropped = drop_side(self.lift, side, last=True)
             if dropped:
                 self.packages_delivered += 1
             else:
@@ -788,7 +809,9 @@ class Robot:
                 return State.DONE
 
             approached = self._approach_shelf("TASK2_PICKUP")
-            success = (self.lift.pickup(shelf_level=1, require_both=False)
+            # NV2 chỉ cần 1 IR — nhưng vẫn phải NÂNG-LUỒN-NHẤC như NV1, cơ cấu
+            # càng là một, không có đường tắt nào cho hàng rời.
+            success = (self._insert_and_lift(tier=1, require_both=False)
                        if approached else False)
             self._retreat_from_shelf("TASK2_PICKUP")
             if success:
@@ -811,7 +834,7 @@ class Robot:
     def _handle_task2_drop(self) -> State:
         logger.info("Nhiệm vụ 2: đặt hàng tại nhà máy liên hợp...")
         self._approach_for_drop("TASK2_DROP")
-        if self.lift.dropoff():
+        if drop_both(self.lift):
             self.task2_done = True
             logger.info("NHIỆM VỤ 2 HOÀN THÀNH!")
         else:

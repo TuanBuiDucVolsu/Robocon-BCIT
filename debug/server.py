@@ -173,7 +173,10 @@ def create_app() -> Flask:
                 level = max(_lift._current_level - 1, 0)
                 _lift.go_to_level(level)
             elif action == "pickup":
-                _lift.pickup(shelf)
+                # Điều khiển TAY: chỉ nâng càng ngang tầng. Bước luồn càng vào
+                # pallet do người lái tự đẩy robot (web debug không lái được motor
+                # bánh cùng lúc), rồi bấm "up" để nhấc.
+                _lift.raise_to_insert(shelf)
             elif action == "dropoff":
                 _lift.dropoff()
             elif action == "reset":

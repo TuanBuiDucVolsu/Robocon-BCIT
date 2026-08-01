@@ -164,6 +164,10 @@ class Motion:
                 echo=config.ULTRASONIC_ECHO_PIN,
                 trigger=config.ULTRASONIC_TRIG_PIN,
                 max_distance=1.0,
+                # KHÔNG bỏ trống: mặc định của gpiozero là 9 mẫu → .distance là
+                # trung vị của 540ms lịch sử, trễ ~270ms so với thực tế. Xem
+                # config.ULTRASONIC_QUEUE_LEN.
+                queue_len=config.ULTRASONIC_QUEUE_LEN,
             )
             logger.info("Cảm biến siêu âm HC-SR04 đã sẵn sàng")
         except Exception as e:
@@ -195,16 +199,19 @@ class Motion:
     # Đo khoảng cách
     # ----------------------------------------------------------
 
-    def get_distance(self, samples: int = 1) -> float:
-        """Đo khoảng cách (cm). Trả -1.0 nếu không có cảm biến HOẶC lỗi đọc."""
+    def get_distance(self) -> float:
+        """Đo khoảng cách (cm). Trả -1.0 nếu không có cảm biến HOẶC lỗi đọc.
+
+        Không tự lọc nhiễu ở đây nữa: gpiozero ĐÃ lấy trung vị sẵn trên
+        config.ULTRASONIC_QUEUE_LEN mẫu. Bản trước gọi `.distance` 3 lần rồi lấy
+        trung vị — nhưng 3 lần đọc đó chạy trong vài phần triệu giây, trong khi
+        luồng nền của gpiozero chỉ cập nhật mỗi ~60ms, nên cả 3 lần trả về CÙNG
+        MỘT giá trị. Phép lọc đó không làm gì cả, chỉ tạo cảm giác an toàn giả.
+        """
         if self._distance_sensor is None:
             return -1.0
         try:
-            if samples <= 1:
-                return self._distance_sensor.distance * 100
-            readings = [self._distance_sensor.distance * 100 for _ in range(samples)]
-            readings.sort()
-            return readings[len(readings) // 2]
+            return self._distance_sensor.distance * 100
         except Exception as e:
             logger.warning("Lỗi đọc cảm biến siêu âm: %s", e)
             return -1.0
@@ -533,11 +540,14 @@ class Motion:
                     config.APPROACH_SLOW_SPEED, config.APPROACH_SLOW_DISTANCE)
         start = time.time()
         target_seen = False
+        # Mốc "gần nhất từng tới được" — dùng để phát hiện robot không tiến thêm nữa
+        best_dist = float("inf")
+        best_at = start
 
         while time.time() - start < config.APPROACH_TIMEOUT:
             if self._aborted():
                 return False
-            dist = self.get_distance(samples=3)  # median chống nhiễu HC-SR04
+            dist = self.get_distance()   # gpiozero đã lấy trung vị sẵn (ULTRASONIC_QUEUE_LEN)
             if dist < 0:
                 # Lỗi đọc mẫu này — KHÔNG hiểu nhầm thành "đã tới", thử lại
                 time.sleep(0.02)
@@ -546,6 +556,24 @@ class Motion:
                 self.stop()
                 logger.info("Đã đến vị trí kệ — khoảng cách %.1fcm", dist)
                 return True
+
+            # KHÔNG TIẾN THÊM ĐƯỢC → dừng, đừng húc tiếp.
+            # "Thấy mục tiêu" không đồng nghĩa "đang lại gần": mũi càng chạm kệ,
+            # cảm biến kẹt, hay bánh trượt đều cho số đo đứng yên ở một giá trị
+            # trông rất hợp lý — và APPROACH_BLIND_TIMEOUT (chỉ bắt "không thấy
+            # gì") để lọt hết. Đã có lần robot đẩy vào kệ trọn 5s ở 60% tốc độ vì
+            # cảm biến báo đều đặn 21.8cm trong khi mục tiêu là 4cm.
+            if dist < best_dist - config.APPROACH_NO_PROGRESS_CM:
+                best_dist = dist
+                best_at = time.time()
+            elif time.time() - best_at > config.APPROACH_NO_PROGRESS_TIME:
+                self.stop()
+                logger.error("Tiếp cận: %.1fs không lại gần thêm được (đang %.1fcm, "
+                             "cần %.1fcm) — DỪNG, nhiều khả năng càng đã chạm kệ. "
+                             "Kiểm APPROACH_DISTANCE có đúng khoảng cách CẢM BIẾN→kệ "
+                             "lúc càng vào đúng khe pallet không.",
+                             config.APPROACH_NO_PROGRESS_TIME, dist, target_cm)
+                return False
 
             if dist <= config.APPROACH_DETECT_DISTANCE:
                 target_seen = True
@@ -571,6 +599,65 @@ class Motion:
         logger.warning("Timeout tiếp cận kệ sau %.1fs!", config.APPROACH_TIMEOUT)
         return False
 
+    def creep_until(self, check, speed: float = config.INSERT_SPEED,
+                    timeout: float = config.INSERT_TIMEOUT,
+                    min_distance: float = config.INSERT_MIN_DISTANCE) -> bool:
+        """Tiến CHẬM cho tới khi `check()` trả True. Dùng để LUỒN CÀNG vào pallet.
+
+        `check` là hàm không tham số do caller cung cấp — thường là "cả 2 IR đã
+        thấy pallet". Motion cố tình KHÔNG biết nó đang đợi cái gì: cảm biến IR
+        thuộc về Lift, và tách như vậy thì test được bằng một hàm giả.
+
+        Vì sao không dùng siêu âm để canh điểm dừng: siêu âm đo khoảng cách tới
+        MẶT KỆ, còn thứ cần biết là PALLET đã nằm trên càng chưa. Robot lệch ngang
+        vài centimet, hay pallet đặt lệch trên kệ, là con số siêu âm sai ngay —
+        IR thì không. Siêu âm ở đây chỉ còn làm CHẶN CỨNG (min_distance).
+
+        Trả False khi hết `timeout` hoặc chạm `min_distance` mà `check` vẫn False.
+        """
+        logger.info("Luồn càng: tiến %d%% tối đa %.1fs (chặn ở %.1fcm)",
+                    speed, timeout, min_distance)
+        start = time.time()
+        try:
+            if check():
+                logger.info("Luồn càng: đã đạt điều kiện ngay từ đầu")
+                return True
+        except Exception as e:
+            logger.error("Luồn càng: lỗi đọc điều kiện dừng (%s) — không tiến", e)
+            return False
+
+        while time.time() - start < timeout:
+            if self._aborted():
+                return False
+
+            # Chặn cứng: dù IR chưa báo cũng KHÔNG được tiến sát hơn mức này, không
+            # thì robot đẩy đổ cả giá kệ khi càng luồn trượt ra ngoài pallet.
+            dist = self.get_distance()
+            if 0 <= dist <= min_distance:
+                self.stop()
+                logger.error("Luồn càng: đã tới %.1fcm (chặn %.1fcm) mà IR chưa báo "
+                             "— DỪNG. Nhiều khả năng càng trượt ra ngoài khe pallet.",
+                             dist, min_distance)
+                return False
+
+            self.forward(speed)
+            time.sleep(0.02)
+
+            try:
+                if check():
+                    self.stop()
+                    logger.info("Luồn càng: điều kiện đạt sau %.2fs",
+                                time.time() - start)
+                    return True
+            except Exception as e:
+                self.stop()
+                logger.error("Luồn càng: lỗi đọc điều kiện dừng (%s) — dừng", e)
+                return False
+
+        self.stop()
+        logger.warning("Luồn càng: hết %.1fs mà IR vẫn chưa báo có pallet", timeout)
+        return False
+
     def retreat_from_shelf(self, target_cm: float = config.RETREAT_DISTANCE,
                            speed: float = config.APPROACH_SPEED) -> bool:
         if self._distance_sensor is None:
@@ -584,7 +671,7 @@ class Motion:
         while time.time() - start < config.APPROACH_TIMEOUT:
             if self._aborted():
                 return False
-            dist = self.get_distance(samples=3)  # median chống nhiễu HC-SR04
+            dist = self.get_distance()   # gpiozero đã lấy trung vị sẵn (ULTRASONIC_QUEUE_LEN)
             if dist < 0:
                 # Lỗi đọc mẫu này — KHÔNG hiểu nhầm thành "đã lùi đủ", thử lại
                 time.sleep(0.02)

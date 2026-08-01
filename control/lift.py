@@ -250,47 +250,56 @@ class Lift:
         self._current_level = target_level
         logger.info("Cả 2 càng đã đến tầng %d", target_level)
 
-    def pickup(self, shelf_level: int = 1, require_both: bool = True) -> bool:
+    def raise_to_insert(self, shelf_level: int):
+        """Nâng 2 càng lên NGANG tầng cần lấy, để chuẩn bị LUỒN vào pallet.
+
+        Phải chạy TRƯỚC khi robot tiến vào — cơ cấu là xe nâng thật, càng luồn vào
+        pallet rồi mới nhấc. Tiến vào lúc càng còn ở sàn thì nâng lên chỉ đi trong
+        không khí trước mặt kệ, còn với tầng 2 thì đội thẳng vào mặt tầng 1.
         """
-        Nâng pallet từ kệ. Retry nếu cảm biến không thấy.
-        require_both=True (NV1): cần cả 2 IR. require_both=False (NV2): 1 IR là đủ.
+        logger.info("Nâng càng lên ngang tầng %d để chuẩn bị luồn", shelf_level)
+        self.go_to_level(shelf_level)
+
+    def lift_off(self) -> None:
+        """Nhấc thêm một đoạn ngắn để pallet RỜI mặt kệ, sau khi càng đã luồn vào.
+
+        Không đi qua go_to_level(): đây là phần dôi ra NGOÀI thang tầng, chỉ vài
+        phần mười giây. `_current_level` giữ nguyên — coi như vẫn ở tầng đó, chỉ
+        cao hơn chút. Sai lệch tích luỹ (nếu có) được home_to_floor() xoá sạch.
         """
-        for attempt in range(1, config.PICKUP_MAX_RETRIES + 1):
-            logger.info("Nhấc hàng tầng %d — lần %d/%d (require_both=%s)",
-                        shelf_level, attempt, config.PICKUP_MAX_RETRIES, require_both)
-            approach_level = shelf_level - 1 if shelf_level > 0 else 0
-            self.go_to_level(approach_level)
-            time.sleep(0.2)
-            self.go_to_level(shelf_level)
-            time.sleep(config.PICKUP_VERIFY_DELAY)
+        secs = config.LIFT_PICKUP_RAISE_TIME
+        if secs <= 0:
+            return
+        logger.info("Nhấc bổng pallet khỏi mặt kệ (%.2fs)", secs)
+        self._left_en.on(); self._left_up.on(); self._left_down.off()
+        self._right_up.on(); self._right_down.off()
+        time.sleep(secs)
+        self._stop_all()
 
-            left, right, ok = self.pallet.read_status()
-            if not ok:
-                logger.warning("Lần %d: không đọc được cảm biến IR — thử lại", attempt)
-                self.go_to_level(approach_level)
-                time.sleep(0.3)
-                continue
+    def confirm_pickup(self, require_both: bool = True) -> bool:
+        """Đọc IR xác nhận pallet đã thật sự nằm trên càng.
 
-            logger.info("Cảm biến: trái=%s, phải=%s",
-                        "CÓ" if left else "KHÔNG",
-                        "CÓ" if right else "KHÔNG")
-
-            if require_both:
-                if left and right:
-                    logger.info("Xác nhận: CẢ 2 pallet trên càng")
-                    return True
-                if left or right:
-                    logger.warning("Chỉ có 1 pallet (%s) — không chấp nhận (cần cả 2)",
-                                   "trái" if left else "phải")
-            elif left or right:
-                logger.info("Xác nhận: có pallet trên càng (NV2)")
+        Tách khỏi pickup() vì ở luồng mới, phần NÂNG và phần LUỒN nằm ở hai chỗ
+        khác nhau (Lift nâng, Motion tiến) — chỉ còn phần xác nhận là của Lift.
+        """
+        time.sleep(config.PICKUP_VERIFY_DELAY)
+        left, right, ok = self.pallet.read_status()
+        if not ok:
+            logger.error("Không đọc được cảm biến IR — KHÔNG coi là nhấc thành công")
+            return False
+        logger.info("Cảm biến: trái=%s, phải=%s",
+                    "CÓ" if left else "KHÔNG", "CÓ" if right else "KHÔNG")
+        if require_both:
+            if left and right:
+                logger.info("Xác nhận: CẢ 2 pallet trên càng")
                 return True
-
-            logger.warning("Lần %d: KHÔNG thấy pallet — thử lại", attempt)
-            self.go_to_level(approach_level)
-            time.sleep(0.3)
-
-        logger.error("Thất bại sau %d lần thử nâng!", config.PICKUP_MAX_RETRIES)
+            if left or right:
+                logger.warning("Chỉ có 1 pallet (%s) — không chấp nhận (cần cả 2)",
+                               "trái" if left else "phải")
+            return False
+        if left or right:
+            logger.info("Xác nhận: có pallet trên càng (NV2)")
+            return True
         return False
 
     def _verify_released(self, side: str | None = None) -> bool:

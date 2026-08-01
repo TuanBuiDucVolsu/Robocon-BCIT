@@ -13,6 +13,7 @@ chuỗi logger.* ra khỏi source rồi đối chiếu, nên hỏng là biết n
 import ast
 import os
 import re
+import pathlib
 import statistics
 import sys
 import tempfile
@@ -27,8 +28,9 @@ from tools.measure_phases import (ANOMALIES, RESULT_ELAPSED, RESULT_PACKAGES,
                                   parse_log, project, split_runs, summarize)
 
 ROOT = os.path.join(os.path.dirname(__file__), "..")
-SOURCES = ["main.py", "control/motion.py", "control/lift.py", "vision/vision.py",
-           "navigation.py", "control/board_switch.py", "control/mcp3008_bus.py"]
+SOURCES = ["main.py", "control/motion.py", "control/lift.py", "control/handling.py",
+           "vision/vision.py", "navigation.py", "control/board_switch.py",
+           "control/mcp3008_bus.py"]
 
 # %-placeholder → giá trị mẫu, để dựng lại chuỗi log ĐÚNG như lúc chạy thật
 _SPEC = re.compile(r"%[-+ #0]*[\d.]*([difsxX%])")
@@ -50,6 +52,97 @@ def _rendered_log_messages() -> list[str]:
                     and isinstance(node.args[0].value, str)):
                 out.append(_SPEC.sub(lambda m: _SAMPLE[m.group(1)], node.args[0].value))
     return out
+
+
+class TestPickupFlowIsSingleImplementation(unittest.TestCase):
+    """Luồng BỐC HÀNG chỉ được viết MỘT chỗ — test và trận không thể lệch nhau.
+
+    Đây là lớp canh cho lỗi nặng nhất của dự án: `main.py` gọi một chuỗi thao tác,
+    còn `test_lift.py` gọi chuỗi KHÁC (Lift.pickup — nâng tại chỗ, không luồn càng).
+    Test bàn luôn xanh vì NGƯỜI tự canh càng vào pallet trước khi bấm Enter; robot
+    thì không bao giờ móc được hàng. Không có gì đối chiếu hai bên nên lỗi sống rất lâu.
+
+    Giờ chuỗi nằm ở control/pickup.py. Test này chặn việc ai đó lại chép nó ra nơi
+    khác — chép ra là hai bản bắt đầu trôi khỏi nhau, và vòng lặp cũ tái diễn.
+    """
+
+    #: Nguyên thuỷ BỐC hàng — chỉ có nghĩa khi đi đúng thứ tự nâng→luồn→nhấc.
+    PICKUP_PRIMITIVES = ("raise_to_insert", "lift_off", "confirm_pickup", "creep_until")
+
+    #: Nguyên thuỷ THẢ hàng — `raise_after_drop`/`stow_forks` PHẢI chạy kể cả khi
+    #: IR không xác nhận, nên không được để mỗi nơi tự quyết định gọi hay không.
+    DROP_PRIMITIVES = ("dropoff_left", "dropoff_right", "raise_after_drop", "stow_forks")
+
+    PRIMITIVES = PICKUP_PRIMITIVES + DROP_PRIMITIVES
+
+    #: Nơi ĐƯỢC PHÉP gọi trực tiếp, kèm lý do.
+    ALLOWED = {
+        "control/handling.py": "cài đặt DUY NHẤT của cả 2 chuỗi",
+        "control/lift.py": "nơi định nghĩa các nguyên thuỷ",
+        "control/motion.py": "nơi định nghĩa creep_until",
+        "tests/test_lift.py": "test bàn KHÔNG có Motion nên không luồn được — "
+                              "_manual_pickup() đã ghi rõ đây không phải luồng thi đấu",
+        "tests/test_match_sim.py": "mô phỏng — mock các nguyên thuỷ, không gọi thật",
+        "tests/test_units.py": "unit test của chính các nguyên thuỷ",
+        "debug/server.py": "điều khiển TAY qua web, người lái tự đẩy robot",
+        "tests/test_tools.py": "chính test này",
+    }
+
+    def _callers(self, name: str) -> set[str]:
+        found = set()
+        for path in pathlib.Path(ROOT).rglob("*.py"):
+            rel = path.relative_to(ROOT).as_posix()
+            if ".git" in rel or "__pycache__" in rel:
+                continue
+            if re.search(rf"\.{name}\s*\(", path.read_text(encoding="utf-8")):
+                found.add(rel)
+        return found
+
+    def test_primitives_only_called_from_allowed_places(self):
+        for prim in self.PRIMITIVES:
+            for rel in self._callers(prim):
+                with self.subTest(primitive=prim, file=rel):
+                    self.assertIn(
+                        rel, self.ALLOWED,
+                        f"{rel} gọi thẳng .{prim}() — chuỗi bốc hàng phải đi qua "
+                        f"control.pickup.insert_and_lift_once(), nếu không luồng "
+                        f"test sẽ trôi khỏi luồng thi đấu (đã xảy ra một lần)")
+
+    def test_match_and_smoke_share_one_implementation(self):
+        for rel in ("main.py", "tests/test_smoke.py"):
+            src = (pathlib.Path(ROOT) / rel).read_text(encoding="utf-8")
+            with self.subTest(file=rel):
+                for fn in ("insert_and_lift_once", "drop_side"):
+                    self.assertIn(fn, src,
+                                  f"{rel} phải gọi {fn}() dùng chung, không tự dựng lại")
+
+    def test_drop_always_raises_even_when_ir_fails(self):
+        """`raise_after_drop`/`stow_forks` phải NGOÀI mọi nhánh `if dropped`.
+
+        Viết `if dropped: lift.raise_after_drop(...)` là nhánh IR-fail không bao giờ
+        nâng càng lên — mà đó đúng là nhánh hay xảy ra nhất. Càng nằm thấp lúc robot
+        lùi và chạy tiếp thì cạ sàn, vướng mép kệ, kéo đổ kiện.
+        """
+        src = (pathlib.Path(ROOT) / "control/handling.py").read_text(encoding="utf-8")
+        body = src[src.index("def drop_side("):]
+        body = body[:body.index("def drop_both(")]
+        for line in body.splitlines():
+            stripped = line.strip()
+            if stripped.startswith(("if dropped", "if not dropped", "elif dropped")):
+                self.fail("drop_side() đặt việc nâng/gập càng sau điều kiện IR — "
+                          f"dòng: {stripped!r}")
+        self.assertIn("lift.stow_forks(side)", body)
+        self.assertIn("lift.raise_after_drop(side)", body)
+
+    def test_shared_flow_has_the_three_mandatory_steps(self):
+        """Cơ cấu luồn-rồi-nâng: thiếu bước nào là robot không móc được hàng."""
+        src = (pathlib.Path(ROOT) / "control/handling.py").read_text(encoding="utf-8")
+        order = [src.index(s) for s in
+                 ("raise_to_insert", "creep_until", "lift_off", "confirm_pickup")
+                 if s in src]
+        self.assertEqual(len(order), 4, "control/pickup.py thiếu bước bắt buộc")
+        self.assertEqual(order, sorted(order),
+                         "sai THỨ TỰ: phải nâng ngang tầng TRƯỚC rồi mới luồn càng")
 
 
 class TestPatternsMatchRealLogStrings(unittest.TestCase):
@@ -113,7 +206,7 @@ class TestPatternsMatchRealLogStrings(unittest.TestCase):
 
 # reverse > forward: lệnh back chạy ở config.REVERSE_SPEED, chậm hơn tiến
 TRUTH = dict(forward=1.80, reverse=2.30, turn=0.90, advance=1.50, approach=1.40,
-             retreat=0.80, pickup=4.00, drop=2.20, raise_=0.70, scan=0.60)
+             retreat=0.80, insert=0.80, pickup=4.00, drop=2.20, raise_=0.70, scan=0.60)
 
 
 def _build_log(laps: int = 3) -> str:
@@ -156,8 +249,12 @@ def _build_log(laps: int = 3) -> str:
     for _ in range(laps):
         go(2); dock()
         log("Nhận diện OK (lần 1): trái=samsung, phải=foxconn", TRUTH["scan"])
-        log("Nhấc hàng tầng 1 — lần 1/2 (require_both=True)", 0.01)
-        log("Xác nhận: CẢ 2 pallet trên càng", TRUTH["pickup"])
+        # Chặng LUỒN CÀNG nằm BÊN TRONG chặng bốc hàng — chia thời gian sao cho
+        # span "bốc hàng" đúng bằng TRUTH["pickup"], span "luồn" bằng TRUTH["insert"].
+        log("Bốc hàng tầng 1 — lần 1/2", 0.01)
+        log("Luồn càng: tiến 25% tối đa 4.0s (chặn ở 4.0cm)", 0.0)
+        log("Luồn càng: điều kiện đạt sau 0.80s", TRUTH["insert"])
+        log("Xác nhận: CẢ 2 pallet trên càng", TRUTH["pickup"] - TRUTH["insert"])
         undock(); back()
         for side, other in (("TRÁI", "trái"), ("PHẢI", "phải")):
             turn(1); go(3); dock()

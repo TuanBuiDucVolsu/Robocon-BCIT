@@ -76,6 +76,10 @@ def mode_live(button):
         while True:
             state = button.is_pressed
             if state != last:
+                # Callback đếm chạy ở LUỒNG KHÁC, thường xong sau vòng lặp này vài
+                # phần nghìn giây. Không chờ thì số đếm in ra trễ một dòng và người
+                # đọc log tưởng máy đếm sai.
+                time.sleep(0.03)
                 print(f"  [{time.strftime('%H:%M:%S')}] "
                       f"{'●  ĐANG BẤM ' if state else '○  đã nhả  '}"
                       f"  (bấm: {len(presses)}, nhả: {len(releases)})")
