@@ -113,10 +113,10 @@ LIFT_HOME_DURATION = 4.0   # = min_home_duration() sau calibrate (3.9 + LOWER_EX
 # Bù lệch 2 càng theo VỊ TRÍ TUYỆT ĐỐI: thời gian từ SÀN lên tầng n = LIFT_TIME_SHELF_n
 # + bù. Thời gian mỗi lần chạy = hiệu 2 mốc (Lift._level_time) → không cộng dồn khi đi
 # 0→1→2, và càng lẻ dùng chung hệ số với khi chạy cả 2 càng.
-LIFT_LEFT_EXTRA = -0.050          # Càng TRÁI khi nâng
-LIFT_RIGHT_EXTRA = 0.100         # Càng PHẢI khi nâng
+LIFT_LEFT_EXTRA = 0.050          # Càng TRÁI khi nâng
+LIFT_RIGHT_EXTRA = 0.200         # Càng PHẢI khi nâng
 LIFT_LEFT_LOWER_EXTRA = 0.100     # Càng TRÁI khi hạ (tăng nếu bên đó khó hạ)
-LIFT_RIGHT_LOWER_EXTRA = 0.0      # Càng PHẢI khi hạ
+LIFT_RIGHT_LOWER_EXTRA = 0.050      # Càng PHẢI khi hạ
 
 LIFT_SPEED = 80              # Duty cycle motor nâng — chỉ dùng trong web debug
 PICKUP_MAX_RETRIES = 2       # Số lần nâng lại nếu IR không thấy pallet
