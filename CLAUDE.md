@@ -257,7 +257,16 @@ tại điểm giao, line cắt ngang nằm dọc thanh cảm biến nên xoay ki
   `backward()` / phần lùi của `turn_left/right()` chạy ĐÚNG tốc độ (không full speed) →
   retreat êm, không giật pallet; xoay cân tâm → calibrate `TURN_TIME` chính xác hơn.
 - **`approach_shelf()` 2 pha**: nhanh (`APPROACH_FAST_SPEED`) khi > `APPROACH_SLOW_DISTANCE`,
-  chậm (`APPROACH_SLOW_SPEED`) khi gần → dừng chính xác ở `APPROACH_DISTANCE` (4cm).
+  chậm (`APPROACH_SLOW_SPEED`) khi gần → dừng ở `APPROACH_DISTANCE`.
+  ⚠️ **PHỤ THUỘC CHẤT LƯỢNG BÁM LINE nhiều hơn tưởng.** Robot đứng LỆCH LINE thì
+  chùm siêu âm dội vào mặt khác và đọc sai — đã gặp thật: robot húc kệ vì được đặt
+  hơi lệch, đặt lại đúng line thì chạy sạch. Lúc thi đấu robot tới kệ bằng bám line,
+  nên nếu bám line để nó dừng hơi lệch thì cùng lỗi đó xảy ra giữa trận, mà lúc ấy
+  không có tay ai đỡ. Cân nhắc thêm một bước căn thẳng trước khi tiếp cận.
+  ⚠️ `APPROACH_SLOW_SPEED` nằm sát VÙNG CHẾT của JGA25-370 qua L298N: 25 thì robot
+  chỉ nhích từng tí (chậm hơn ngưỡng 0.83cm/s của cơ chế chống húc kệ → bị dừng oan
+  giữa đường và báo nhầm "càng đã chạm kệ"), 40 thì vọt quá đà. Hiện để 32, CHƯA
+  chạy thử. Vẫn nhích → nâng 36; vẫn vọt → hạ 28.
   **Chặn chạy mù**: nếu sau `APPROACH_BLIND_TIMEOUT` chưa lần nào thấy vật trong
   `APPROACH_DETECT_DISTANCE` → dừng + trả `False` (trước đây chạy hết 5s ở 60% tốc độ
   = lao ra khỏi sa bàn / sang sân đối phương khi mất echo).
@@ -484,10 +493,29 @@ chấp nhận được: nó không nhận SAI, chỉ im lặng, nhờ cơ chế 
 - **Dải V của amkor bị siết bằng tay** (130..230, không dùng số tool đề xuất): dải
   gốc phủ luôn khung kệ đen và mặt bàn trắng nên KỆ TRỐNG khớp 41.6%, tự nó vượt
   `CONFIDENCE_THRESHOLD`. Siết còn kệ trống 14.8% / có amkor 68.9%.
-- ⚠️ **Điểm yếu còn lại, KHÔNG sửa được bằng ngưỡng:** trên kiện hana, HSV cho
-  amkor 23.3% so với hana 11.0% — vì decal hana nền TRẮNG mà amkor định nghĩa là
-  "vô sắc và sáng". Ô đó phải trông vào ORB. Đừng cố siết dải amkor thêm: nó đã bị
-  siết một lần rồi (V 130..230) và siết nữa sẽ mất chính kiện amkor.
+- ⚠️ **HAI THAY ĐỔI SAU PHẢI ĐI CÙNG NHAU** (a950c75) — sửa hai lỗi ngược chiều của
+  cùng một nguyên nhân là 3/4 decal nền trắng. Đổi một cái mà quên cái kia là hỏng:
+  - **Sàn S của samsung 52 → 90.** Decal "Al Aluminum" có nền xanh xám nhạt, rơi
+    đúng dải hue samsung — trên kiện amkor thật, dải samsung ăn 31.1% còn dải amkor
+    chỉ 18.5%, tức HSV gọi amkor thành samsung. Chip xanh samsung là màu IN ĐẬM còn
+    ánh xanh trên nhôm thì nhạt: S>=52 cho 33.3%/16.7% (2.0x), S>=90 cho 23.4%/5.7%
+    (4.1x). Đừng nâng quá 110 — samsung thật tụt còn 20.3%, hết dư địa khi tối đi.
+  - **`CONFIDENCE_THRESHOLD` 0.20 → 0.12.** Decal hana nền trắng nên dải amkor luôn
+    ăn nhiều pixel hơn (trên kiện hana: amkor 47.0% mà hana 15.4%). Hana không cần
+    thắng về SỐ pixel — màu đỏ là đặc trưng RIÊNG, sạch hơn hẳn: 15.4% trên kiện
+    hana so với 0.6-0.9% trên 3 loại kia, chênh >20 lần. Nó chỉ cần vượt ngưỡng để
+    cơ chế ưu tiên `CHROMATIC_LABELS` kích hoạt và chặn amkor.
+  - Hạ ngưỡng MỘT MÌNH sẽ hỏng: samsung 31.1% trên kiện amkor sẽ thắng ở ô đó.
+  - ĐÃ THỬ VÀ LOẠI: nâng sàn S của dải amkor cho nó nhả nền trắng của hana. Phải
+    lên S>=30 mới thắng (12.6% so với 9.3%) nhưng lúc đó chính amkor tụt dưới ngưỡng
+    — chữa ô này thì mất khả năng nhận amkor.
+  - Hệ quả phụ đáng biết: với ngưỡng 0.12, kết quả ORB chắc chắn luôn có conf
+    >= SHAPE_MIN_INLIERS/40 = 0.15, tức luôn cao hơn mọi kết quả HSV chưa đạt ngưỡng.
+- **Kết quả sau 2 bản vá trên**, bố cục đúng kiểu thi đấu (tầng 2 hai khối, tầng 1
+  bốn khối 2x2) — lần đầu CẢ HAI đường đều đúng CẢ 4 ô:
+      T2 trái hana ORB 100% / HSV 26.9%  |  T2 phải samsung ORB 100% / HSV 39.9%
+      T1 trái amkor ORB 100% / HSV 53.6% |  T1 phải foxconn ORB 100% / HSV 66.6%
+  Ghi nhận thêm: 16 ảnh mẫu chụp bằng MỘT khối vẫn khớp tốt với kiện đủ 2-4 khối.
 - ĐÃ SỬA (0e8107d): vạch xanh tím của sa bàn từng lọt vào 60px đáy ROI tầng 1 và
   rơi đúng dải hue samsung — trên kiện hana, samsung ăn 12.3% chỉ nhờ dải đó và
   vượt mặt hana. Thu `ROI_HEIGHT` 0.375→0.30 và dịch `ROI_Y_CENTER[1]` 0.76→0.74
