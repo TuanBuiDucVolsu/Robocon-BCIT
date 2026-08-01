@@ -545,13 +545,21 @@ class TestClassifyPair(unittest.TestCase):
     def test_confident_orb_survives_a_higher_scoring_hsv_retry(self):
         """conf của ORB (inlier/40) và của HSV (tỉ lệ pixel) là HAI THANG khác nhau.
 
-        Ca thật: Foxconn chỉ đạt ~7 inlier (xem config.SHAPE_MIN_INLIERS) → conf
-        0.175 nhưng ORB đã chắc chắn. Lần quét sau ORB trượt, HSV cho 0.18 mơ hồ.
-        So confidence trần thì 0.18 > 0.175 → ghi đè mất kết quả đúng và trả None.
+        Lỗi cũ: so confidence TRẦN nên một kết quả ORB ĐÃ chắc chắn bị lần quét sau
+        ghi đè bằng kết quả HSV mơ hồ nhưng số cao hơn → trả None và bỏ cả tầng kệ.
+        Quy tắc đúng là so theo (đã_đủ_tự_tin, confidence).
+
+        Số ở đây đặt CỐ ĐỊNH, KHÔNG suy từ CONFIDENCE_THRESHOLD nữa. Với ngưỡng hiện
+        tại (0.12) thì một kết quả ORB chắc chắn luôn có conf >= SHAPE_MIN_INLIERS/40
+        = 0.15, tức luôn CAO HƠN mọi kết quả HSV chưa đạt ngưỡng — ca này không còn
+        xảy ra trong thực tế. Nhưng quy tắc so sánh vẫn phải đúng, vì ngưỡng có thể
+        đổi lại: bản cũ suy hsv_conf từ ngưỡng nên khi hạ 0.20 → 0.12 là tiền đề tự
+        gãy (0.11 không lớn hơn 0.175), test đỏ mà bản thân logic không sai.
         """
-        orb_conf = 7 / 40.0                             # dưới CONFIDENCE_THRESHOLD
-        hsv_conf = config.CONFIDENCE_THRESHOLD - 0.01   # cao hơn nhưng KHÔNG đạt ngưỡng
+        orb_conf, hsv_conf = 0.05, 0.10   # HSV cao hơn nhưng KHÔNG đạt ngưỡng
         self.assertGreater(hsv_conf, orb_conf, "tiền đề của test")
+        self.assertLess(hsv_conf, config.CONFIDENCE_THRESHOLD,
+                        "tiền đề: HSV phải CHƯA đạt ngưỡng")
         attempts = [
             (("foxconn", orb_conf, True), ("amkor", 0.05, False)),   # trái: ORB chắc
             (("samsung", hsv_conf, False), ("amkor", 0.05, False)),  # trái: HSV mơ hồ
