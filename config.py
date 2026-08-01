@@ -275,7 +275,17 @@ EDGE_COST_START_GAP = 3      # Phụ phí đoạn ngang R0 (trôi qua khoảng �
 # ============================================================
 # CAMERA & NHẬN DIỆN KIỆN HÀNG
 # ============================================================
-CAMERA_RESOLUTION = (640, 480)
+# ⚠️ ĐỔI ĐỘ PHÂN GIẢI LÀ PHẢI CHỤP LẠI TOÀN BỘ ẢNH MẪU ORB — ảnh mẫu cắt ở độ phân
+# giải này, đem so với khung ở độ phân giải khác là tự chuốc lệch tỉ lệ.
+# 1296x972 thay cho 640x480: gấp đôi mỗi chiều, gấp bốn pixel, CÙNG tỉ lệ 4:3 nên mọi
+# hằng số ROI (tính theo phần trăm) giữ nguyên hiệu lực.
+# Lý do: kiện ở TẦNG 1 nằm xa camera nên hiện ra rất nhỏ — ở 640x480 ảnh mẫu tầng 1
+# chỉ 178x130 với 130-220 keypoint, và kiện THẬT ở tầng 1 chỉ đạt 9 inlier, trong khi
+# ô TRỐNG ở tầng 2 cũng cho 10 inlier. Hai ca cùng dấu vân tay, không ngưỡng nào tách
+# được. Ở 1296x972 vùng đó thành ~356x260, đủ chi tiết để tách.
+# Chi phí đo trên Pi 4: classify_pair 360ms → 585ms, tức +225ms mỗi lần quét, cả trận
+# 6 lượt ≈ +1.4s trên ngân sách 240s.
+CAMERA_RESOLUTION = (1296, 972)
 CONFIDENCE_THRESHOLD = 0.20  # Tỷ lệ pixel tối thiểu (đường HSV)
 MAX_SCAN_RETRIES = 3         # Số lần chụp lại trong 1 lượt quét
 MAX_PAIR_SCAN_ATTEMPTS = 2   # Số lần quét lại cả cặp sau khi tiếp cận kệ

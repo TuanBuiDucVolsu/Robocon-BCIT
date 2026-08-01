@@ -412,6 +412,41 @@ class TestShapeMatcherDecision(unittest.TestCase):
         m._sets[None]["foxconn"] = (MagicMock(), MagicMock())
         self.assertTrue(m.ready)
 
+    def test_templates_normalised_to_same_size_within_a_set(self):
+        """Ảnh mẫu trong CÙNG một bộ phải được cắt về cùng kích thước trước khi so.
+
+        Bốn tấm của cùng một ô đều chứa cùng phần pallet + khung kệ ở nền, mà nền đó
+        có trong MỌI vùng quét. Tấm nào cắt rộng hơn thì ăn thêm inlier miễn phí từ
+        nền — tấm cắt SẠCH nhất lại thiệt nhất. Đo thật ở t2_left: samsung (296px)
+        thua sát nút amkor (395px) ngay trên ô đang đặt samsung; cắt về cùng cỡ thì
+        t2_right nhảy từ cách biệt 1.2x lên 9.0x.
+        """
+        import tempfile
+        from vision.shape_match import ShapeMatcher
+        m = object.__new__(ShapeMatcher)
+        m._orb = _cv2.ORB_create(nfeatures=200)
+
+        # 4 ảnh mẫu giả, kích thước lệch nhau, đủ hoạ tiết để ORB tìm được keypoint
+        rng = _np.random.default_rng(0)
+        sizes = {"samsung": (100, 120), "foxconn": (140, 180),
+                 "amkor": (130, 160), "hana_micron": (150, 200)}
+        with tempfile.TemporaryDirectory() as d:
+            for label, (h, w) in sizes.items():
+                img = rng.integers(0, 255, size=(h, w), dtype=_np.uint8)
+                _cv2.imwrite(os.path.join(d, f"{label}.png"), img)
+            loaded = m._load_dir(d, "test")
+
+        self.assertEqual(len(loaded), 4, "phải nạp đủ 4 ảnh mẫu")
+        # _load_dir trả (kp, des); kiểm gián tiếp qua toạ độ keypoint không vượt cỡ nhỏ nhất
+        hmin = min(h for h, _w in sizes.values())
+        wmin = min(w for _h, w in sizes.values())
+        for label, (kp, _des) in loaded.items():
+            for point in kp:
+                self.assertLessEqual(point.pt[0], wmin,
+                                     f"{label}: keypoint nằm ngoài bề rộng đã chuẩn hoá")
+                self.assertLessEqual(point.pt[1], hmin,
+                                     f"{label}: keypoint nằm ngoài chiều cao đã chuẩn hoá")
+
     def test_variant_set_chosen_by_tier_and_side(self):
         """classify() phải dùng ĐÚNG bộ ảnh mẫu của (tầng, ô) đang quét.
 

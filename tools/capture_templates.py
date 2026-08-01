@@ -252,7 +252,15 @@ def main():
             # nửa MỘT kiện. Ảnh mẫu 2 kiện đem so với nửa khung 1 kiện thì quá nửa
             # đặc trưng của mẫu không có chỗ khớp — và phần khớp được lại rơi vào
             # nền/pallet dùng chung, thứ giống hệt nhau ở cả 4 mẫu.
-            if w > h * 1.4:
+            #
+            # ⚠️ Ngưỡng 1.4 cũ BÁO ĐỘNG GIẢ liên tục. Một kiện = 1 pallet + 4 khối,
+            # nhìn từ trước thấy HAI mặt khối cạnh nhau nên vốn dĩ đã nằm ngang.
+            # Đo thật cùng một kiện ở 2 ô: t2_left 280x212 = 1.32 (lọt),
+            # t2_right 272x184 = 1.48 (kêu oan) — mà chính bộ mẫu t2_right đó cho
+            # 229 inlier. Hai kiện thật cạnh nhau thì rộng gấp đôi, tỉ lệ ~3.0, nên
+            # 2.0 vẫn bắt được ca thật mà không kêu oan nữa. Cảnh báo lúc nào cũng
+            # kêu thì người dùng quen tay bỏ qua, kể cả lần nó kêu đúng.
+            if w > h * 2.0:
                 print(f"    ⚠️ Vùng phát hiện rất RỘNG ({w}x{h}) — nhiều khả năng đang")
                 print("       chụp CẢ 2 kiện cạnh nhau. Ảnh mẫu phải là MỘT kiện thôi:")
                 print("       bỏ bớt 1 kiện khỏi bệ rồi chụp lại kiện này.")

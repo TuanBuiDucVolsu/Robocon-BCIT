@@ -58,7 +58,10 @@ def variant_dirname(level: int, side: str) -> str:
     return f"t{int(level)}_{side}"
 
 # Số keypoint tối đa trích xuất mỗi ảnh — nhiều hơn thì chính xác hơn nhưng chậm hơn trên Pi.
-ORB_FEATURES = 500
+# Nâng 500 → 900 cùng lúc với CAMERA_RESOLUTION 640x480 → 1296x972: ở độ phân giải mới
+# ORB chạm ĐÚNG trần 500 trên một ROI (520x364), tức ảnh còn chi tiết mà bị cắt cụt.
+# Giữ 500 là bỏ phí chính thứ vừa bỏ công tăng độ phân giải để có.
+ORB_FEATURES = 900
 # Lowe's ratio test: match "tốt" khi khoảng cách gần nhất < LOWE_RATIO * khoảng cách gần nhì.
 # Thấp hơn = khắt khe hơn (ít match nhiễu hơn nhưng cũng ít match thật hơn).
 LOWE_RATIO = 0.75
@@ -72,6 +75,10 @@ MIN_INLIERS = getattr(config, "SHAPE_MIN_INLIERS", 10)
 # nhau (không có cách biệt rõ ràng như khi thật sự cầm đúng kiện hàng).
 MARGIN_RATIO = getattr(config, "SHAPE_MARGIN_RATIO", 1.8)
 RANSAC_REPROJ_THRESHOLD = 5.0
+# Trong một bộ, ảnh mẫu to nhất không được vượt quá bấy nhiêu lần ảnh nhỏ nhất.
+# Vượt = buổi chụp đó đặt kiện xê dịch, chuẩn hoá sẽ cắt cụt tấm to (đã gặp ở bộ
+# t1_right: 237x218 .. 915x530, chuẩn hoá về 237x172 làm hỏng hẳn tấm hana).
+MAX_TEMPLATE_SIZE_SPREAD = 1.5
 # Quy đổi số inlier -> "confidence" 0-1 CHỈ để hiển thị (web debug UI, log) thống nhất
 # định dạng % với đường màu HSV — quyết định nhận diện thật vẫn dựa vào MIN_INLIERS thô,
 # không dựa vào số quy đổi này.
@@ -101,12 +108,27 @@ class ShapeMatcher:
     # Nạp ảnh mẫu
     # ----------------------------------------------------------
 
+    @staticmethod
+    def _center_crop(img, h, w):
+        ih, iw = img.shape[:2]
+        y0, x0 = (ih - h) // 2, (iw - w) // 2
+        return img[y0:y0 + h, x0:x0 + w]
+
     def _load_dir(self, path, what):
         """Nạp một thư mục ảnh mẫu → {label: (kp, des)}. Thiếu file thì bỏ qua lặng lẽ
-        với bộ biến thể (đang chụp dần), nhưng cảnh báo với bộ phẳng."""
-        loaded = {}
+        với bộ biến thể (đang chụp dần), nhưng cảnh báo với bộ phẳng.
+
+        ⚠️ CHUẨN HOÁ KÍCH THƯỚC trong cùng một bộ trước khi trích đặc trưng.
+        Bốn ảnh mẫu của cùng một ô đều chứa CÙNG phần pallet + khung kệ ở nền, mà
+        nền đó có mặt trong MỌI vùng quét. Nên tấm nào được cắt rộng hơn thì tự nhiên
+        ăn thêm inlier miễn phí từ nền — tấm cắt SẠCH nhất lại thành tấm thiệt nhất.
+        Đo thật ở bộ t2_left: samsung cắt sát (296px) thua sát nút amkor cắt rộng
+        (395px) ngay trên ô đang đặt kiện samsung. Cắt tất cả về cùng cỡ thì cùng ô
+        đó lên 1.8x, còn t2_right nhảy từ 1.2x lên 9.0x.
+        """
+        imgs = {}
         if not os.path.isdir(path):
-            return loaded
+            return {}
         for label in config.LABEL_TO_FACTORY:
             fp = os.path.join(path, f"{label}.png")
             if not os.path.isfile(fp):
@@ -115,12 +137,29 @@ class ShapeMatcher:
             if img is None:
                 logger.warning("Không đọc được ảnh mẫu: %s", fp)
                 continue
-            kp, des = self._orb.detectAndCompute(img, None)
-            if des is None or len(kp) < MIN_MATCHES_FOR_HOMOGRAPHY:
-                logger.warning("Ảnh mẫu %s quá ít đặc trưng (%d keypoint) — chụp lại nét hơn/gần hơn",
-                                fp, len(kp) if kp else 0)
-                continue
-            loaded[label] = (kp, des)
+            imgs[label] = img
+
+        loaded = {}
+        if imgs:
+            hmin = min(i.shape[0] for i in imgs.values())
+            wmin = min(i.shape[1] for i in imgs.values())
+            hmax = max(i.shape[0] for i in imgs.values())
+            wmax = max(i.shape[1] for i in imgs.values())
+            # Lệch nhiều = buổi chụp đó đặt kiện xê dịch giữa các lần, chuẩn hoá sẽ
+            # phải cắt rất sâu và làm hỏng những tấm to. Chụp lại rẻ hơn là chịu đựng.
+            if wmax > wmin * MAX_TEMPLATE_SIZE_SPREAD or hmax > hmin * MAX_TEMPLATE_SIZE_SPREAD:
+                logger.warning("[%s] ảnh mẫu LỆCH CỠ NẶNG (%dx%d .. %dx%d) — chuẩn hoá về "
+                               "%dx%d sẽ cắt cụt những tấm to. Nên chụp lại cả bộ, đặt kiện "
+                               "vào ĐÚNG một chỗ cho cả 4 loại.",
+                               what, wmin, hmin, wmax, hmax, wmin, hmin)
+            for label, img in imgs.items():
+                img = self._center_crop(img, hmin, wmin)
+                kp, des = self._orb.detectAndCompute(img, None)
+                if des is None or len(kp) < MIN_MATCHES_FOR_HOMOGRAPHY:
+                    logger.warning("Ảnh mẫu %s/%s quá ít đặc trưng (%d keypoint) — chụp lại "
+                                   "nét hơn/gần hơn", what, label, len(kp) if kp else 0)
+                    continue
+                loaded[label] = (kp, des)
 
         total = len(config.LABEL_TO_FACTORY)
         if loaded:
