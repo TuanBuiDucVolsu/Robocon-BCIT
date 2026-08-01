@@ -291,8 +291,8 @@ tại điểm giao, line cắt ngang nằm dọc thanh cảm biến nên xoay ki
 
 | Script | Mục đích |
 |--------|----------|
-| `tests/test_logic.py` | 114 unit test — PC, không GPIO (bản đồ + mô phỏng route tới đúng chỗ + polarity + phân loại màu + reset + resume) |
-| `tests/test_units.py` | 70 unit test — PC (bám line, lift, ShapeMatcher, classify_pair) |
+| `tests/test_logic.py` | 114 unit test — **an toàn chạy cả trên Pi** (tự ép pin factory giả, xem dưới): bản đồ + mô phỏng route tới đúng chỗ + polarity + phân loại màu + reset + resume |
+| `tests/test_units.py` | 70 unit test — **an toàn chạy cả trên Pi**: bám line, lift, ShapeMatcher, classify_pair |
 | `tests/test_match_sim.py` | Mô phỏng TRỌN trận với phần cứng giả lập: **13/13 kiện** (12 NV1 + hàng rời NV2), reset giữa trận, lỗi phần cứng, mất line giữa route — kiểm vị trí main.py tin tưởng có khớp vị trí thật không |
 | `tests/test_tools.py` | 21 unit test — PC (regex của `measure_phases` phải khớp chuỗi log CÓ THẬT trong source + round-trip; `dry_run` chạy hết được và mọi bước đi đều có line thật) |
 | `tools/show_routes.py` | In toàn bộ route sinh ra để đối chiếu tay trên sa bàn |
@@ -306,6 +306,37 @@ tại điểm giao, line cắt ngang nằm dọc thanh cảm biến nên xoay ki
 | `tests/test_lift.py` | Menu LẶP, **home đầu phiên + sau mỗi option** (không limit switch → `_current_level` chỉ đúng sau khi home). Option **1 = diễn tập trọn 1 lượt giao** như main.py; còn lại: nâng/hạ, IR, home, từng càng riêng, so 2 càng, calibrate |
 | `tests/test_vision.py` | 9 option + `l` — camera, BGR, ORB, HSV, classify_pair, ánh xạ trái/phải |
 | `tests/test_smoke.py` | Smoke tích hợp trên sa bàn |
+
+### ⚠️ Script nào chạm phần cứng THẬT
+
+Chạy nhầm trên Pi là **robot cử động thật** — kê bánh khỏi mặt bàn hoặc ngắt nguồn
+động lực L298N trước khi chạy nhóm dưới.
+
+| Chạy được ở đâu | Script |
+|---|---|
+| **PC và Pi — không chạm GPIO** | `test_logic`, `test_units`, `test_tools`, `test_match_sim`, `tools/show_routes`, `tools/dry_run`, `tools/measure_phases`, `tools/estimate_time`, `tools/sim_ui` |
+| **CHỈ trên Pi — điều khiển thật** | `test_motion` (chạy bánh), `test_lift` (nâng càng), `test_vision` (camera), `test_smoke`, `tools/measure_pickup` (nâng càng, bánh KHÔNG chạy), `tools/calibrate_line`, `tools/capture_templates`, `tools/check_board_side` |
+
+`test_units.py` / `test_logic.py` **tự ép pin factory giả** ngay đầu file, TRƯỚC khi
+import `control.*`:
+
+```python
+os.environ.setdefault("GPIOZERO_PIN_FACTORY", "mock")
+os.environ.setdefault("GPIOZERO_MOCK_PIN_CLASS", "mockpwmpin")
+```
+
+Không có 2 dòng này thì chạy trên Pi là **bánh xe quay thật**: `TestFollowLine._drive()`
+chỉ giả lập ĐẦU VÀO cảm biến (`read_line_sensor_raw`), rồi gọi `follow_line()` thật để
+đọc ngược duty cycle 4 chân motor — chân ra là `PWMOutputDevice` thật. Mà `follow_line()`
+không dừng motor sau khi chạy, nên bánh quay tới tận `cleanup()`.
+
+- `mockpwmpin` là **bắt buộc** — `MockPin` thường không hỗ trợ PWM, thiếu nó là 14 test
+  lỗi `PinPWMUnsupported`.
+- **KHÔNG chuyển 2 dòng này sang `tests/__init__.py`.** `test_motion.py` và `test_lift.py`
+  đều có `from tests.config_editor import save_config` → chúng cũng bị ép sang chân giả
+  và sẽ **im lặng không điều khiển gì**: bấm menu, log chạy bình thường, robot đứng yên.
+- `setdefault` để các script cần phần cứng thật vẫn đặt đè được.
+- Dấu hiệu nhận biết đang chạy bằng chân giả: bộ test xong trong ~4.5s thay vì ~31s.
 
 Scenario calibrate quan trọng: **Kệ3 T1 → giao foxconn → samsung → return → Kệ3 T2**
 
