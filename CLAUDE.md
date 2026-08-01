@@ -484,9 +484,16 @@ chấp nhận được: nó không nhận SAI, chỉ im lặng, nhờ cơ chế 
 - **Dải V của amkor bị siết bằng tay** (130..230, không dùng số tool đề xuất): dải
   gốc phủ luôn khung kệ đen và mặt bàn trắng nên KỆ TRỐNG khớp 41.6%, tự nó vượt
   `CONFIDENCE_THRESHOLD`. Siết còn kệ trống 14.8% / có amkor 68.9%.
-- ⚠️ **CHƯA SỬA:** vạch xanh tím của SA BÀN lọt vào ROI tầng 1 và rơi đúng dải hue
-  của samsung. Trên kiện hana thật: hana 9.1% mà samsung 12.3% → HSV gọi nhầm.
-  Sửa bằng cách thu `ROI_HEIGHT` / dịch `ROI_Y_CENTER[1]`, hoặc siết dải samsung.
+- ⚠️ **Điểm yếu còn lại, KHÔNG sửa được bằng ngưỡng:** trên kiện hana, HSV cho
+  amkor 23.3% so với hana 11.0% — vì decal hana nền TRẮNG mà amkor định nghĩa là
+  "vô sắc và sáng". Ô đó phải trông vào ORB. Đừng cố siết dải amkor thêm: nó đã bị
+  siết một lần rồi (V 130..230) và siết nữa sẽ mất chính kiện amkor.
+- ĐÃ SỬA (0e8107d): vạch xanh tím của sa bàn từng lọt vào 60px đáy ROI tầng 1 và
+  rơi đúng dải hue samsung — trên kiện hana, samsung ăn 12.3% chỉ nhờ dải đó và
+  vượt mặt hana. Thu `ROI_HEIGHT` 0.375→0.30 và dịch `ROI_Y_CENTER[1]` 0.76→0.74
+  là hết: samsung giả còn 5.4-7.7%, ORB tự quyết đúng tăng từ 2/4 lên 3/4 ô.
+  **Đo lại 2 hằng số này nếu đổi độ phân giải, góc camera hay khoảng cách dừng** —
+  chúng là toạ độ pixel quy ra phần trăm, không phải hằng số vật lý.
 - Chốt dải bằng `python3 -m tools.calibrate_vision` (hỏi tầng, chạy riêng từng tầng;
   `COLOR_RANGES` hiện chỉ có MỘT bộ dùng chung cho cả 2 tầng).
 
