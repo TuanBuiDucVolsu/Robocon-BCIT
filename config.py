@@ -156,6 +156,11 @@ PICKUP_VERIFY_DELAY = 0.2    # Giây chờ sau nâng trước khi đọc IR
 # robot húc kệ trọn 5 giây cho tới timeout.
 # ⚠️ Con số ~13.5cm ở dòng trên là ƯỚC LƯỢNG cũ, số đo thật bên dưới mâu thuẫn với
 #   nó (11.9 < 13.5) — đo lại nếu thấy càng chạm kệ lúc nâng.
+# ⚠️ Từng bị nâng lên 15.0 sau một lần robot húc kệ, rồi TRẢ LẠI 11.9. Lần húc đó
+# do đặt robot LỆCH LINE nên siêu âm dội vào mặt khác, không phải do mốc dừng sát.
+# Nâng mốc dừng còn phản tác dụng: bước luồn càng phải bò từ đây vào ~3.6cm ở
+# INSERT_SPEED=25 trong INSERT_TIMEOUT=4.0s, tức 11.9 cần 21mm/s còn 15.0 cần
+# 28mm/s — đẩy vấn đề từ bước tiếp cận sang bước luồn.
 APPROACH_DISTANCE = 11.9     # ĐÃ ĐO — measure_pickup ① (APPROACH_STANDOFF_DISTANCE)
 
 # --- ② LÙI RA ----------------------------------------------------------------
@@ -195,10 +200,17 @@ INSERT_TIMEOUT = 4.0         # Giây, IR không báo thì dừng (đừng đẩy
 APPROACH_TIMEOUT = 5.0       # Timeout tiếp cận / lùi ra (giây)
 APPROACH_SPEED = 30          # Tốc độ lùi ra
 APPROACH_FAST_SPEED = 60     # Pha xa
-APPROACH_SLOW_SPEED = 25     # Pha gần (dừng chính xác)
+# ⚠️ 25 là QUÁ THẤP với JGA25-370 qua L298N (sụt ~2V): robot chỉ nhích từng tí,
+# chậm hơn ngưỡng 0.83cm/s của cơ chế chống húc kệ → approach_shelf() bị dừng oan
+# giữa đường, báo "càng đã chạm kệ" trong khi còn cách kệ rất xa (đã gặp thật ở
+# test_motion option 9: khựng ở 18.9cm trong khi mục tiêu 11.9cm).
+# Vùng ~25% là chỗ đường đặc tính duty–tốc độ dựng đứng, không bao giờ ổn định.
+APPROACH_SLOW_SPEED = 32     # Pha gần — 25 quá chậm (bò từng tí), 40 vọt quá đà
 # PHẢI LỚN HƠN ①, không thì pha chậm không bao giờ chạy và robot lao hết tốc độ
 # tới tận lúc dừng.
-APPROACH_SLOW_DISTANCE = 35  # cm — dưới mức này thì chuyển sang chậm
+# Hạ 35 → 20 vì ① đã tụt từ 25.0 xuống 11.9: giữ 35 là bắt robot bò suốt 23cm thay
+# vì 10cm như thiết kế ban đầu, vừa tốn giây vừa kéo dài đoạn dễ bị dừng oan.
+APPROACH_SLOW_DISTANCE = 20  # cm — dưới mức này thì chuyển sang chậm
 
 # Chặn chạy mù: mất echo (tường check-in chỉ cao 5cm) mà cứ tiến hết timeout ở tốc
 # độ cao là robot ra khỏi sa bàn / sang sân đối phương (reject −10 điểm).
