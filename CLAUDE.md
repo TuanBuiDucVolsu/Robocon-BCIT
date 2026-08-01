@@ -87,12 +87,18 @@ config.py            — GPIO, HSV color ranges, timing, SHELVES_TASK1, chi phí
 control/mcp3008_bus.py — Bus SPI dùng chung MCP3008 (lock)
 control/motion.py    — Di chuyển, bám line PD analog, siêu âm HC-SR04
 control/lift.py      — 2 càng độc lập: PalletSensors (SPI), require_both, _verify_released
-vision/vision.py     — Nhận diện kiện hàng, classify_pair(). _classify_frame(): thử
-                        ORB (shape_match.ShapeMatcher) trước, rơi về HSV màu nếu ORB
-                        chưa có ảnh mẫu hoặc không đủ tự tin (không dùng AI model/deep
-                        learning ở cả 2 phương pháp)
+vision/vision.py     — Nhận diện kiện hàng, classify_pair(LEVEL). _classify_frame():
+                        thử ORB (shape_match.ShapeMatcher) trước, rơi về HSV màu nếu
+                        ORB chưa có ảnh mẫu hoặc không đủ tự tin (không dùng AI model/
+                        deep learning ở cả 2 phương pháp).
+                        ⚠️ VÙNG QUÉT DỊCH THEO TẦNG (config.ROI_Y_CENTER) và bộ ảnh
+                        mẫu chọn theo (tầng, ô) — main.py truyền current_tier, còn
+                        classify_pair tự truyền "left"/"right". Xem mục "Nhận diện
+                        kiện hàng" ở dưới, ĐỌC TRƯỚC KHI SỬA.
 vision/shape_match.py — ShapeMatcher: ORB + BFMatcher (Lowe's ratio test) + RANSAC
-                        homography (đếm inlier) so với ảnh mẫu vision/templates/*.png.
+                        homography (đếm inlier) so với ảnh mẫu, chia theo (tầng, ô):
+                        vision/templates/t{1,2}_{left,right}/*.png — 16 tấm.
+                        Nạp xong CHUẨN HOÁ kích thước trong từng bộ (lý do ở dưới).
                         Bền với nền lạ (tường, dây điện...) hơn HSV vì so HÌNH DẠNG,
                         không chỉ màu — xem lịch sử debug HSV bị nền "ăn" ở dưới.
                         Ảnh mẫu tạo bằng `python3 -m tools.capture_templates` (ảnh
@@ -411,19 +417,78 @@ Route do `navigation.plan(pose, goal)` sinh — xem mục "Điều hướng (`na
 
 ## Nhận diện kiện hàng
 
-Phân tích màu HSV (OpenCV), không cần model AI.
+Hai tầng: **ORB (hình dạng) trước, HSV (màu) dự phòng** — `_classify_frame()`.
 4 loại hình dán trên khối 40x40x40mm (dán 6 mặt, cố định):
-- **Samsung (01)**: chip xanh dương — H=90-130, S>60, V>40
-- **Foxconn (02)**: chip vàng đồng — H=15-40, S>60, V>80
-- **Amkor (03)**: khối nhôm Al xám — S<40 (saturation thấp)
-- **Hana Micron (04)**: QR code + **ngoặc đỏ ở GÓC** — H=0-10 hoặc 160-179
-- Nâng 2 kiện → chia ảnh trái/phải → `classify_pair()`
-- Camera resolution: 640x480
-- **Ưu tiên màu sắc nét hơn Amkor (xám)**: `_classify_by_color` chọn màu chromatic
-  (`CHROMATIC_LABELS`) nếu đạt ngưỡng, KỂ CẢ khi Amkor đếm nhiều pixel hơn → nền
-  trắng/xám không "ăn" mất Samsung/Hana. ROI cắt giữa theo `ROI_MARGIN` (giảm nếu
-  Hana hay bị nhầm Amkor vì ngoặc đỏ nằm ở góc). Giá trị HSV/ROI vẫn cần chốt bằng
-  camera thật (test_vision #2/#6).
+- **Samsung (01)**: chip xanh dương
+- **Foxconn (02)**: chip vàng đồng — loại DUY NHẤT phủ màu kín mặt
+- **Amkor (03)**: khối nhôm Al xám
+- **Hana Micron (04)**: QR code + **ngoặc đỏ ở GÓC**
+- Camera: **1296x972** (xem `config.CAMERA_RESOLUTION`, đừng hạ lại — lý do dưới)
+- Nâng 2 kiện → chia ảnh trái/phải → `classify_pair(level)`
+
+### ⚠️ VÙNG QUÉT DỊCH THEO TẦNG (`config.ROI_Y_CENTER`)
+
+Camera gắn CỐ ĐỊNH vào thân robot nên tầng 1 và tầng 2 rơi vào 2 độ cao khác nhau
+trong khung. Kệ lúc thi đấu có hàng ở CẢ HAI tầng, nên một khung cắt giữa cố định
+sẽ ôm 2 loại kiện cùng lúc: HSV trộn màu 2 kiện, ORB so vùng 2 decal với ảnh mẫu
+1 decal. Đo trên robot (640x480 lúc đó): kiện tầng 2 ở y 75..215, tầng 1 ở y
+300..430, mà ROI cũ là y 96..384 — vắt ngang cả hai, 164px còn lại là sàn nhà.
+
+`main.py` truyền `self.current_tier` xuống. **Mọi công cụ soi ROI phải truyền tầng**
+(`calibrate_vision`, `capture_templates`, `test_vision`, `test_smoke`, web debug) —
+soi nhầm vùng thì calibrate xong vẫn nhận sai.
+
+### ⚠️ ẢNH MẪU ORB CHIA THEO (TẦNG, Ô) — 16 tấm
+
+```
+vision/templates/t2_left/{label}.png    t2_right/   t1_left/   t1_right/
+```
+
+Đo trên robot: khớp ĐÚNG tổ hợp được **65-229 inlier**, khớp lệch tổ hợp chỉ **0-6**.
+Camera đặt giữa nên kiện ô TRÁI nhìn từ sườn phải, ô PHẢI nhìn từ sườn trái, hai
+tầng lại hai góc chúc — bốn tổ hợp là bốn phối cảnh, một ảnh mẫu không phủ nổi.
+Thiếu tổ hợp nào thì tổ hợp đó không có ORB (log cảnh báo rõ).
+
+**Chuẩn hoá kích thước trong cùng một bộ** (`ShapeMatcher._load_dir`): bốn ảnh mẫu
+của cùng một ô đều chứa CÙNG phần pallet + khung kệ, mà nền đó có trong MỌI vùng
+quét — tấm nào cắt rộng hơn thì ăn thêm inlier miễn phí, nên **tấm cắt SẠCH nhất
+lại thiệt nhất**. Đo ở t2_left: samsung (296px) thua sát nút amkor (395px) ngay
+trên ô đang đặt samsung; cắt về cùng cỡ thì cách biệt lên 11.1x. Lệch cỡ quá
+`MAX_TEMPLATE_SIZE_SPREAD` thì cảnh báo chụp lại — **dán dấu lên pallet** rồi đặt
+cả 4 loại đúng vào dấu đó khi chụp.
+
+**Vì sao 1296x972 chứ không phải 640x480:** kiện tầng 1 nằm xa camera nên ở 640x480
+ảnh mẫu tầng 1 chỉ 178x130 với 130-220 keypoint, và kiện THẬT ở đó chỉ đạt 9 inlier
+— bằng đúng mức ô TRỐNG ở tầng 2 (10 inlier), không ngưỡng nào tách được. Ở độ phân
+giải mới thành ~290x220 với 321-706 kp. Giá: `classify_pair` 360ms → 585ms, cả trận
+≈ +1.4s. `ORB_FEATURES` nâng 500 → 900 vì ROI 520x364 chạm đúng trần 500.
+
+### ⚠️ ORB RẤT NHẠY VỚI VỊ TRÍ ĐẶT KIỆN — đừng tin nó một mình
+
+Cùng ô, cùng loại, hai lần đo cách nhau vài phút: **230 inlier so với 15**. Nguyên
+nhân thuộc về bản chất phương pháp: RANSAC homography giả định vật thể PHẲNG, mà
+kiện là khối lập phương và ảnh mẫu ôm cả mặt trước lẫn mặt trên — đổi góc nhìn là
+không homography nào khớp được cả hai mặt.
+
+Thi đấu thì BTC đặt kiện NGẪU NHIÊN, nên **ORB sẽ thường xuyên bỏ cuộc**. Điều đó
+chấp nhận được: nó không nhận SAI, chỉ im lặng, nhờ cơ chế 2 điều kiện
+(`MIN_INLIERS` + `MARGIN_RATIO`). Đừng nới `MARGIN_RATIO` để ép nó lên tiếng.
+
+### HSV — dự phòng, và điểm yếu đã biết
+
+- **Ưu tiên màu chromatic hơn Amkor (xám)**: `_classify_by_color` chọn nhãn
+  chromatic (`CHROMATIC_LABELS`) nếu đạt ngưỡng, KỂ CẢ khi Amkor đếm nhiều pixel
+  hơn. Cần vậy vì **3/4 decal có nền TRẮNG** (samsung chip xanh trên trắng, hana QR
+  đỏ trên trắng, amkor chữ Al trên trắng xám) — "vô sắc và sáng" không phải đặc
+  trưng riêng của amkor.
+- **Dải V của amkor bị siết bằng tay** (130..230, không dùng số tool đề xuất): dải
+  gốc phủ luôn khung kệ đen và mặt bàn trắng nên KỆ TRỐNG khớp 41.6%, tự nó vượt
+  `CONFIDENCE_THRESHOLD`. Siết còn kệ trống 14.8% / có amkor 68.9%.
+- ⚠️ **CHƯA SỬA:** vạch xanh tím của SA BÀN lọt vào ROI tầng 1 và rơi đúng dải hue
+  của samsung. Trên kiện hana thật: hana 9.1% mà samsung 12.3% → HSV gọi nhầm.
+  Sửa bằng cách thu `ROI_HEIGHT` / dịch `ROI_Y_CENTER[1]`, hoặc siết dải samsung.
+- Chốt dải bằng `python3 -m tools.calibrate_vision` (hỏi tầng, chạy riêng từng tầng;
+  `COLOR_RANGES` hiện chỉ có MỘT bộ dùng chung cho cả 2 tầng).
 
 ## Quy tắc quan trọng
 
@@ -463,7 +528,14 @@ Phân tích màu HSV (OpenCV), không cần model AI.
 - Khung robot **không dùng kim loại** (trừ ốc vít)
 - Pin **≤ 12V, ≤ 5000mAh**
 - Ánh sáng thi đấu **không đảm bảo ổn định**, nền xung quanh (kệ/pallet/tường/vật
-  dụng khác) dễ gây nhận nhầm nếu chỉ dựa vào màu — nhận diện CHÍNH đã chuyển sang
-  ORB (so hình dạng, bền với nền lạ hơn); chụp ảnh mẫu thật tại sân trước khi thi
-  bằng `python3 -m tools.capture_templates`. HSV (`tools.calibrate_vision`) vẫn cần
-  calibrate làm dự phòng khi ORB không đủ tự tin.
+  dụng khác) dễ gây nhận nhầm — nên nhận diện đi HAI TẦNG: ORB (hình dạng) trước,
+  HSV (màu) dự phòng. Đo thật cho thấy hai đường bù trừ nhau đúng chỗ: ô nào ORB
+  bỏ cuộc thì HSV đỡ, ô nào HSV nhầm thì ORB đỡ. **Đừng bỏ đường nào.**
+- **Tới sân thi phải chụp lại CẢ 16 ảnh mẫu** (`tools.capture_templates`, 4 tổ hợp
+  × 4 loại) và **calibrate lại HSV** (`tools.calibrate_vision`, từng tầng). Ảnh mẫu
+  gắn chặt với khoảng cách dừng, góc camera và ánh sáng — đổi sân là phải làm lại,
+  không mang bộ cũ đi dùng được. Tính khoảng 30-45 phút, đưa vào kế hoạch ngày thi.
+- ORB **rất nhạy với vị trí đặt kiện** (đo được 230 inlier so với 15 ở cùng ô, cùng
+  loại) vì RANSAC homography giả định vật PHẲNG mà kiện là khối lập phương. BTC đặt
+  kiện ngẫu nhiên nên ORB sẽ hay bỏ cuộc — chấp nhận được, vì nó im lặng chứ không
+  nhận sai. **Đừng nới `SHAPE_MARGIN_RATIO` để ép nó lên tiếng.**
