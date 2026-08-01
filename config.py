@@ -331,8 +331,16 @@ ROI_MARGIN = 0.2             # Tỉ lệ cắt mỗi cạnh lấy vùng giữa. 
 #     kiện tầng 1: y ≈ 300..430, tâm 365  → 365/480 = 0.76
 # ĐO LẠI khi đổi góc camera / chiều cao lắp / khoảng cách dừng: chụp bằng
 # `tests/test_vision.py` option 1 rồi đọc toạ độ kiện trong khung.
-ROI_Y_CENTER = {1: 0.76, 2: 0.30}   # tâm dọc vùng quét theo tầng (tỉ lệ chiều cao)
-ROI_HEIGHT = 0.375           # chiều cao vùng quét (tỉ lệ) ≈ 180px — ôm kiện 40mm + biên
+# Đo lại ở 1296x972 với hàng ở cả 4 ô (số cũ đo hồi còn 640x480):
+#     kiện tầng 2 ở y 140..430, kiện tầng 1 ở y 620..860
+#     ROI cũ tầng 1 = y 556..920 → 60px CUỐI là sàn lộ ra dưới kệ, và VẠCH XANH TÍM
+#     của sa bàn ở đó rơi đúng dải hue samsung: trên kiện hana thật, samsung ăn
+#     11-12% chỉ nhờ dải y 856..916, đủ để vượt mặt hana (9.4%).
+# Thu chiều cao 0.375 → 0.30 và dịch tâm tầng 1 0.76 → 0.74 để cắt đúng phần đó:
+#     tầng 2 → y 143..435 (kiện 140..430, vừa khít)
+#     tầng 1 → y 573..865 (kiện 620..860, bỏ được dải sàn)
+ROI_Y_CENTER = {1: 0.74, 2: 0.295}  # tâm dọc vùng quét theo tầng (tỉ lệ chiều cao)
+ROI_HEIGHT = 0.30            # chiều cao vùng quét (tỉ lệ) ≈ 292px
 ROI_MARGIN_X = 0.10          # cắt ngang mỗi bên của NỬA khung. 0.2 xén hụt cả 2 mép:
                              # kiện trong nửa trái trải x≈20..270 mà ROI chỉ lấy 64..256
 CENTER_WEIGHT_SIGMA = 0.85   # Trọng số Gauss theo khoảng cách tới tâm ROI: pixel nền
