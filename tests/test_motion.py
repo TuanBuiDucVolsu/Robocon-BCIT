@@ -487,6 +487,68 @@ def test_retreat_turn_and_go(m: Motion):
     print("\n  ⚠ Lặp 3 LẦN mới tính đạt — xem tests/NGHIEM_THU.md.")
 
 
+def test_measure_speed(m: Motion):
+    """ĐO cm/s ở một tốc độ cụ thể, rồi tính ra 2 hằng số đang treo trên ước lượng.
+
+    Không có bài nào làm được việc này: option 1 chạy cứng 2s ở SPEED_DEFAULT, option
+    3 chạy liền 4 mức nên không tách ra đo được. Mà tốc độ KHÔNG tuyến tính theo duty
+    — vùng chết ~25% làm 32% chậm hơn nhiều so với tỉ lệ 32/50 — nên phải đo ở ĐÚNG
+    tốc độ mình quan tâm.
+
+    Hai hằng số phụ thuộc số này, cả hai hiện đang đặt theo ƯỚC LƯỢNG:
+      APPROACH_STOP_MARGIN — bù độ trễ siêu âm ≈ cm/s × 0.09s
+      EXIT_START_BLIND_TIME — cửa sổ mù rời ô xuất phát ≈ 45cm ÷ (cm/s)
+    """
+    print("\n[TEST] Đo cm/s")
+    print("  Dán băng dính đánh dấu MŨI robot trên sàn trước khi chạy.")
+    try:
+        speed = float(input(f"  Tốc độ % [{config.APPROACH_SLOW_SPEED}]: ").strip()
+                      or config.APPROACH_SLOW_SPEED)
+        giay = float(input("  Chạy mấy giây [2.0]: ").strip() or "2.0")
+    except ValueError:
+        print("  Số không hợp lệ.")
+        return
+    print(f"  Sẽ chạy TIẾN {speed:.0f}% trong {giay:.1f}s. Chừa đủ chỗ trống phía trước.")
+    input("  Enter để chạy...")
+
+    m.forward(speed)
+    time.sleep(giay)
+    m.stop()
+    print("\n  Đo khoảng cách MŨI robot đã đi được (cm).")
+    try:
+        cm = float(input("  Nhập số cm: ").strip())
+    except ValueError:
+        print("  Bỏ qua.")
+        return
+    if cm <= 0 or giay <= 0:
+        print("  Số không hợp lệ.")
+        return
+
+    v = cm / giay
+    print(f"\n  ==> {v:.1f} cm/s ở {speed:.0f}% duty  ({cm:.1f}cm / {giay:.1f}s)")
+    if not (5 <= v <= 60):
+        print("  ⚠ Ngoài dải hợp lý 5-60 cm/s — đo lại, có thể nhập nhầm đơn vị.")
+
+    print("\n  Hằng số suy ra từ số này:")
+    if abs(speed - config.APPROACH_SLOW_SPEED) < 1:
+        bu = v * 0.09
+        print(f"    APPROACH_STOP_MARGIN = {bu:.1f}   (đang để {config.APPROACH_STOP_MARGIN})")
+        print(f"      = {v:.1f} cm/s × 0.09s trễ siêu âm (ULTRASONIC_QUEUE_LEN={config.ULTRASONIC_QUEUE_LEN}")
+        print(f"        × ~60ms/mẫu, độ trễ ≈ nửa cửa sổ)")
+    else:
+        print(f"    (đo ở {speed:.0f}%, không phải APPROACH_SLOW_SPEED="
+              f"{config.APPROACH_SLOW_SPEED} — chạy lại ở tốc độ đó để tính bù siêu âm)")
+    if abs(speed - config.EXIT_START_SPEED) < 1:
+        mu = min(45.0 / v, 1.5)
+        print(f"    EXIT_START_BLIND_TIME = {mu:.2f}  (đang để {config.EXIT_START_BLIND_TIME})")
+        print(f"      = 45cm ÷ {v:.1f} cm/s, chặn trên 1.5s")
+        print(f"      (cửa sổ mù phải kết thúc trong 10.2..51.2cm — xem SA_BAN.md 3c)")
+    else:
+        print(f"    (đo ở {speed:.0f}%, không phải EXIT_START_SPEED="
+              f"{config.EXIT_START_SPEED} — chạy lại ở tốc độ đó để tính cửa sổ mù)")
+    print("\n  Lặp 3 lần, chênh nhau ≤10% mới tính đạt (tests/NGHIEM_THU.md A3).")
+
+
 def test_speed_limit(m: Motion):
     """Giới hạn tốc độ THẬT — đo tần số đọc cảm biến rồi tính biên an toàn giao lộ.
 
@@ -655,6 +717,8 @@ def main():
         "15": ("LÙI ra khỏi kệ tới giao lộ (lệnh back)", test_back_out_of_shelf),
         "18": ("Rút khỏi kệ → xoay → bám line tới giao lộ kế (mở đầu MỌI tuyến giao)",
                test_retreat_turn_and_go),
+        "19": ("ĐO cm/s ở một tốc độ → tính ra hằng số bù trễ + cửa sổ mù",
+               test_measure_speed),
         "d": ("Chẩn đoán motor từng bánh riêng", test_motor_diagnosis),
         "e": ("Đọc xung encoder real-time (Ctrl+C để thoát)", test_encoder_live),
         "f": ("Calibrate PWM_COMPENSATION bằng encoder (lưu config)", test_calibrate_pwm_by_encoder),
