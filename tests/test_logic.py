@@ -1083,6 +1083,41 @@ class TestRouteConfigIntegrity(unittest.TestCase):
             self.assertIn(node, nav.NODES, f"{term} gắn vào node không tồn tại")
 
 
+class TestDeliveryTrust(unittest.TestCase):
+    """Chỉ TÍNH ĐIỂM khi có căn cứ tin là đang đứng trong khu nhà máy.
+
+    Thả ngoài khu nhà máy = 0 điểm theo thể lệ, nhưng IR vẫn xác nhận pallet đã rời
+    càng nên packages_delivered vẫn tăng nếu không chặn. Con số đó còn quyết định mốc
+    chuyển sang NV2 và là đầu vào của tools.measure_phases — đếm sai một kiện là sai
+    cả chuỗi, mà log thì vẫn báo thành công.
+    """
+
+    def _robot(self, nav_ok: bool) -> Robot:
+        robot = object.__new__(Robot)
+        robot._deliver_nav_ok = nav_ok
+        return robot
+
+    def test_navigate_ok_is_enough(self):
+        """Tới được nhà máy thì siêu âm chớp lỗi một nhịp cũng vẫn tin."""
+        self.assertTrue(self._robot(True)._delivery_is_trustworthy(False, "test"))
+
+    def test_approach_ok_is_enough(self):
+        """Siêu âm thấy tường khu nhà máy thì tìm đường trục trặc cũng vẫn tin."""
+        self.assertTrue(self._robot(False)._delivery_is_trustworthy(True, "test"))
+
+    def test_both_failing_is_not_trusted(self):
+        """CẢ HAI hỏng = không biết đang ở đâu, trước mặt cũng trống trơn."""
+        self.assertFalse(self._robot(False)._delivery_is_trustworthy(False, "test"))
+
+    def test_only_both_failing_blocks_the_count(self):
+        """Chốt lại bảng chân trị — chỉ đúng MỘT ô chặn đếm điểm."""
+        for nav_ok in (True, False):
+            for approach_ok in (True, False):
+                with self.subTest(nav=nav_ok, approach=approach_ok):
+                    got = self._robot(nav_ok)._delivery_is_trustworthy(approach_ok, "t")
+                    self.assertEqual(got, nav_ok or approach_ok)
+
+
 class TestResetForNewRun(unittest.TestCase):
     """_reset_for_new_run() xoá sạch trạng thái 1 lượt cho chế độ luyện tập."""
 

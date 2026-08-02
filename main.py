@@ -111,6 +111,10 @@ class Robot:
         self.delivery_queue: list[str] = []
         # Label cuối cùng đã giao thực tế (dùng để chọn route quay về)
         self._last_delivered_label: str | None = None
+        # Bước DELIVER vừa rồi có tới được nhà máy không — DROP dùng để quyết định
+        # có TÍNH ĐIỂM hay không (xem _delivery_is_trustworthy). Mặc định True để
+        # đường nào chưa đi qua DELIVER cũng không bị coi là đáng ngờ.
+        self._deliver_nav_ok = True
 
         # Khôi phục sau lỗi (chế độ thi đấu)
         self._resume_epoch: float | None = None   # mốc trận dở để chạy nốt thời gian
@@ -644,7 +648,7 @@ class Robot:
                            self.time_remaining())
             return State.DONE
 
-        self._goto(goal, f"DELIVER → {label}")
+        self._deliver_nav_ok = self._goto(goal, f"DELIVER → {label}")
         return State.DROP_FIRST
 
     def _get_drop_side(self, label: str) -> str | None:
@@ -660,6 +664,35 @@ class Robot:
         """Thả 1 kiện rồi nâng lại càng — chuỗi ở control/handling.py."""
         return drop_side(self.lift, side, last=False)
 
+    def _delivery_is_trustworthy(self, approach_ok: bool, context: str) -> bool:
+        """Có đủ căn cứ để TIN rằng đang đứng trong khu nhà máy không?
+
+        Hai tín hiệu độc lập: tìm đường có tới nơi không, và siêu âm có thấy tường
+        khu nhà máy trước mặt không. Chỉ cần MỘT cái đúng là tin — tìm đường tới nơi
+        nhưng siêu âm chớp nhoáng lỗi, hay ngược lại, đều còn khả năng đang đúng chỗ.
+
+        CẢ HAI cùng hỏng thì nghĩa là "không biết đang ở đâu, mà trước mặt cũng trống
+        trơn". Vẫn PHẢI thả để giải phóng càng — giữ kiện lại thì lượt bốc sau không
+        luồn được vào pallet và robot đứng chết với hàng trên càng suốt phần trận còn
+        lại, tệ hơn hẳn. Nhưng KHÔNG được cộng điểm:
+
+        thả ngoài khu nhà máy = 0 điểm theo thể lệ, trong khi IR vẫn xác nhận pallet
+        đã rời càng nên `packages_delivered` vẫn tăng nếu không chặn ở đây. Con số đó
+        còn quyết định lúc nào chuyển sang NV2 và là đầu vào của tools.measure_phases
+        — sai một chỗ là sai cả chuỗi, mà log thì vẫn báo thành công.
+        """
+        if self._deliver_nav_ok or approach_ok:
+            return True
+        logger.warning("=" * 60)
+        logger.warning("  %s — KHÔNG TÍNH ĐIỂM kiện này", context)
+        logger.warning("  Tìm đường tới nhà máy THẤT BẠI và siêu âm KHÔNG thấy gì")
+        logger.warning("  trước mặt → nhiều khả năng đang thả ngoài khu nhà máy.")
+        logger.warning("  Vẫn thả để giải phóng càng, nhưng packages_delivered")
+        logger.warning("  giữ nguyên: đếm cả kiện thả sai chỗ là sai luôn mốc")
+        logger.warning("  chuyển NV2 và mọi số liệu của measure_phases.")
+        logger.warning("=" * 60)
+        return False
+
     def _handle_drop_first(self) -> State:
         """Hạ kiện hàng đầu tiên."""
         label = self.delivery_queue.pop(0)
@@ -669,11 +702,13 @@ class Robot:
         logger.info("Trạng thái: DROP_FIRST — %s (%s)",
                      label, "cả 2 càng" if same_factory else self._get_drop_side(label))
 
-        self._approach_for_drop(f"DROP_FIRST {label}")
+        approach_ok = self._approach_for_drop(f"DROP_FIRST {label}")
+        trusted = self._delivery_is_trustworthy(approach_ok, f"DROP_FIRST {label}")
 
         if same_factory:
             if drop_both(self.lift):
-                self.packages_delivered += 2
+                if trusted:
+                    self.packages_delivered += 2
             else:
                 logger.error("DROP_FIRST thất bại — IR vẫn thấy pallet hoặc lỗi cảm biến")
         else:
@@ -681,7 +716,8 @@ class Robot:
             if side is None:
                 logger.error("DROP_FIRST — bỏ qua drop, không xác định được càng")
             elif self._drop_single_side(side):
-                self.packages_delivered += 1
+                if trusted:
+                    self.packages_delivered += 1
             else:
                 logger.error("DROP_FIRST thất bại — càng %s chưa thả được pallet", side)
 
@@ -728,7 +764,7 @@ class Robot:
 
         # Bộ tìm đường tự lo đoạn nhà máy → nhà máy (phải vòng về cột giữa vì giữa
         # các khu nhà máy không có line nối dọc).
-        self._goto(goal, f"DELIVER kiện 2 → {label}")
+        self._deliver_nav_ok = self._goto(goal, f"DELIVER kiện 2 → {label}")
         return State.DROP_SECOND
 
     def _handle_drop_second(self) -> State:
@@ -742,12 +778,13 @@ class Robot:
         if side is None:
             logger.error("DROP_SECOND — bỏ qua drop, không xác định được càng")
         else:
-            self._approach_for_drop(f"DROP_SECOND {label}")
+            approach_ok = self._approach_for_drop(f"DROP_SECOND {label}")
+            trusted = self._delivery_is_trustworthy(approach_ok, f"DROP_SECOND {label}")
 
             # Chuỗi thả ở control/handling.py — gập càng chạy LUÔN, kể cả khi IR
             # không xác nhận (càng nằm thấp mà robot chạy tiếp là cạ sàn/vướng kệ).
             dropped = drop_side(self.lift, side, last=True)
-            if dropped:
+            if dropped and trusted:
                 self.packages_delivered += 1
             else:
                 logger.error("DROP_SECOND thất bại — càng %s chưa thả được pallet", side)
