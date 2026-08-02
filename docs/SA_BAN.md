@@ -161,6 +161,31 @@ VIỀN Ô KỆ chứ không phải line; **hàng** R4 y≈128, R2 y≈374, R1 y�
 Bản đồ này được khai báo **một chỗ duy nhất**: `navigation.NODES` / `EDGES` /
 `TERMINALS`. Route không còn viết tay — xem mục 5.
 
+### 3d. C0R0 là ngã BA — cảm biến đọc ra kiểu LỆCH, đó là bình thường
+
+Vạch dọc cột kệ C0 **kết thúc tại R0**, không đi tiếp xuống dưới:
+
+| Từ tâm giao lộ C0R0 | Vạch dọc C0 |
+|---|---|
+| lên phía bắc (R2/R4) | **324 mm** |
+| xuống phía nam | **0** |
+
+Nên khi thanh cảm biến (nằm ngang, vuông góc hướng đi) cán qua C0R0, **nửa phía bắc
+của thanh nằm trên vạch dọc, nửa phía nam nằm trên nền trắng**:
+
+```
+đo trên bản in : bắc 10-11 px đen | nam 0-1 px đen
+đọc trên robot : mắt 0 1 2 3 4 5  =  0 0 1 1 1 1
+```
+
+**Đây KHÔNG phải lỗi cảm biến và cũng không phải robot đi xiên** — đã nghi oan cả
+hai. Ngã ba thì phải ra như vậy. Ngã tư (như trên cột C1) mới cho cả 6 mắt đen.
+
+Vạch dọc chỉ rộng **20 mm** theo hướng robot đi: ra khỏi tâm **±1.2 cm** là cảm biến
+trở lại `bắc 3 | nam 3` bình thường. Con số đó là lý do `Motion._escape_intersection`
+phải bám theo CẢM BIẾN chứ không chạy mù một khoảng thời gian cố định — 0.3s ở
+`ADVANCE_SPEED = 40` có thể chỉ đi được 1.5-2cm, đúng ngay ranh giới.
+
 ### 3c. Ô xuất phát in MASCOT — cảm biến line đọc nhầm ngay mẫu đầu tiên
 
 Ô xuất phát nằm trong khoảng đứt của R0, và chỗ đó **in hình mascot** — mặt robot

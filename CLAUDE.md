@@ -332,6 +332,14 @@ tại điểm giao, line cắt ngang nằm dọc thanh cảm biến nên xoay ki
   nếu dừng sát kệ hơn trước thì **hạ `STOP_RAMP_TIME`**, đừng vội đổi
   `APPROACH_DISTANCE` (khoảng cách đó còn ràng buộc với vị trí khe pallet).
   Đặt `STOP_RAMP_TIME = 0` là quay về đúng hành vi cũ.
+- **`_escape_intersection()` bám theo CẢM BIẾN, không theo đồng hồ**: chạy tới khi
+  số mắt thấy đen tụt dưới `INTERSECTION_THRESHOLD` (3 nhịp liên tiếp), sàn
+  `ESCAPE_MIN_TIME`, chặn trên `ESCAPE_MAX_TIME`. Bản cũ chạy mù 0.3s — số viết cứng
+  chưa đo — và **smoke option 1 đã gãy thật vì nó**: robot dừng đúng ở C0R0, advance
+  không thoát nổi vạch dọc 20mm nên đọc lại chính giao lộ đó và báo "gặp giao lộ".
+  ⚠️ **C0R0 là ngã BA** (vạch dọc kéo lên bắc 324mm, phía nam 0) nên thanh cảm biến
+  đọc ra kiểu LỆCH — đo thật `0 0 1 1 1 1`. Đó là bình thường, không phải cảm biến
+  hỏng hay robot đi xiên. Chi tiết: `docs/SA_BAN.md` mục 3d.
 - **`advance_to_end()`**: bám line tới HẾT line — dùng cho đoạn cuối vào kệ / khu nhà
   máy / Kệ 4 (những chỗ đó không phải giao lộ nên không đếm bằng `forward` được).
 - **Vượt khoảng đứt**: mất line thì trôi thẳng `LINE_GAP_COAST_TIME` giây rồi mới quét

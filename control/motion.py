@@ -1068,14 +1068,51 @@ class Motion:
         return False
 
     def _escape_intersection(self, speed: float = config.SPEED_DEFAULT,
-                             reverse: bool = False):
-        """Chạy mù 0.3s để rời khỏi giao lộ đang đứng, trước khi bám line tiếp."""
-        if reverse:
-            self.backward(speed)
-        else:
-            self.forward(speed)
-        time.sleep(0.3)
+                             reverse: bool = False) -> bool:
+        """Rời khỏi giao lộ đang đứng, trước khi bám line tiếp.
+
+        Chạy tới khi CẢM BIẾN không còn báo giao lộ nữa, chặn trên bằng thời gian —
+        chứ không chạy mù một khoảng thời gian cố định.
+
+        Bản cũ chạy mù đúng 0.3s, một con số viết cứng chưa ai đo. Đo trên bản in:
+        vạch dọc C0 chỉ rộng 20mm theo hướng robot đi, ra khỏi tâm ±1.2cm là cảm
+        biến trở lại bình thường. Mà ADVANCE_SPEED = 40 nằm không xa vùng chết (25%
+        đứng hẳn, 32% mới bò được), nên 0.3s rất có thể chỉ đi được 1.5-2cm — đúng
+        ngay ranh giới. Gặp thật ở smoke option 1: robot dừng tại C0R0, advance
+        không thoát nổi và báo "gặp giao lộ".
+
+        Bám theo tín hiệu thì đúng ở mọi tốc độ, không cần biết cm/s (thứ chưa đo).
+        Trả True nếu đã thoát, False nếu hết chặn trên mà cảm biến vẫn báo giao lộ —
+        khi đó nhiều khả năng robot nằm trên một mảng đen lớn, không phải giao lộ.
+        """
+        drive = self.backward if reverse else self.forward
+        drive(speed)
+        start = time.time()
+        cap = getattr(config, "ESCAPE_MAX_TIME", 1.2)
+        san = getattr(config, "ESCAPE_MIN_TIME", 0.15)
+        sach = 0
+        thoat = False
+        while time.time() - start < cap:
+            if self._aborted():
+                return False
+            values = self.read_line_sensor()
+            if (sum(values) < config.INTERSECTION_THRESHOLD
+                    and time.time() - start >= san):
+                sach += 1
+                if sach >= 3:          # 3 nhịp liên tiếp mới tin, chống nhiễu 1 mẫu
+                    thoat = True
+                    break
+            else:
+                sach = 0
+            time.sleep(0.01)
         self.stop()
+        dt = time.time() - start
+        if thoat:
+            logger.debug("Rời giao lộ sau %.2fs", dt)
+        else:
+            logger.warning("Rời giao lộ: hết %.2fs mà cảm biến vẫn báo giao lộ — "
+                           "robot có thể đang nằm trên mảng đen lớn, không phải vạch", dt)
+        return thoat
 
     def navigate_intersections(self, count: int,
                                base_speed: float = config.SPEED_DEFAULT,

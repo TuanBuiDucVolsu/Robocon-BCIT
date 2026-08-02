@@ -838,6 +838,61 @@ class TestFollowLineReverse(unittest.TestCase):
         self.assertTrue(at_intersection, "lùi vẫn phải nhận ra giao lộ")
 
 
+class TestEscapeIntersection(unittest.TestCase):
+    """Rời giao lộ phải bám theo CẢM BIẾN, không theo đồng hồ.
+
+    C0R0 là ngã BA: vạch dọc kéo lên bắc 324mm, phía nam không có gì — nên thanh cảm
+    biến đọc ra kiểu LỆCH (đo thật trên robot: 0 0 1 1 1 1). Vạch dọc chỉ rộng 20mm
+    theo hướng robot đi. Bản cũ chạy mù 0.3s ở ADVANCE_SPEED=40, không đủ thoát, và
+    advance_to_end đọc lại chính giao lộ đó → "gặp giao lộ".
+    """
+
+    def _motion(self, frames):
+        m = object.__new__(Motion)
+        m._aborted = lambda: False
+        m.forward = MagicMock()
+        m.backward = MagicMock()
+        m.stop = MagicMock()
+        seq = list(frames)
+        m.read_line_sensor = lambda: seq.pop(0) if len(seq) > 1 else seq[0]
+        return m
+
+    GIAO_LO = [1, 1, 1, 1, 0, 0]     # 4/6 — kiểu ngã ba đọc được trên robot
+    LINE = [0, 0, 1, 1, 0, 0]        # 2/6 — vạch thẳng bình thường
+
+    def test_keeps_going_until_sensor_is_clear(self):
+        """Còn báo giao lộ thì còn chạy, dù đã quá 0.3s của bản cũ."""
+        m = self._motion([self.GIAO_LO] * 60 + [self.LINE])
+        t0 = time.time()
+        with patch.object(config, "ESCAPE_MIN_TIME", 0.0):
+            self.assertTrue(m._escape_intersection(40))
+        self.assertGreater(time.time() - t0, 0.3,
+                           "bản cũ dừng ở 0.3s và đó chính là lỗi")
+        m.stop.assert_called_once()
+
+    def test_gives_up_at_cap_when_never_clear(self):
+        """Mảng đen lớn (không phải giao lộ) → bỏ cuộc, KHÔNG chạy mãi."""
+        m = self._motion([self.GIAO_LO])
+        with patch.object(config, "ESCAPE_MAX_TIME", 0.3):
+            self.assertFalse(m._escape_intersection(40))
+        m.stop.assert_called_once()
+
+    def test_honours_min_time_even_if_clear_immediately(self):
+        """Sạch ngay từ đầu cũng phải chạy đủ sàn, không thì gần như không nhúc nhích."""
+        m = self._motion([self.LINE])
+        t0 = time.time()
+        with patch.object(config, "ESCAPE_MIN_TIME", 0.2):
+            m._escape_intersection(40)
+        self.assertGreaterEqual(time.time() - t0, 0.2)
+
+    def test_reverse_uses_backward(self):
+        m = self._motion([self.LINE])
+        with patch.object(config, "ESCAPE_MIN_TIME", 0.0):
+            m._escape_intersection(40, reverse=True)
+        m.backward.assert_called_once_with(40)
+        m.forward.assert_not_called()
+
+
 class TestStopGently(unittest.TestCase):
     """Dừng có giảm tốc ở những chỗ TƯ THẾ robot quyết định bước sau.
 

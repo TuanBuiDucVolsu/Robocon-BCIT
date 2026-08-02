@@ -318,6 +318,15 @@ LINE_KP = 16.0               # CHƯA calibrate thật
 LINE_KD = 6.5                # CHƯA calibrate thật
 INTERSECTION_THRESHOLD = 4   # Số mắt (/6) thấy line cùng lúc để nhận là giao lộ
 
+# --- Rời khỏi giao lộ (Motion._escape_intersection) ---
+# Chạy tới khi CẢM BIẾN hết báo giao lộ, không chạy mù một khoảng cố định.
+# Bản cũ chạy mù 0.3s — số viết cứng, chưa đo. Đo trên bản in: vạch dọc C0 rộng 20mm
+# theo hướng robot đi, ra khỏi tâm ±1.2cm là cảm biến bình thường trở lại. ADVANCE_SPEED
+# = 40 nằm không xa vùng chết nên 0.3s có thể chỉ đi 1.5-2cm — đúng ranh giới, và
+# smoke option 1 đã gãy thật vì chuyện này ("Advance: gặp giao lộ" ngay tại C0R0).
+ESCAPE_MIN_TIME = 0.15       # Giây tối thiểu vẫn chạy, kể cả khi cảm biến đã sạch ngay
+ESCAPE_MAX_TIME = 1.2        # Chặn trên: hết ngần này mà vẫn báo giao lộ thì bỏ cuộc
+
 # --- Đếm giao lộ mà KHÔNG dừng lại ở từng cái ---
 # Chế độ mặc định dừng hẳn ở mỗi giao lộ rồi chạy mù 0.3s để thoát ra
 # (_escape_intersection). Kịch bản tệ nhất đi qua ~65 giao lộ nên riêng phần phanh +
