@@ -511,8 +511,26 @@ class Motion:
             logger.info("Route rỗng — robot đã ở đích, không cần di chuyển")
             return True
 
-        for step in route:
+        for i, step in enumerate(route):
             action = step[0]
+            # ⚠️ TRƯỚC KHI XOAY, đưa TÂM XOAY về đúng giao lộ.
+            # Thanh cảm biến ở ĐẦU xe, trục bánh dẫn động cách nó 12cm về phía sau
+            # (đo trên robot). Tiến tới giao lộ thì cảm biến nằm TRÊN vạch còn trục
+            # còn cách vạch 12cm — xoay tại chỗ lúc đó là quay quanh một điểm nằm
+            # TRƯỚC giao lộ, xoay xong thanh cảm biến văng ra vùng trắng.
+            # Chiều LÙI đã có bước bù này sẵn (REVERSE_RECENTER_TIME) nên xoay sau
+            # khi lùi vẫn ổn; chiều TIẾN thì chưa có gì. Đo trên robot (option 8):
+            #     xoay sau khi LÙI  → rời giao lộ [0,0,0,1,1,0]  còn thấy line
+            #     xoay sau khi TIẾN → rời giao lộ [0,0,0,0,0,0]  TRẮNG HẾT → gãy
+            # Cả hai chiều đều cần tiến thêm ĐÚNG 12cm, nên dùng chung hằng số.
+            if (action in ("left", "right") and i > 0
+                    and route[i - 1][0] == "forward"
+                    and config.REVERSE_RECENTER_TIME > 0):
+                logger.info("Tiến bù %.2fs để tâm xoay về đúng giao lộ",
+                            config.REVERSE_RECENTER_TIME)
+                self.forward(config.REVERSE_RECENTER_SPEED)
+                time.sleep(config.REVERSE_RECENTER_TIME)
+                self.stop()
             if action == "forward":
                 # Gọi MỘT lần cho cả N giao lộ (chia nhỏ sẽ ép dừng ở từng cái, mất
                 # hết cái lợi của chế độ chạy liền); tiến độ ghi qua callback.

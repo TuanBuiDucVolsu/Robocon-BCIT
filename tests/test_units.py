@@ -1248,6 +1248,58 @@ class TestAdvanceToEnd(unittest.TestCase):
                         "phải dừng bằng siêu âm chứ không chạy tới hết line")
 
 
+class TestTurnRecenterAfterForward(unittest.TestCase):
+    """Xoay sau khi TIẾN tới giao lộ phải có bước tiến bù, như chiều lùi đã có.
+
+    Thanh cảm biến ở đầu xe, trục bánh cách nó 12cm về sau. Tiến tới giao lộ thì cảm
+    biến TRÊN vạch còn trục còn cách vạch 12cm — xoay lúc đó là quay quanh điểm nằm
+    TRƯỚC giao lộ, xoay xong cảm biến văng ra vùng trắng.
+    Đo trên robot (smoke option 8):
+        xoay sau khi LÙI  → [0,0,0,1,1,0]  còn thấy line
+        xoay sau khi TIẾN → [0,0,0,0,0,0]  TRẮNG HẾT → route gãy
+    """
+
+    def _motion(self):
+        m = object.__new__(Motion)
+        m.last_route_progress = []
+        m.forward = MagicMock()
+        m.stop = MagicMock()
+        m.turn_left_90 = MagicMock()
+        m.turn_right_90 = MagicMock()
+        m.navigate_intersections = MagicMock(return_value=True)
+        m.back_to_intersection = MagicMock(return_value=True)
+        m.advance_to_end = MagicMock(return_value=True)
+        return m
+
+    def test_nudges_forward_before_turning_after_a_forward_leg(self):
+        m = self._motion()
+        with patch.object(config, "REVERSE_RECENTER_TIME", 0.02):
+            self.assertTrue(m.execute_route([("forward", 2), ("right",)]))
+        m.forward.assert_called_once_with(config.REVERSE_RECENTER_SPEED)
+        m.turn_right_90.assert_called_once()
+
+    def test_no_nudge_after_a_reverse_leg(self):
+        """back_to_intersection đã tự tiến bù rồi — bù thêm lần nữa là đi lố."""
+        m = self._motion()
+        with patch.object(config, "REVERSE_RECENTER_TIME", 0.02):
+            self.assertTrue(m.execute_route([("back", 1), ("right",)]))
+        m.forward.assert_not_called()
+
+    def test_no_nudge_when_turn_is_the_first_command(self):
+        """Xoay ngay đầu route: robot đang đứng sẵn ở đâu đó, không tự ý tiến."""
+        m = self._motion()
+        with patch.object(config, "REVERSE_RECENTER_TIME", 0.02):
+            self.assertTrue(m.execute_route([("right",), ("forward", 1)]))
+        m.forward.assert_not_called()
+
+    def test_two_turns_in_a_row_nudge_only_once(self):
+        """Xoay 180° = 2 lệnh xoay liền nhau; chỉ bù trước cái ĐẦU."""
+        m = self._motion()
+        with patch.object(config, "REVERSE_RECENTER_TIME", 0.02):
+            self.assertTrue(m.execute_route([("forward", 1), ("right",), ("right",)]))
+        self.assertEqual(m.forward.call_count, 1)
+
+
 class TestReverseRecenter(unittest.TestCase):
     """Đoạn tiến bù sau khi lùi phải dùng ĐÚNG tốc độ mà thời gian được đo ra.
 

@@ -478,6 +478,14 @@ EDGE_COST_REVERSE = 1        # Phụ phí so với tiến 1 giao lộ → hoà t
 # REVERSE_SPEED 35 → 40 làm robot tiến bù quá vạch, xoay phải xong thanh cảm biến đã
 # qua khỏi giao lộ → mất line (option 8).
 # Đổi số này thì PHẢI đo lại REVERSE_RECENTER_TIME bằng test_motion option 15/18.
+# Dùng cho CẢ HAI chiều, vì cả hai đều cần tiến thêm đúng 12cm (khoảng cách trục
+# bánh → thanh cảm biến):
+#   sau khi LÙI tới giao lộ  : trục đã QUÁ vạch 12cm  → tiến bù về
+#   sau khi TIẾN tới giao lộ : trục còn CÁCH vạch 12cm → tiến bù tới
+# Không bù ở chiều tiến thì xoay tại chỗ là quay quanh điểm nằm TRƯỚC giao lộ, xoay
+# xong thanh cảm biến văng ra vùng trắng. Đo trên robot (smoke option 8):
+#     xoay sau khi LÙI  → [0,0,0,1,1,0]  còn thấy line
+#     xoay sau khi TIẾN → [0,0,0,0,0,0]  TRẮNG HẾT → mất line, route gãy
 REVERSE_RECENTER_SPEED = 35
 REVERSE_RECENTER_TIME = 1.3
 
