@@ -396,10 +396,24 @@ class Robot:
     # ----------------------------------------------------------
 
     def _handle_init(self) -> State:
-        logger.info("Trạng thái: INIT — hạ càng về sàn rồi chờ nút khởi động...")
+        logger.info("Trạng thái: INIT — chờ nút khởi động...")
         # Home càng TRƯỚC khi chờ nút: thao tác này mất LIFT_HOME_DURATION giây, làm
         # sau khi bấm nút là ăn thẳng vào 240s của trận.
-        self.lift.reset()
+        if getattr(config, "HOME_AT_INIT", True):
+            logger.info("Hạ càng về sàn (%.1fs) trước khi chờ nút...",
+                        config.LIFT_HOME_DURATION)
+            self.lift.reset()
+        else:
+            # Khối cảnh báo nhiều dòng, cùng kiểu với _apply_board_side: đây là điều
+            # kiện KHÔNG kiểm chứng được (không có limit switch), quên là hỏng cả
+            # trận mà không có tín hiệu lỗi nào.
+            logger.warning("=" * 60)
+            logger.warning("HOME_AT_INIT = False — ROBOT KHÔNG TỰ HẠ CÀNG")
+            logger.warning("  ⚠ ĐỘI PHẢI TỰ HẠ CÀNG VỀ SÀN TRƯỚC KHI BẤM NÚT.")
+            logger.warning("  Robot mặc định coi càng đang ở SÀN (_current_level = 0)")
+            logger.warning("  và KHÔNG có cách nào kiểm chứng — không có limit switch.")
+            logger.warning("  Càng chưa ở sàn = mọi phép tính tầng sau đó lệch, im lặng.")
+            logger.warning("=" * 60)
         # Đọc công tắc nửa sân LÚC NÀY để đội còn nhìn log mà gạt lại nếu sai
         self._apply_board_side()
 

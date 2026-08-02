@@ -534,6 +534,14 @@ chấp nhận được: nó không nhận SAI, chỉ im lặng, nhờ cơ chế 
 - `TURN_TIME = 0.5s` (fast-profile, CHƯA calibrate thật) cần đo lại trên robot thật
 - `LIFT_TIME_SHELF_1/2` cần calibrate riêng cho từng càng; `LIFT_*_EXTRA` là bù theo
   **vị trí tuyệt đối** (thời gian từ sàn lên tầng n), không phải bù mỗi lần chạy
+- **`HOME_AT_INIT = False`** — robot KHÔNG tự hạ càng lúc INIT nữa. ⚠️ **ĐỘI PHẢI TỰ
+  HẠ CÀNG VỀ SÀN TRƯỚC KHI BẤM NÚT.** Không có limit switch nên robot không kiểm
+  chứng được, nó chỉ tin `_current_level = 0`; quên hạ càng thì mọi phép tính tầng
+  sau đó lệch và KHÔNG có tín hiệu báo — cùng loại lỗi im lặng với công tắc gạt nửa
+  sân. `main.py` in khối cảnh báo 6 dòng mỗi lần khởi động.
+  Lưu ý 4 giây đó **không** ăn vào 240s (nó chạy TRƯỚC lúc chờ nút); tắt đi là để đỡ
+  bào mòn dây curoa, vì mỗi lần khởi động là 4s motor ghì đáy ở 100% duty.
+  Bật lại bằng `HOME_AT_INIT = True` nếu muốn robot tự lo.
 - `LIFT_HOME_DURATION` phải **≥ `Lift.min_home_duration()`** = `LIFT_TIME_SHELF_2` **+**
   `LIFT_*_LOWER_EXTRA` lớn hơn trong 2 bên (hiện 4.2s). So với `LIFT_TIME_SHELF_2`
   suông là SAI ngưỡng — thấy "đạt" mà càng vẫn còn hở. `home_to_floor()` tự kẹp lên

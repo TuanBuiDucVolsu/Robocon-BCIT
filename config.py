@@ -125,6 +125,16 @@ LIFT_RIGHT_LOWER_EXTRA = 0.050      # Càng PHẢI khi hạ
 LIFT_HOME_KNOWN_MARGIN = 1.6   # nhân vào thời gian lý thuyết của tầng đó
 LIFT_HOME_MIN_DURATION = 0.8   # sàn tối thiểu — phòng _current_level lệch nhẹ
 
+# Có home càng ở INIT không (trước lúc chờ nút, KHÔNG ăn vào 240s của trận).
+# Tắt để đỡ bào mòn dây curoa: mỗi lần khởi động là 4s motor ghì vào đáy cơ khí ở
+# 100% duty, mà ngồi test thì khởi động lại rất nhiều lần.
+# ⚠️ TẮT = ĐỘI PHẢI TỰ HẠ CÀNG VỀ SÀN TRƯỚC KHI BẤM NÚT. Không có limit switch nên
+# robot KHÔNG kiểm chứng được; nó chỉ tin `_current_level = 0`. Quên hạ càng thì mọi
+# phép tính tầng sau đó lệch, và KHÔNG có tín hiệu nào báo — cùng loại lỗi im lặng
+# với công tắc gạt nửa sân. main.py in một khối cảnh báo mỗi lần khởi động để không
+# ai bỏ sót.
+HOME_AT_INIT = False
+
 LIFT_SPEED = 80              # Duty cycle motor nâng — chỉ dùng trong web debug
 PICKUP_MAX_RETRIES = 2       # Số lần nâng lại nếu IR không thấy pallet
 PICKUP_VERIFY_DELAY = 0.2    # Giây chờ sau nâng trước khi đọc IR
