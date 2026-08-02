@@ -4,6 +4,7 @@ Test module motion.py — kiểm tra từng chức năng động cơ & cảm bi�
 Chạy trên Raspberry Pi 4 với phần cứng kết nối.
 """
 
+import logging
 import sys
 import os
 import time
@@ -14,6 +15,19 @@ import config
 from control import Motion
 from tests.config_editor import save_config
 from control.mcp3008_bus import reset_mcp3008_bus
+
+# Không script test nào bật logging → root logger mặc định ở mức WARNING và MỌI dòng
+# logger.info() của control/* bị nuốt. Mất trắng phần chẩn đoán quan trọng nhất:
+# khoảng cách dừng thật, thời gian nâng từng càng, lý do luồn càng thất bại...
+# Đã tốn nhiều lượt thử chỉ vì các số đó không hiện ra.
+# CHỈ ra màn hình, KHÔNG ghi file: robot_log.txt là của trận đấu thật, tools.measure_phases
+# đọc nó — trộn log test vào là số đo trận bị bịa.
+logging.basicConfig(
+    level=logging.INFO,
+    format="    %(levelname)-7s %(name)s: %(message)s",
+    handlers=[logging.StreamHandler()],
+)
+
 
 
 def test_forward_backward(m: Motion):

@@ -4,6 +4,7 @@ Test module vision.py — kiểm tra camera & nhận diện kiện hàng bằng 
 Chạy trên Raspberry Pi 4 với camera CSI kết nối.
 """
 
+import logging
 import sys
 import os
 import time
@@ -12,6 +13,19 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import config
 from vision import Vision
+
+# Không script test nào bật logging → root logger mặc định ở mức WARNING và MỌI dòng
+# logger.info() của control/* bị nuốt. Mất trắng phần chẩn đoán quan trọng nhất:
+# khoảng cách dừng thật, thời gian nâng từng càng, lý do luồn càng thất bại...
+# Đã tốn nhiều lượt thử chỉ vì các số đó không hiện ra.
+# CHỈ ra màn hình, KHÔNG ghi file: robot_log.txt là của trận đấu thật, tools.measure_phases
+# đọc nó — trộn log test vào là số đo trận bị bịa.
+logging.basicConfig(
+    level=logging.INFO,
+    format="    %(levelname)-7s %(name)s: %(message)s",
+    handlers=[logging.StreamHandler()],
+)
+
 
 
 def _ask_tier() -> int:
