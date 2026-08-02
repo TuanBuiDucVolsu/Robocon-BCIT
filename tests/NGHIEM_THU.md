@@ -32,19 +32,30 @@ Vì sao ±5°: chặng giữa hai giao lộ dài 66–100cm. Lệch 5° trên 66
 5.8cm, mà thanh cảm biến chỉ rộng ~60mm — quá 5° là robot ra khỏi vạch trước khi PD
 kịp kéo lại. **Chênh lệch giữa hai chiều quan trọng hơn trị tuyệt đối.**
 
-### A2 · Bù PWM — `test_motion` **f**, rồi đo tay
+### A2 · Bù PWM CẢ 2 CHIỀU — `test_motion` **f** 🔑
 
-Chạy `f` để ghi `PWM_COMPENSATION`. Sau đó dán vạch thẳng 2m trên sàn, cho robot
-chạy dọc theo, đo độ trôi ngang ở cuối.
+Kê robot lên đế (bánh không chạm đất). Trong `f` chọn **t** (tiến) rồi **l** (lùi),
+mỗi chiều lặp cho tới khi đạt.
+
+| | |
+|---|---|
+| **ĐẠT** | Cả 2 chiều: lệch xung 2 bánh **< 1%** |
+| **CHƯA ĐẠT** | ≥ 1% ở chiều nào → lưu giá trị đề xuất, đo lại chiều đó |
+
+Rồi hạ robot xuống, dán vạch thẳng 2m, chạy dọc theo và đo trôi ngang:
 
 | | Tiến | Lùi |
 |---|---|---|
-| **ĐẠT** | trôi ngang **≤ 2cm / 2m** | **≤ 2cm / 2m** |
-| **CHƯA ĐẠT** | > 2cm | > 2cm |
-| **Sửa** | chạy lại `f` | **`f` KHÔNG ghi hệ số chiều lùi** — sửa tay `PWM_COMPENSATION_REV` / `PWM_COMPENSATION_LEFT_REV`, mỗi lần 0.01 |
+| **ĐẠT** | ≤ **2cm / 2m** | ≤ **2cm / 2m** |
 
-2cm/2m ≈ 0.6°. Chiều lùi bắt buộc phải đạt: **mọi tuyến giao hàng đều mở đầu bằng
-`LÙI 1 giao lộ`** — khoảng 28 lần mỗi trận.
+2cm/2m ≈ 0.6°. **Chiều lùi bắt buộc phải đạt** — mọi tuyến giao hàng đều mở đầu
+bằng `LÙI 1 giao lộ`, khoảng 28 lần mỗi trận.
+
+⚠️ **Đây là bài đang chặn nhiều thứ nhất.** Lùi không thẳng thì robot tới giao lộ
+trong tư thế CHÉO — đo được trên robot: cùng một bước lùi, hai lần chạy cho
+`[0,0,1,1,1,1]` và `[1,0,1,1,1,0]` (mắt 1 trắng kẹp giữa hai mắt đen, tức nằm
+chéo). Xoay từ tư thế chéo thì văng khỏi line, và **kết quả đổi theo từng lần** —
+loại lỗi không thể gỡ bằng cách chỉnh hằng số nào khác.
 
 ### A3 · Đo cm/s — `test_motion` **1**
 

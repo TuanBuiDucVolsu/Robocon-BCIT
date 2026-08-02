@@ -313,35 +313,46 @@ def test_calibrate_pwm_by_encoder(m: Motion):
         print("  Encoder chưa sẵn sàng — kiểm tra ENCODER_LEFT_PIN/ENCODER_RIGHT_PIN trong config.py.")
         return
 
-    print("\n[CALIBRATE] Đo xung 2 bánh khi tiến thẳng 1s, tự tính PWM_COMPENSATION")
+    print("\n[CALIBRATE] Đo xung 2 bánh, tự tính hệ số bù — CẢ 2 CHIỀU")
     print("  Đặt robot lên đế (bánh không chạm đất) trước khi chạy.")
-    print("  Chỉ chỉnh chiều TIẾN — chiều lùi vẫn phải tự chỉnh PWM_COMPENSATION_REV bằng tay.\n")
+    print("  ⚠️ CHIỀU LÙI quan trọng không kém: mọi tuyến giao hàng đều mở đầu bằng")
+    print("     LÙI 1 giao lộ (~28 lần/trận). Lùi không thẳng thì robot tới giao lộ")
+    print("     trong tư thế CHÉO, xoay xong văng khỏi line — đã gặp ở smoke option 8.\n")
 
     while True:
         importlib.reload(config)
-        print(f"  PWM_COMPENSATION hiện tại (bánh phải, tiến) = {config.PWM_COMPENSATION:.3f}")
-        cmd = input("  Enter = tiến 1s và đo xung / q = thoát: ").strip().lower()
+        print(f"  Hiện tại:  tiến {config.PWM_COMPENSATION:.3f}   "
+              f"lùi {config.PWM_COMPENSATION_REV:.3f}   (đều là bù bánh PHẢI)")
+        cmd = input("  t = đo TIẾN / l = đo LÙI / q = thoát: ").strip().lower()
         if cmd == "q":
             break
+        if cmd not in ("t", "l"):
+            continue
 
-        m.forward(config.SPEED_DEFAULT)
+        lui = cmd == "l"
+        khoa = "PWM_COMPENSATION_REV" if lui else "PWM_COMPENSATION"
+        hien = getattr(config, khoa)
+        (m.backward if lui else m.forward)(config.SPEED_DEFAULT)
         left, right = m.sample_wheel_pulses(1.0)
         m.stop()
 
-        print(f"  trái={left} xung   phải={right} xung")
+        print(f"  [{'LÙI' if lui else 'TIẾN'}] trái={left} xung   phải={right} xung")
         if left == 0 or right == 0:
-            print("  Không đọc được xung ở 1 trong 2 bánh — kiểm tra dây encoder (C1/VCC/GND) trước khi calibrate.")
+            print("  Không đọc được xung ở 1 trong 2 bánh — kiểm tra dây encoder "
+                  "(C1/VCC/GND) trước khi calibrate.")
             continue
 
-        ratio = left / right
-        suggested = max(0.5, min(1.0, config.PWM_COMPENSATION * ratio))
+        lech = abs(left - right) / max(left, right) * 100
+        suggested = max(0.5, min(1.0, hien * (left / right)))
         nhanh_hon = "phải" if right > left else "trái"
-        print(f"  Bánh {nhanh_hon} đang quay nhanh hơn.")
-        print(f"  Đề xuất PWM_COMPENSATION = {suggested:.3f} (hiện {config.PWM_COMPENSATION:.3f})")
+        print(f"  Bánh {nhanh_hon} quay nhanh hơn {lech:.1f}%.")
+        print(f"  Đề xuất {khoa} = {suggested:.3f} (hiện {hien:.3f})")
+        if lech < 1.0:
+            print("  Lệch dưới 1% — coi như đã cân, không cần đổi.")
 
-        if input("  Lưu giá trị đề xuất vào config.py? (y/N): ").strip().lower() == "y":
-            save_config("PWM_COMPENSATION", suggested)
-            print("  Đã lưu.")
+        if input(f"  Lưu vào config.py? (y/N): ").strip().lower() == "y":
+            save_config(khoa, suggested)
+            print("  Đã lưu. Chạy lại để kiểm — lặp tới khi lệch < 1%.")
 
 
 def test_cross_line_gap(m: Motion):
@@ -726,7 +737,8 @@ def main():
                test_measure_speed),
         "d": ("Chẩn đoán motor từng bánh riêng", test_motor_diagnosis),
         "e": ("Đọc xung encoder real-time (Ctrl+C để thoát)", test_encoder_live),
-        "f": ("Calibrate PWM_COMPENSATION bằng encoder (lưu config)", test_calibrate_pwm_by_encoder),
+        "f": ("Calibrate bù PWM bằng encoder — CẢ 2 CHIỀU (lưu config)",
+               test_calibrate_pwm_by_encoder),
         "0": ("Chạy tất cả", None),
     }
 
