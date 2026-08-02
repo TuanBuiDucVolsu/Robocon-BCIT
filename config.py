@@ -134,7 +134,12 @@ LIFT_RIGHT_LOWER_EXTRA = 0.150      # Càng PHẢI khi hạ — ĐÃ ĐO trên r
 # cần ~0.9s trong khi home mặc định chạy 4.0s theo tầng cao nhất — hơn 3 giây motor
 # ghì vào đáy vô ích, mà motor cẩu là DigitalOutputDevice nên ghì ở 100% duty và bào
 # mòn dây curoa. Chỉ dùng ở menu test / công cụ đo; luồng THI ĐẤU vẫn chạy bản đầy đủ.
-LIFT_HOME_KNOWN_MARGIN = 1.6   # nhân vào thời gian lý thuyết của tầng đó
+# ⚠️ 1.6 là số ĐẶT MÒ ban đầu → hạ từ tầng 1 mất 1.52s. Đo trên robot 02/08: 1 giây
+# là đủ (thời gian lý thuyết 0.950s = LIFT_TIME_SHELF_1 0.800 + LOWER_EXTRA 0.150).
+# 1.05 → 1.00s. Biên mỏng, nhưng đây là home DỌN DẸP chứ không phải home chuẩn mốc:
+# chạy thiếu thì lần home ĐẦY ĐỦ sau đó sửa lại, và menu vẫn còn lựa chọn "?".
+# Tăng lại nếu đổi pin, đổi dây curoa, hoặc thấy càng không chạm sàn hẳn.
+LIFT_HOME_KNOWN_MARGIN = 1.05  # nhân vào thời gian lý thuyết của tầng đó
 LIFT_HOME_MIN_DURATION = 0.8   # sàn tối thiểu — phòng _current_level lệch nhẹ
 
 # Có home càng ở INIT không (trước lúc chờ nút, KHÔNG ăn vào 240s của trận).
