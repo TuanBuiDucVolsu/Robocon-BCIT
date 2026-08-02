@@ -321,7 +321,14 @@ APPROACH_FAST_SPEED = 60     # Pha xa
 # giữa đường, báo "càng đã chạm kệ" trong khi còn cách kệ rất xa (đã gặp thật ở
 # test_motion option 9: khựng ở 18.9cm trong khi mục tiêu 11.9cm).
 # Vùng ~25% là chỗ đường đặc tính duty–tốc độ dựng đứng, không bao giờ ổn định.
-APPROACH_SLOW_SPEED = 32     # Pha gần — ĐÃ XÁC NHẬN trên robot (test_motion #9).
+# ⚠️ NÂNG 32 → 40. Không phải vì 32 chạy không được (nó chạy được), mà vì LỰC LÁI:
+# _forward_guided bám line ở pha này, và lực lái = base − MOTOR_MIN_DUTY. Ở 32 chỉ
+# còn ±2 — robot gần như KHÔNG lái được suốt quãng tiếp cận cuối, nên dừng ở tư thế
+# nào chịu tư thế đó. Đo trên robot 02/08: robot dừng CHỆCH một chút, bước luồn đâm
+# vào theo hướng lệch sẵn, càng vướng mép pallet → IR không xác nhận.
+# Đánh đổi: chạy nhanh hơn thì trôi thêm khi dừng. Chấp nhận, vì hai vế không cân —
+# sai khoảng cách thì bước luồn (IR dẫn) nuốt được, sai TƯ THẾ thì không gì cứu.
+APPROACH_SLOW_SPEED = 40     # Pha gần — đủ trên vùng chết để CÒN lái được (±10)
                              # 25 quá chậm (bò từng tí, bị cơ chế chống húc kệ dừng
                              # oan), 40 vọt quá đà. 32 chạy sạch.
 # PHẢI LỚN HƠN ①, không thì pha chậm không bao giờ chạy và robot lao hết tốc độ
@@ -421,7 +428,10 @@ ADVANCE_TIMEOUT = 6.0
 # xoay; đo trên toàn bộ 6 lượt thì bớt ~28 lần xoay ở kịch bản tệ nhất (~34s) — chi
 # phí cố định lớn nhất của trận. Robot vẫn BÁM LINE khi lùi (thanh cảm biến ở đầu xe
 # lúc này thành đuôi), không chạy mù.
-REVERSE_SPEED = 35           # Chậm hơn tiến: sai số lái nằm ở đầu kia của xe
+# ⚠️ NÂNG 35 → 40, cùng lý do: ở 35 lực lái chỉ còn ±5. Mà lùi bám line là chặng
+# TINH TẾ NHẤT (thanh cảm biến thành đuôi, hiệu chỉnh phải đảo dấu) và nó mở đầu
+# MỌI tuyến giao hàng — ~28 lần mỗi trận.
+REVERSE_SPEED = 40           # Đủ trên vùng chết để CÒN lái được (±10)
 REVERSE_TIMEOUT = 8.0
 EDGE_COST_REVERSE = 1        # Phụ phí so với tiến 1 giao lộ → hoà thì vẫn ưu tiên tiến
 

@@ -1210,6 +1210,25 @@ class TestClampCorrection(unittest.TestCase):
         cao = Motion._clamp_correction(lon, config.MOTOR_MIN_DUTY + 20)
         self.assertGreater(cao, thap)
 
+    def test_every_line_following_speed_has_steering_headroom(self):
+        """QUÉT MỌI tốc độ dùng với follow_line — lực lái = base − MOTOR_MIN_DUTY.
+
+        Nâng MOTOR_MIN_DUTY mà quên nâng một tốc độ nào đó là chỗ ấy MẤT LÁI âm
+        thầm: robot vẫn chạy, vẫn tới nơi, chỉ là tới trong tư thế lệch. Đã sót
+        đúng như vậy: sửa INSERT_SPEED mà bỏ quên APPROACH_SLOW_SPEED (còn ±2) và
+        REVERSE_SPEED (còn ±5) — hai chỗ tư thế quan trọng nhất.
+        """
+        thieu = []
+        for ten in ("SPEED_DEFAULT", "ADVANCE_SPEED", "APPROACH_SLOW_SPEED",
+                    "APPROACH_FAST_SPEED", "INSERT_SPEED", "REVERSE_SPEED"):
+            base = getattr(config, ten)
+            luc = base - config.MOTOR_MIN_DUTY
+            if luc < 8:
+                thieu.append(f"{ten}={base} → ±{luc}")
+        self.assertEqual(
+            thieu, [],
+            "tốc độ không đủ lực lái (cần ≥ MOTOR_MIN_DUTY + 8): " + ", ".join(thieu))
+
     def test_insert_speed_leaves_usable_steering(self):
         """Bước LUỒN CÀNG phải còn lái được, không thì _forward_guided vô nghĩa.
 

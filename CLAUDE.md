@@ -370,8 +370,14 @@ tại điểm giao, line cắt ngang nằm dọc thanh cảm biến nên xoay ki
   Đo trên robot (smoke option 2): robot đi chệch hướng và **một càng thọc sâu hơn
   càng kia** — tức cơ chế bám line thêm vào để CHỐNG lệch lại đang TẠO ra lệch.
   ⚠️ Hệ quả: ở base 32 lực lái chỉ còn **±7**. Đó là giới hạn VẬT LÝ, không phải lựa
-  chọn — muốn lái mạnh hơn thì **nâng base_speed** cho có khoảng hở (base 40 → ±15),
-  **đừng bỏ kẹp**. `MOTOR_MIN_DUTY = 0` để về hành vi cũ.
+  chọn — muốn lái mạnh hơn thì **nâng base_speed** cho có khoảng hở, **đừng bỏ kẹp**.
+  `MOTOR_MIN_DUTY = 0` để về hành vi cũ.
+  ⚠️ **Đổi `MOTOR_MIN_DUTY` thì phải rà LẠI MỌI tốc độ dùng với `follow_line`** —
+  `SPEED_DEFAULT`, `ADVANCE_SPEED`, `APPROACH_SLOW_SPEED`, `APPROACH_FAST_SPEED`,
+  `INSERT_SPEED`, `REVERSE_SPEED`. Sót một cái là chỗ đó MẤT LÁI âm thầm: robot vẫn
+  chạy, vẫn tới nơi, chỉ là tới trong tư thế lệch — rồi càng vướng mép pallet và IR
+  không xác nhận. Đã sót thật (bỏ quên `APPROACH_SLOW_SPEED` còn ±2 và `REVERSE_SPEED`
+  còn ±5). Test `test_every_line_following_speed_has_steering_headroom` quét cả 6.
 - **Kẹp tốc độ giữ ĐỘ CHÊNH 2 bánh** (`Motion._fit_to_range`): độ chênh mới tạo ra
   góc lái, nên khi `base + correction > 100` phải trượt CẢ HAI bánh xuống, không kẹp
   riêng. Kẹp riêng ở `SPEED_DEFAULT=80` làm mất 25% lực lái đúng lúc sai số lớn nhất
