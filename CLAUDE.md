@@ -290,7 +290,14 @@ tại điểm giao, line cắt ngang nằm dọc thanh cảm biến nên xoay ki
   `backward()` / phần lùi của `turn_left/right()` chạy ĐÚNG tốc độ (không full speed) →
   retreat êm, không giật pallet; xoay cân tâm → calibrate `TURN_TIME` chính xác hơn.
 - **`approach_shelf()` 2 pha**: nhanh (`APPROACH_FAST_SPEED`) khi > `APPROACH_SLOW_DISTANCE`,
-  chậm (`APPROACH_SLOW_SPEED`) khi gần → dừng ở `APPROACH_DISTANCE`.
+  chậm (`APPROACH_SLOW_SPEED`) khi gần → dừng ở `APPROACH_DISTANCE + APPROACH_STOP_MARGIN`.
+  ⚠️ **HAI hằng số, đừng gộp.** `APPROACH_DISTANCE = 11.9` đo TĨNH bằng
+  `measure_pickup ①` (đẩy robot bằng tay) nên là **hình học thuần**.
+  `APPROACH_STOP_MARGIN = 2.0` bù quãng robot đi thêm trong ~90ms độ trễ của siêu âm
+  (`ULTRASONIC_QUEUE_LEN`×60ms, gpiozero trả trung vị) — chỉ tồn tại khi robot ĐANG
+  CHẠY. Gộp lại thì lần sau chạy `measure_pickup` sẽ đo ra 11.9 (đo tĩnh) và phần bù
+  biến mất không dấu vết. **Robot dừng quá gần kệ → nới `APPROACH_STOP_MARGIN`**, đừng
+  động vào 11.9.
   ⚠️ **PHỤ THUỘC CHẤT LƯỢNG BÁM LINE nhiều hơn tưởng.** Robot đứng LỆCH LINE thì
   chùm siêu âm dội vào mặt khác và đọc sai — đã gặp thật: robot húc kệ vì được đặt
   hơi lệch, đặt lại đúng line thì chạy sạch. Lúc thi đấu robot tới kệ bằng bám line,

@@ -30,7 +30,10 @@ LEVEL_NAMES = {0: "SÀN", 1: "TẦNG 1", 2: "TẦNG 2"}
 STEPS = [
     ("APPROACH_STANDOFF_DISTANCE", "① Vị trí CHỜ", 0,
      "Càng ở SÀN. Đẩy robot tới chỗ xa nhất mà vẫn hợp lý, sao cho khi nâng càng\n"
-     "     lên TẦNG 2 thì càng KHÔNG chạm vào kệ. Đây là chỗ robot dừng trước khi nâng."),
+     "     lên TẦNG 2 thì càng KHÔNG chạm vào kệ. Đây là chỗ robot dừng trước khi nâng.\n"
+     "     ⚠️ Số này đo TĨNH (robot đứng yên) nên là hình học THUẦN — đặt thẳng vào\n"
+     "     config.APPROACH_DISTANCE. ĐỪNG cộng thêm gì: phần bù độ trễ siêu âm khi\n"
+     "     robot ĐANG CHẠY nằm riêng ở config.APPROACH_STOP_MARGIN."),
     ("APPROACH_INSERT_DISTANCE_T1", "② Luồn xong — TẦNG 1", 1,
      "Càng đang ở ngang TẦNG 1. Đẩy robot vào tới khi càng LỒNG HẾT vào pallet\n"
      "     tầng 1, đúng độ sâu để nhấc được."),
