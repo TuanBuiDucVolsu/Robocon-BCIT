@@ -109,7 +109,8 @@ def smoke_exit_and_navigate(m: Motion, **_):
 # SMOKE 2 — Pickup 1 lượt
 # ==========================================================
 
-def smoke_pickup_cycle(m: Motion, lift: Lift, vision: Vision, tier: int = 1, **_):
+def smoke_pickup_cycle(m: Motion, lift: Lift, vision: Vision, tier: int = 1,
+                       ha_cang_cuoi: bool = True, **_):
     print(f"\n[SMOKE 2] Pickup tầng {tier} (approach → classify_pair → nâng → lùi)")
     _pause(f"Đặt robot trước kệ có 2 kiện ở tầng {tier}, càng đang ở sàn")
 
@@ -164,6 +165,13 @@ def smoke_pickup_cycle(m: Motion, lift: Lift, vision: Vision, tier: int = 1, **_
         print("  ⚠ retreat timeout (vẫn coi pickup OK)")
     else:
         print("  ✅ retreat OK")
+
+    if not ha_cang_cuoi:
+        # Được gọi từ bài LỚN HƠN (option 5) — kiện phải Ở NGUYÊN trên càng để chở
+        # đi giao. Hỏi "hạ càng?" ở đây là bẫy: mặc định CÓ, người test bấm Enter
+        # theo quán tính là thả cả 2 kiện xuống sàn rồi robot đi giao tay không.
+        print(f"  → Giữ càng ở tầng {tier}, kiện vẫn trên càng (còn phải chở đi giao).")
+        return True, (label_l, label_r)
 
     # ⚠️ main.py KHÔNG hạ càng ở đây — nó chở kiện đi giao, càng phải giữ nguyên độ
     # cao tầng. Nhưng smoke 2 dừng tại chỗ, để càng treo ở tầng 1/2 thì lượt chạy sau
@@ -257,7 +265,7 @@ def smoke_full_lap(m: Motion, lift: Lift, vision: Vision, **_):
     if not ok:
         return False, None
 
-    ok, labels = smoke_pickup_cycle(m, lift, vision, tier=1)
+    ok, labels = smoke_pickup_cycle(m, lift, vision, tier=1, ha_cang_cuoi=False)
     if not ok:
         return False, None
     label_l, label_r = labels

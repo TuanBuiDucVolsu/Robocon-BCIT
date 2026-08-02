@@ -1023,6 +1023,30 @@ class TestEscapeIntersection(unittest.TestCase):
         m.forward.assert_not_called()
 
 
+class TestSmokePickupKhongHaCang(unittest.TestCase):
+    """Option 5 gọi lại option 2 — KHÔNG được hạ càng ở giữa chừng.
+
+    Option 2 chạy riêng thì hỏi "Hạ càng về sàn? (Y/n)" mặc định CÓ, để lượt sau bắt
+    đầu từ trạng thái đúng. Nhưng option 5 còn phải CHỞ KIỆN ĐI GIAO — hạ ở đó là
+    thả cả 2 kiện xuống sàn rồi robot đi giao tay không, mà người test rất dễ bấm
+    Enter theo quán tính vì mặc định là CÓ.
+    """
+
+    def test_full_lap_passes_ha_cang_cuoi_false(self):
+        import inspect
+        from tests import test_smoke
+        src = inspect.getsource(test_smoke.smoke_full_lap)
+        self.assertIn("ha_cang_cuoi=False", src,
+                      "option 5 phải yêu cầu GIỮ càng, không thì thả kiện giữa chừng")
+
+    def test_standalone_default_is_to_lower(self):
+        import inspect
+        from tests import test_smoke
+        sig = inspect.signature(test_smoke.smoke_pickup_cycle)
+        self.assertTrue(sig.parameters["ha_cang_cuoi"].default,
+                        "chạy riêng option 2 thì mặc định PHẢI hạ càng")
+
+
 class TestStopGently(unittest.TestCase):
     """Dừng có giảm tốc ở những chỗ TƯ THẾ robot quyết định bước sau.
 
