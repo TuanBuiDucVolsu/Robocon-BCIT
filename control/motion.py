@@ -603,7 +603,10 @@ class Motion:
             at_intersection, values = self.follow_line(base_speed)
             if at_intersection:
                 self.stop()
-                logger.warning("Advance: gặp giao lộ — bản đồ hoặc vị trí không khớp")
+                logger.warning("Advance: gặp giao lộ sau %.2fs — cảm biến %s, ADC %s. "
+                               "Bản đồ hoặc vị trí không khớp",
+                               time.time() - start, values,
+                               self.read_line_sensor_adc())
                 return False
 
             if sum(values) > 0:
@@ -877,7 +880,8 @@ class Motion:
 
         if active_count >= config.INTERSECTION_THRESHOLD:
             self.stop()
-            logger.info("Phát hiện giao lộ (active=%d)", active_count)
+            logger.info("Phát hiện giao lộ (active=%d, cảm biến %s)",
+                        active_count, values)
             return True, values
 
         self._steer(raw, base_speed, reverse)
@@ -1108,7 +1112,7 @@ class Motion:
         self.stop()
         dt = time.time() - start
         if thoat:
-            logger.debug("Rời giao lộ sau %.2fs", dt)
+            logger.info("Rời giao lộ sau %.2fs (cảm biến %s)", dt, values)
         else:
             logger.warning("Rời giao lộ: hết %.2fs mà cảm biến vẫn báo giao lộ — "
                            "robot có thể đang nằm trên mảng đen lớn, không phải vạch", dt)
