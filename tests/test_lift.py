@@ -594,12 +594,21 @@ def main():
         # trước khi chạy — nên "đã ở sàn sẵn" mới là trường hợp thường gặp, và bắt
         # nó chạy home đầy đủ mỗi lần mở menu chỉ tổ ghì motor vào đáy vô ích.
         # Hỏi thẳng vị trí càng thay vì hỏi vòng qua câu "dưới càng có vật cản không".
+        full = max(config.LIFT_HOME_DURATION, lift.min_home_duration())
         print("\n  Càng ĐANG ở đâu?")
-        print(f"    y = đã ở SÀN sẵn      → chỉ ép nhẹ {lift.home_from(0):.2f}s cho chắc")
-        print(f"    n = không chắc / ở trên → home đầy đủ "
-              f"{max(config.LIFT_HOME_DURATION, lift.min_home_duration()):.2f}s")
-        at_floor = _yes("  Càng đã ở sàn sẵn? (y/N): ")
-        homed = _home(lift, "chuẩn mốc SÀN đầu phiên", quick=at_floor)
+        print(f"    0 = ở SÀN sẵn        → ép nhẹ {lift.home_from(0):.2f}s cho chắc")
+        print(f"    1 = ở TẦNG 1         → hạ {lift.home_from(1):.2f}s")
+        print(f"    2 = ở TẦNG 2         → hạ {lift.home_from(2):.2f}s")
+        print(f"    ? = KHÔNG CHẮC       → home đầy đủ {full:.2f}s (ép chạm đáy)")
+        print("  Biết tầng thì chọn số — home đầy đủ là hơn 2 giây motor ghì đáy ở")
+        print("  100% duty một cách vô ích, ngồi test một buổi là bào mòn dây curoa.")
+        tra = input("  Chọn [0/1/2/?, Enter = ?]: ").strip()
+        muc = {"0": 0, "1": 1, "2": 2}.get(tra)
+        if muc is None:
+            homed = _home(lift, "chuẩn mốc SÀN đầu phiên")          # đầy đủ
+        else:
+            lift._current_level = muc            # tin lời người dùng, rồi hạ theo mức đó
+            homed = _home(lift, f"hạ từ tầng {muc} về sàn", quick=True)
         if not homed:
             print("  ⚠ Chưa home: mọi option sẽ tính thời gian theo giả định "
                   "càng ĐANG Ở SÀN. Sai thì motor đội cữ.")
