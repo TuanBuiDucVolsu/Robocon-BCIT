@@ -273,7 +273,16 @@ INSERT_TIMEOUT = 4.0         # Giây, IR không báo thì dừng (đừng đẩy
 # ⚠️ Giảm dần thì robot TRÔI THÊM so với phanh gấp. Đo lại APPROACH_DISTANCE sau khi
 # bật; dừng sát kệ hơn trước thì HẠ STOP_RAMP_TIME, đừng vội đổi APPROACH_DISTANCE
 # (khoảng cách đó còn ràng buộc với vị trí khe pallet).
-STOP_RAMP_TIME = 0.12        # Giây giảm dần PWM về 0
+# ⚠️ 0.12 ĐÃ THỬ TRÊN ROBOT — TIẾN QUÁ. Càng (còn ở sàn lúc tiếp cận) lấn vào khe hở
+# dưới gầm kệ, tức robot dừng sát hơn APPROACH_DISTANCE. Hạ 0.12 → 0.06.
+# Lưu ý về chính cơ chế này: ramp 4 bậc từ 32% cho ra 24 → 16 → 8, cả ba đều nằm
+# TRONG vùng chết (25% motor đã đứng). Nên nó không giảm tốc êm mà là THẢ TRÔI rồi
+# mới phanh — vẫn tránh được cú giật phanh, nhưng cái giá là trôi thêm đúng quãng đó.
+# Còn lấn gầm kệ thì hạ tiếp 0.06 → 0.03 → 0. Đặt 0 là về đúng hành vi cũ (phanh
+# gấp), lúc đó khoảng dừng chắc chắn đúng nhưng cú giật phanh quay lại.
+# TUYỆT ĐỐI KHÔNG bù bằng cách tăng APPROACH_DISTANCE: số đó ràng buộc với vị trí
+# khe pallet trên kệ, nới ra là bước luồn càng phải bò xa thêm đúng bấy nhiêu.
+STOP_RAMP_TIME = 0.06        # Giây giảm dần PWM về 0
 STOP_RAMP_STEPS = 4          # Số bậc giảm
 STOP_SETTLE_TIME = 0.15      # Giây đứng yên cho khung xe hết chòng chành
 
