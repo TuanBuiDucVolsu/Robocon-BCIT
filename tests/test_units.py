@@ -612,14 +612,19 @@ class TestClassifyPair(unittest.TestCase):
         ghi đè bằng kết quả HSV mơ hồ nhưng số cao hơn → trả None và bỏ cả tầng kệ.
         Quy tắc đúng là so theo (đã_đủ_tự_tin, confidence).
 
-        Số ở đây đặt CỐ ĐỊNH, KHÔNG suy từ CONFIDENCE_THRESHOLD nữa. Với ngưỡng hiện
-        tại (0.12) thì một kết quả ORB chắc chắn luôn có conf >= SHAPE_MIN_INLIERS/40
-        = 0.15, tức luôn CAO HƠN mọi kết quả HSV chưa đạt ngưỡng — ca này không còn
-        xảy ra trong thực tế. Nhưng quy tắc so sánh vẫn phải đúng, vì ngưỡng có thể
-        đổi lại: bản cũ suy hsv_conf từ ngưỡng nên khi hạ 0.20 → 0.12 là tiền đề tự
-        gãy (0.11 không lớn hơn 0.175), test đỏ mà bản thân logic không sai.
+        ⚠️ Số ở đây suy theo TỈ LỆ của CONFIDENCE_THRESHOLD, không viết cứng. Cả hai
+        cách viết cứng đều đã gãy một lần:
+          - suy theo hiệu số (bản đầu): hạ ngưỡng 0.20 → 0.12 là tiền đề tự gãy
+          - viết cứng 0.10 (bản sau)  : hạ ngưỡng 0.12 → 0.08 thì 0.10 KHÔNG còn
+            nhỏ hơn ngưỡng, tiền đề lại gãy — chính là lần này
+        Nhân tỉ lệ thì hai bất biến (hsv > orb, hsv < ngưỡng) đúng với MỌI ngưỡng
+        dương, nên test chỉ đỏ khi LOGIC SO SÁNH sai, đúng việc nó sinh ra để làm.
+
+        Lần này lọt vì máy dev KHÔNG có cv2 nên test bị skip ở đó; chỉ phantom mới
+        chạy thật. Bộ test trên máy dev không phải là bằng chứng đủ.
         """
-        orb_conf, hsv_conf = 0.05, 0.10   # HSV cao hơn nhưng KHÔNG đạt ngưỡng
+        t = config.CONFIDENCE_THRESHOLD
+        orb_conf, hsv_conf = t * 0.4, t * 0.8   # HSV cao hơn nhưng KHÔNG đạt ngưỡng
         self.assertGreater(hsv_conf, orb_conf, "tiền đề của test")
         self.assertLess(hsv_conf, config.CONFIDENCE_THRESHOLD,
                         "tiền đề: HSV phải CHƯA đạt ngưỡng")

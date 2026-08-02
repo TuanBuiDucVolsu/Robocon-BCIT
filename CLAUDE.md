@@ -395,6 +395,14 @@ Chạy nhầm trên Pi là **robot cử động thật** — kê bánh khỏi m�
 | **PC và Pi — không chạm GPIO** | `test_logic`, `test_units`, `test_tools`, `test_match_sim`, `tools/show_routes`, `tools/dry_run`, `tools/measure_phases`, `tools/estimate_time`, `tools/sim_ui` |
 | **CHỈ trên Pi — điều khiển thật** | `test_motion` (chạy bánh), `test_lift` (nâng càng), `test_vision` (camera), `test_smoke`, `tools/measure_pickup` (nâng càng, bánh KHÔNG chạy), `tools/calibrate_line`, `tools/capture_templates`, `tools/check_board_side` |
 
+> ⚠️ **Bộ test trên máy dev KHÔNG phải bằng chứng đủ.** Máy dev không có `cv2` nên
+> ~14 test bị skip ở đó mà chạy thật trên Pi. Đã lọt lỗi thật vì chuyện này: một test
+> viết cứng `hsv_conf = 0.10` rồi khẳng định nó dưới `CONFIDENCE_THRESHOLD` — hạ
+> ngưỡng xuống 0.08 là tiền đề gãy, máy dev vẫn xanh, chỉ phantom mới đỏ.
+> **Trước khi chốt bất cứ thay đổi nào, chạy lại bộ test TRÊN PHANTOM.**
+> Hệ quả rút ra: test đừng viết cứng số suy từ hằng số config — nhân TỈ LỆ của hằng
+> số đó, để bất biến đúng với mọi giá trị.
+
 `test_units.py` / `test_logic.py` **tự ép pin factory giả** ngay đầu file, TRƯỚC khi
 import `control.*`:
 
