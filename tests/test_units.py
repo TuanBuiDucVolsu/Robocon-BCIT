@@ -166,6 +166,53 @@ class TestHomeDuration(unittest.TestCase):
             config.LIFT_HOME_DURATION, need,
             f"LIFT_HOME_DURATION={config.LIFT_HOME_DURATION} < {need} cần để hạ hết cỡ")
 
+    def test_home_from_known_level_is_much_shorter(self):
+        """Biết chắc đang ở tầng nào thì home không cần chạy theo tầng CAO NHẤT.
+
+        Motor cẩu là DigitalOutputDevice nên ghì ở 100% duty; hạ từ tầng 1 chỉ cần
+        ~0.9s mà home mặc định chạy 4.0s → hơn 3 giây ghì vào đáy cơ khí mỗi lần,
+        bào mòn dây curoa. Menu test_lift home lại sau MỖI option nên nó cộng dồn rất
+        nhanh.
+        """
+        lift = _lift_stub()
+        q0, q1, q2 = (lift.home_from(l) for l in (0, 1, 2))
+        self.assertLess(q0, q1, "ở sàn phải nhanh hơn ở tầng 1")
+        self.assertLess(q1, q2, "tầng 1 phải nhanh hơn tầng 2")
+        self.assertLess(q1, config.LIFT_HOME_DURATION * 0.6,
+                        "home từ tầng 1 phải rút được đáng kể, không thì vô nghĩa")
+
+    def test_home_from_never_exceeds_full_home(self):
+        """Chặn trần: nhân biên vào trường hợp xấu nhất sẽ ra DÀI HƠN bản đầy đủ.
+
+        1.6 × 4.0 = 6.4s — vô nghĩa, vì bản đầy đủ vốn đã đủ chạm đáy từ mọi tầng.
+        """
+        lift = _lift_stub()
+        cap = max(config.LIFT_HOME_DURATION, lift.min_home_duration())
+        for level in (0, 1, MAX_LEVEL):
+            self.assertLessEqual(lift.home_from(level), cap + 1e-9,
+                                 f"tầng {level}: rút gọn dài hơn cả bản đầy đủ")
+
+    def test_home_from_has_a_floor(self):
+        """Ngay cả khi TIN là đang ở sàn vẫn phải chạy một chút — `_current_level`
+        có thể lệch nhẹ, và chạy 0 giây thì home mất hết ý nghĩa."""
+        lift = _lift_stub()
+        self.assertGreaterEqual(lift.home_from(0), config.LIFT_HOME_MIN_DURATION - 1e-9)
+
+    def test_from_level_bypasses_the_worst_case_clamp(self):
+        """Nhánh rút gọn KHÔNG được bị phép kẹp theo tầng cao nhất kéo ngược lên.
+
+        Phép kẹp đó sinh ra cho nhánh KHÔNG biết vị trí; áp cho nhánh biết vị trí thì
+        rút gọn thành vô tác dụng.
+        """
+        lift = _lift_stub()
+        for name in ("_left_en", "_left_up", "_left_down", "_right_up", "_right_down"):
+            setattr(lift, name, MagicMock())
+        with patch("time.sleep") as slept:
+            lift.home_to_floor(from_level=1)
+        self.assertAlmostEqual(slept.call_args[0][0], lift.home_from(1), places=6)
+        self.assertLess(slept.call_args[0][0], lift.min_home_duration(),
+                        "tiền đề: rút gọn phải NGẮN HƠN ngưỡng worst-case")
+
     def test_home_clamps_up_when_config_too_small(self):
         """Config thiếu thì home_to_floor() phải tự chạy ĐỦ, không hạ thiếu âm thầm."""
         lift = _lift_stub()
@@ -412,6 +459,7 @@ class TestShapeMatcherDecision(unittest.TestCase):
         m._sets[None]["foxconn"] = (MagicMock(), MagicMock())
         self.assertTrue(m.ready)
 
+    @unittest.skipIf(_cv2 is None or _np is None, "cần cv2 + numpy")
     def test_templates_normalised_to_same_size_within_a_set(self):
         """Ảnh mẫu trong CÙNG một bộ phải được cắt về cùng kích thước trước khi so.
 

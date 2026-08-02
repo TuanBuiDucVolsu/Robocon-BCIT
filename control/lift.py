@@ -380,22 +380,59 @@ class Lift:
             self._lower_left(duration)
         self._current_level = 0
 
-    def home_to_floor(self, duration: float | None = None):
+    def home_from(self, level: int) -> float:
+        """Số giây đủ để hạ về sàn khi ĐÃ BIẾT đang ở `level`, cộng biên dư.
+
+        Hạ từ tầng 1 chỉ cần ~0.9s trong khi home theo tầng cao nhất chạy 4.0s —
+        hơn 3 giây motor ghì vào đáy cơ khí một cách vô ích, và motor cẩu là
+        DigitalOutputDevice nên ghì ở 100% duty, bào mòn dây curoa.
+        """
+        need = max(self._move_duration(side, level, 0, raising=False)
+                   for side in ("left", "right"))
+        margin = getattr(config, "LIFT_HOME_KNOWN_MARGIN", 1.6)
+        floor = getattr(config, "LIFT_HOME_MIN_DURATION", 0.8)
+        # Chặn TRẦN bằng chính bản đầy đủ: từ tầng cao nhất thì `need` đã là trường
+        # hợp xấu nhất, nhân biên nữa sẽ ra DÀI HƠN home mặc định (1.6 × 4.0 = 6.4s)
+        # — vô nghĩa, vì bản đầy đủ vốn đã đủ để chạm đáy từ bất kỳ tầng nào.
+        cap = max(config.LIFT_HOME_DURATION, self.min_home_duration())
+        return min(max(need * margin, floor), cap)
+
+    def home_to_floor(self, duration: float | None = None,
+                      from_level: int | None = None):
         """Ép hạ CẢ 2 càng chạm đáy cơ khí. KHÔNG có limit switch nên không có
         cách nào ĐO được đã chạm đáy thật — chỉ có thể chạy hạ liên tục lâu hơn
         hẳn thời gian tối đa cần thiết (config.LIFT_HOME_DURATION) để chắc chắn
         chạm đáy dù trước đó lift đang ở tầng nào / _current_level có đúng hay
         không. Khác go_to_level(0): hàm đó TIN _current_level (không làm gì nếu
         đã là 0), không xác minh vị trí thật — dùng home_to_floor() khi vị trí
-        thật sự không chắc (đầu trận, sau lỗi/mất điện)."""
-        duration = duration if duration is not None else config.LIFT_HOME_DURATION
-        needed = self.min_home_duration()
-        if duration < needed:
-            logger.warning(
-                "LIFT_HOME_DURATION=%.2fs THIẾU — càng chậm nhất cần %.2fs để hạ từ "
-                "tầng %d về sàn (đã tính LIFT_*_LOWER_EXTRA). Dùng %.2fs; sửa config lại.",
-                duration, needed, MAX_LEVEL, needed)
-            duration = needed
+        thật sự không chắc (đầu trận, sau lỗi/mất điện).
+
+        `from_level` — tầng đang ở, CHỈ truyền khi tin được `_current_level`.
+        Truyền thì chỉ chạy đủ cho tầng đó cộng biên (home_from), thay vì luôn
+        chạy theo tầng cao nhất: hạ từ tầng 1 còn ~1.4s thay vì 4.0s, đỡ hơn 2.5
+        giây motor ghì vào đáy mỗi lần — nguồn bào mòn dây curoa chính khi ngồi
+        test menu (test_lift home lại sau MỖI option).
+
+        ⚠️ ĐÁNH ĐỔI, đọc kỹ trước khi dùng: nếu `_current_level` SAI (thực tế đang
+        ở tầng cao hơn), bản rút gọn sẽ KHÔNG hạ tới đáy, rồi vẫn khai `_current_level
+        = 0` — sai lệch tồn tại tiếp mà không có tín hiệu nào báo. Chính rủi ro đó
+        là lý do home mặc định chạy theo tầng cao nhất.
+        Nên: luồng THI ĐẤU (Lift.reset ← main.py) KHÔNG truyền from_level, giữ
+        nguyên hành vi an toàn cũ. Chỉ menu test và công cụ đo mới truyền.
+        """
+        if duration is None and from_level is not None:
+            duration = self.home_from(from_level)
+            logger.info("Home (biết đang ở tầng %d): hạ %.2fs thay vì %.2fs",
+                        from_level, duration, config.LIFT_HOME_DURATION)
+        elif duration is None:
+            duration = config.LIFT_HOME_DURATION
+            needed = self.min_home_duration()
+            if duration < needed:
+                logger.warning(
+                    "LIFT_HOME_DURATION=%.2fs THIẾU — càng chậm nhất cần %.2fs để hạ từ "
+                    "tầng %d về sàn (đã tính LIFT_*_LOWER_EXTRA). Dùng %.2fs; sửa config lại.",
+                    duration, needed, MAX_LEVEL, needed)
+                duration = needed
         logger.info("Home: hạ cả 2 càng liên tục %.1fs để ép chạm đáy cơ khí", duration)
         self._left_en.on(); self._left_up.off(); self._left_down.on()
         self._right_up.off(); self._right_down.on()

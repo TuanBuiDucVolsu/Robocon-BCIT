@@ -62,16 +62,32 @@ def _ir(lift: Lift) -> str:
     return (f"IR: trái={'CÓ' if left else '--'}  phải={'CÓ' if right else '--'}")
 
 
-def _home(lift: Lift, why: str, ask: bool = True) -> bool:
-    """Home cả 2 càng để `_current_level` khớp thực tế. Trả False nếu người dùng huỷ."""
-    needed = lift.min_home_duration()
+def _home(lift: Lift, why: str, ask: bool = True, quick: bool = False) -> bool:
+    """Home cả 2 càng để `_current_level` khớp thực tế. Trả False nếu người dùng huỷ.
+
+    `quick=True` — dùng bản RÚT GỌN theo tầng đang tin là đang ở, thay vì luôn chạy
+    theo tầng cao nhất. Chỉ dùng cho những lần home mang tính DỌN DẸP (trả càng về
+    sàn sau khi xong một option), nơi vừa mới điều khiển càng nên `_current_level`
+    đáng tin. Những lần home mang tính CHUẨN LẠI MỐC (đầu phiên, option 9, trước khi
+    calibrate) vẫn chạy bản đầy đủ — đó chính là việc của chúng.
+
+    Lý do có nhánh này: menu home lại sau MỖI option, mà home đầy đủ chạy 4.0s trong
+    khi hạ từ tầng 1 chỉ cần ~0.9s. Hơn 3 giây motor ghì vào đáy cơ khí ở 100% duty
+    mỗi lần, ngồi test một buổi là bào mòn thấy rõ dây curoa.
+    """
+    level = lift._current_level if quick else None
+    secs = lift.home_from(level) if quick else max(config.LIFT_HOME_DURATION,
+                                                   lift.min_home_duration())
     print(f"\n  [HOME] {why}")
-    print(f"    Hạ liên tục {max(config.LIFT_HOME_DURATION, needed):.2f}s ép chạm đáy cơ khí "
-          f"(cần ≥ {needed:.2f}s).")
+    if quick:
+        print(f"    Hạ {secs:.2f}s — bản RÚT GỌN, tin rằng càng đang ở tầng {level}.")
+    else:
+        print(f"    Hạ liên tục {secs:.2f}s ép chạm đáy cơ khí "
+              f"(cần ≥ {lift.min_home_duration():.2f}s).")
     if ask and not _yes("    ⚠ Dưới càng KHÔNG có vật cản? (y/N): "):
         print("    Đã huỷ — CHÚ Ý: vị trí càng vẫn chưa chắc chắn.")
         return False
-    lift.home_to_floor()
+    lift.home_to_floor(from_level=level)
     print("    ✅ Cả 2 càng ở SÀN.")
     return True
 
@@ -436,7 +452,7 @@ def _find_level_by_hand(lift: Lift, target_level: int):
         if raw == "q":
             print("  Đã bỏ — hạ về sàn.")
             lift._current_level = target_level   # để _home hạ đủ lâu
-            _home(lift, "trả càng về sàn sau khi bỏ đo")
+            _home(lift, "trả càng về sàn sau khi bỏ đo", quick=True)
             return
         raise_one(pulse)
         elapsed += pulse
@@ -561,7 +577,7 @@ def _run(lift: Lift, name: str, func):
     if lift._current_level != 0:
         print(f"  Càng đang ở {LEVEL_NAMES.get(lift._current_level, '?')} — "
               "cần hạ về sàn trước khi chọn option khác.")
-        _home(lift, "trả càng về sàn sau khi kết thúc option")
+        _home(lift, "trả càng về sàn sau khi kết thúc option", quick=True)
 
 
 def main():
@@ -617,7 +633,7 @@ def main():
             print(f"\nCàng đang ở {LEVEL_NAMES.get(lift._current_level, '?')} — hạ về sàn "
                   "trước khi thoát.")
             try:
-                _home(lift, "hạ càng về sàn trước khi thoát")
+                _home(lift, "hạ càng về sàn trước khi thoát", quick=True)
             except KeyboardInterrupt:
                 print("  ⚠ Bỏ qua — LẦN CHẠY SAU PHẢI HOME NGAY.")
         lift.cleanup()

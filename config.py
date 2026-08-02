@@ -118,6 +118,13 @@ LIFT_RIGHT_EXTRA = 0.200         # Càng PHẢI khi nâng
 LIFT_LEFT_LOWER_EXTRA = 0.100     # Càng TRÁI khi hạ (tăng nếu bên đó khó hạ)
 LIFT_RIGHT_LOWER_EXTRA = 0.050      # Càng PHẢI khi hạ
 
+# Home RÚT GỌN khi đã biết chắc đang ở tầng nào (Lift.home_from). Hạ từ tầng 1 chỉ
+# cần ~0.9s trong khi home mặc định chạy 4.0s theo tầng cao nhất — hơn 3 giây motor
+# ghì vào đáy vô ích, mà motor cẩu là DigitalOutputDevice nên ghì ở 100% duty và bào
+# mòn dây curoa. Chỉ dùng ở menu test / công cụ đo; luồng THI ĐẤU vẫn chạy bản đầy đủ.
+LIFT_HOME_KNOWN_MARGIN = 1.6   # nhân vào thời gian lý thuyết của tầng đó
+LIFT_HOME_MIN_DURATION = 0.8   # sàn tối thiểu — phòng _current_level lệch nhẹ
+
 LIFT_SPEED = 80              # Duty cycle motor nâng — chỉ dùng trong web debug
 PICKUP_MAX_RETRIES = 2       # Số lần nâng lại nếu IR không thấy pallet
 PICKUP_VERIFY_DELAY = 0.2    # Giây chờ sau nâng trước khi đọc IR
