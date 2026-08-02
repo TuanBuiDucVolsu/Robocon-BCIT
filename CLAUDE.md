@@ -71,13 +71,17 @@ Chỉ vẽ line THẬT SỰ có trên bản in (đã đo bằng quét pixel — 
   đi nhà máy → nhà máy phải vòng về cột C1
 - **Kệ 4** nằm trên cột C1, ngay dưới R0 (bên phải ô start, cạnh Foxconn — kho hàng rời NV2)
 - Robot xuất phát: ô start trên R0, **quay mặt sang trái (9h)** về Kệ 3
-- `exit_start_zone()`: tiến MÙ `EXIT_START_BLIND_TIME` → tiến tiếp tới khi chạm line R0
+- `exit_start_zone()`: tiến MÙ tới khi qua hết vùng in → tiến tiếp tới khi chạm line R0
   → căn giữa ngắn (nếu chạm giao lộ khi căn → dừng căn, **không** đếm giao lộ).
   ⚠️ Cửa sổ mù là BẮT BUỘC: ô xuất phát in hình **mascot mặt đen**, robot ngồi ngay
   trên đó (14/23 px đen) nên không có bước mù là nó "chạm line" ở mẫu đầu tiên rồi
   căn giữa trên mặt con mascot. Cửa sổ phải kết thúc trong **10.2→51.2cm** (hết
-  mascot → trước giao lộ C0R0). Số đo: `docs/SA_BAN.md` mục 3c. **CHƯA ĐO cm/s
-  trên robot — 0.6s là ước lượng.**
+  mascot → trước giao lộ C0R0). Số đo: `docs/SA_BAN.md` mục 3c.
+  Điểm kết thúc bám theo **hình in**, không theo đồng hồ: thấy đen rồi thấy SẠCH =
+  vừa ra khỏi mascot (sau nó là 11.7cm sạch). Nhờ vậy đúng ở mọi tốc độ và mọi chỗ
+  đặt trong ô 400x400mm. `EXIT_START_BLIND_TIME = 1.5` chỉ là **chặn trên**, dùng
+  khi robot đặt ở chỗ không có hình in nào dưới cảm biến — an toàn tới 34cm/s.
+  **cm/s thật CHƯA ĐO trên robot.**
 - Sau đó `navigation.plan(START_POSE, "SHELF0")` = tiến 1 giao lộ + advance → Kệ 3
 - Thứ tự lấy kệ: Kệ 3 (R0, gần nhất) → Kệ 2 (R2) → Kệ 1 (R4)
 - 4 nhà máy xếp DỌC cạnh phải: Samsung(R4) → Hana(R3) → Amkor(R1) → Foxconn(R0)
