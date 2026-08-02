@@ -50,9 +50,14 @@ giây bằng mắt: đứng ở ô xuất phát nhìn sang tường, cụm nhà 
 phát là cụm nào. Đặt sai = giao Samsung vào Foxconn; IR vẫn báo thả thành công nên
 log KHÔNG báo lỗi, chỉ mất sạch điểm.
 
-Chiều trái/phải thì robot **tự dò** đầu trận (state `DETECT_SIDE`) để phòng bản in
-sai — dò được nhờ một điểm bất đối xứng: tại giao lộ Kệ 3, đường line dọc cột kệ
+Chiều trái/phải thì robot **từng tự dò** đầu trận (state `DETECT_SIDE`) để phòng bản
+in sai — dò được nhờ một điểm bất đối xứng: tại giao lộ Kệ 3, đường line dọc cột kệ
 **chỉ chạy về MỘT phía** (lên R2/R4), phía kia là mép sa bàn.
+
+⚠️ **Bước dò này ĐANG TẮT** (`BOARD_AUTO_DETECT = False`, 178c4e8): công tắc gạt đã
+cho biết nửa sân rồi nên nó thừa, nó chạy hở nên làm robot lệch khỏi vạch khiến lệnh
+ngay sau không tìm thấy line, và đoán sai thì lật cả bản đồ. Chi tiết: CLAUDE.md mục
+`DETECT_SIDE`. Mô tả dưới đây là cơ chế khi bật lại.
 
 ```
 Robot đứng tại giao lộ Kệ 3, quay mặt về phía kệ:
@@ -69,7 +74,7 @@ Khoảng cách và số giao lộ **giống hệt** ở cả 2 nửa.
 | Hằng số | Vai trò |
 |---|---|
 | `FACTORY_AT_START_ROW` | **Nửa sân — thứ tự nhà máy.** Phải đặt tay, kiểm bằng mắt |
-| `BOARD_AUTO_DETECT` | Bật tự dò chiều trái/phải (mặc định `True`) |
+| `BOARD_AUTO_DETECT` | Bật tự dò chiều trái/phải — **hiện `False`**, xem cảnh báo trên |
 | `BOARD_MIRRORED` | Dự phòng chiều trái/phải khi dò lỗi (bản in: cả 2 nửa `False`) |
 | `PROBE_TRAVEL_TIME` | Giây tiến ra khỏi giao lộ khi dò — đo trên sân |
 
