@@ -629,18 +629,11 @@ class Motion:
         # Đã bám được line lần nào chưa. Trước khi True thì "mất line" nghĩa là
         # KHÔNG TÌM THẤY, không phải "đã hết".
         acquired = False
-        # Khoảng cách đọc được lúc BẮT ĐẦU, để biết siêu âm có đang nhìn thấy vật
-        # thật ở phía trước hay chỉ đang nhìn KIỆN HÀNG robot đang cõng. Xem dưới.
-        dist_dau = None
-        ke_bi_che = False
 
         while time.time() - start < timeout:
             if self._aborted():
                 return False
-            troi = time.time() - start
             dist = self.get_distance()
-            if dist >= 0 and dist_dau is None:
-                dist_dau = dist
             # ⚠️ CHỈ tin "đã tới gần" khi khoảng cách đã THỰC SỰ GIẢM kể từ lúc bắt
             # đầu. Lệnh advance luôn xuất phát từ một giao lộ, cách điểm cuối 35cm
             # trở lên — vật thật thì số đo phải giảm dần khi tiến tới.
@@ -653,40 +646,7 @@ class Motion:
             # ≥5cm rồi mới tin, và khi điều kiện đó không đạt thì advance chạy tới
             # HẾT LINE — mà line kéo tới tận chân kệ, tức đâm thẳng vào kệ. Tiêu chí
             # sai, không phải cơ chế sai.
-            # ⚠️ ĐỨNG YÊN thôi CHƯA đủ — phải đứng yên Ở GIÁ TRỊ NHỎ.
-            # Kiện hàng robot cõng nằm sát cảm biến → số đo ~4cm và không đổi.
-            # MẤT TIẾNG VỌNG thì gpiozero trả giá trị kịch trần ~100cm, cũng không
-            # đổi. Bản trước chỉ kiểm "không đổi" nên gộp hai thứ làm một: mất tiếng
-            # vọng vài nhịp đầu là code tưởng bị kiện che, bỏ qua siêu âm, rồi đi tới
-            # KHI HẾT LINE — mà line kéo tới tận chân kệ, tức LAO THẲNG VÀO KỆ.
-            # Đo trên robot: option 8 lúc dừng đúng 11.9cm, lúc lao vào kệ — hỏng
-            # kiểu NHỊ PHÂN, đúng dấu hiệu một nhánh lật qua lật lại.
-            # ⛔ CHẶN CỨNG — đứng trên MỌI logic khác.
-            # Nhánh "đi tới khi hết line" của hàm này VỀ BẢN CHẤT là đâm vào kệ: line
-            # kéo tới cách chân kệ 1mm (SA_BAN.md 3b). Nhánh đó chỉ an toàn ở khu nhà
-            # máy (line dừng ở mép khu). Nên dù cơ chế nào phía trên quyết định bỏ qua
-            # siêu âm, hễ số đo xuống dưới mốc này là DỪNG.
-            if 0 <= dist <= config.ADVANCE_HARD_STOP_CM:
-                self.stop_gently(base_speed)
-                logger.warning("Advance: CHẶN CỨNG ở %.1fcm (mốc %.1f) — dừng bất kể "
-                               "logic phía trên. Nếu tới đây thì hoặc siêu âm mất tín "
-                               "hiệu ở xa, hoặc cơ chế chống-kiện-che bật nhầm.",
-                               dist, config.ADVANCE_HARD_STOP_CM)
-                return True
-
-            if (config.ADVANCE_LOAD_BLOCK_DETECT
-                    and dist_dau is not None and not ke_bi_che
-                    and troi >= config.ADVANCE_STUCK_TIME
-                    and abs(dist - dist_dau) < config.ADVANCE_STUCK_CM
-                    and dist <= config.APPROACH_SLOW_DISTANCE):
-                ke_bi_che = True
-                logger.warning(
-                    "Advance: sau %.1fs mà siêu âm chỉ đổi %.1fcm (%.1f→%.1f) và đứng "
-                    "yên ở mức GẦN — nhiều khả năng đang nhìn CHÍNH KIỆN HÀNG robot "
-                    "cõng. Bỏ qua siêu âm, đi tới khi hết line.",
-                    troi, abs(dist - dist_dau), dist_dau, dist)
-
-            if not ke_bi_che and 0 <= dist <= config.APPROACH_SLOW_DISTANCE:
+            if 0 <= dist <= config.APPROACH_SLOW_DISTANCE:
                 near_streak += 1
                 if near_streak >= 2:
                     self.stop_gently(base_speed)
@@ -959,22 +919,22 @@ class Motion:
                 logger.info("Đã lùi đủ xa — khoảng cách %.1fcm", dist)
                 return True
 
-            # ⚠️ SIÊU ÂM BỊ CHÍNH KIỆN HÀNG CHE. Sau khi nhấc, pallet nằm ngay trước
-            # cảm biến và di chuyển CÙNG robot, nên số đo ĐỨNG YÊN dù robot lùi bao
-            # xa — điều kiện `dist >= target` không bao giờ đạt.
-            # Đo trên robot 02/08, tương quan hoàn hảo qua 2 lượt:
-            #     bốc hàng THÀNH CÔNG (có pallet) → lùi TIMEOUT 5s
-            #     bốc hàng THẤT BẠI (không pallet) → lùi OK, báo 13.3cm
-            # Trong trận thì LƯỢT NÀO cũng lùi lúc đang cõng kiện: 6 lần × 5s = 30s
-            # của ngân sách 240s, cộng robot lùi mù không ai kiểm soát.
-            # Phát hiện bằng "số đo không TĂNG", rồi chuyển sang lùi theo THỜI GIAN.
+            # Lưới an toàn khi siêu âm KHÔNG DÙNG ĐƯỢC (mất tiếng vọng, bị che bởi
+            # vật lạ, cảm biến hỏng): số đo không TĂNG dù robot đang lùi → chuyển
+            # sang lùi theo THỜI GIAN thay vì chạy hết timeout 5s.
+            # ⚠️ Ban đầu tôi cho rằng nguyên nhân là KIỆN HÀNG cõng che cảm biến.
+            # Đo lại ngày 02/08 (tools.check_load_blocks_sonar) thì SAI: kiện đọc
+            # 74.6 / 76.8 / 72.6 cm ở sàn / tầng 1 / tầng 2 — không che gì cả.
+            # Vụ lùi timeout thật ra do APPROACH_SPEED = 30 quá sát vùng chết (25),
+            # cõng hàng thì không thắng nổi ma sát; nâng lên 40 là hết.
+            # Giữ nhánh này vì nó rẻ và vẫn đúng cho MỌI nguyên nhân làm cảm biến
+            # đứng số, nhưng đừng đọc nó như "kiện che cảm biến".
             if (not mu and troi >= config.RETREAT_STUCK_TIME
                     and dist - dau < config.RETREAT_STUCK_CM):
                 mu = True
                 logger.warning(
                     "Lùi ra: sau %.1fs mà khoảng cách chỉ đổi %.1fcm (%.1f→%.1f) — "
-                    "siêu âm nhiều khả năng bị CHÍNH KIỆN HÀNG che. Chuyển sang lùi "
-                    "theo thời gian %.1fs.",
+                    "siêu âm không dùng được. Chuyển sang lùi theo thời gian %.1fs.",
                     troi, dist - dau, dau, dist, config.RETREAT_BLIND_TIME)
             if mu and troi >= config.RETREAT_BLIND_TIME:
                 self.stop()

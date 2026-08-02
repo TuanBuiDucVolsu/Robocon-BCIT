@@ -1226,49 +1226,6 @@ class TestAdvanceToEnd(unittest.TestCase):
         self.assertLess(time.time() - t0, 1.0, "chặn cứng phải nổ ngay, không chờ")
         m.stop.assert_called()   # stop_gently() thật gọi tới stop()
 
-    def test_load_block_detect_is_off_until_measured(self):
-        """Cơ chế chống-kiện-che phải TẮT cho tới khi làm bài B5.
-
-        Nó dựa trên giả định chưa ai đo, và đã gây 2 hồi quy trong một ngày — cả hai
-        đều làm robot lao vào kệ, vì nhánh dự phòng của nó là "đi tới khi hết line".
-        """
-        self.assertFalse(config.ADVANCE_LOAD_BLOCK_DETECT,
-                         "bật lại chỉ sau khi B5 xác nhận kiện có che cảm biến")
-
-    def test_constant_FAR_reading_is_lost_echo_not_a_carried_load(self):
-        """⚠️ HỒI QUY: mất tiếng vọng (số kịch trần, đứng yên) KHÔNG phải kiện che.
-
-        gpiozero trả ~100cm khi không bắt được tiếng vọng — đứng yên y như kiện hàng
-        cõng. Bản trước chỉ kiểm "không đổi" nên gộp hai thứ: mất tiếng vọng vài nhịp
-        đầu là bỏ qua siêu âm rồi đi tới KHI HẾT LINE — mà line kéo tới tận chân kệ,
-        tức LAO VÀO KỆ. Ở đây số đo đứng yên ở 100cm rồi mới giảm dần về mục tiêu:
-        phải dừng bằng siêu âm.
-        """
-        m = self._motion([[0, 0, 1, 1, 0, 0]] * 400)   # line KHÔNG bao giờ hết
-        seq = [100.0] * 120 + [40.0, 30.0, config.APPROACH_SLOW_DISTANCE - 1]
-        m.get_distance = lambda: seq.pop(0) if len(seq) > 1 else seq[0]
-        self.assertTrue(m.advance_to_end(timeout=5.0),
-                        "phải dừng bằng siêu âm, không chạy tới hết line")
-
-    def test_constant_near_reading_is_the_carried_load_not_the_target(self):
-        """Số đo NHỎ NGAY TỪ ĐẦU và ĐỨNG YÊN = siêu âm đang nhìn KIỆN HÀNG đang cõng.
-
-        Kiện nằm trước cảm biến và đi CÙNG robot nên số đo không đổi. Nếu tin nó thì
-        MỌI chặng giao hàng "tới nhà máy" ngay khi vừa rời giao lộ, robot thả kiện
-        giữa sa bàn mà log vẫn xanh hết — không có gì báo.
-        Ở đây phải bỏ qua siêu âm và đi tiếp cho tới khi HẾT LINE.
-        """
-        m = self._motion([[0, 0, 1, 1, 0, 0]] * 20 + [[0] * 6], dist=4.0)
-        self.assertTrue(m.advance_to_end(timeout=3.0))
-        # tới đích bằng "hết line", KHÔNG phải bằng siêu âm
-        self.assertGreater(len(m.follow_line.mock_calls) if hasattr(m.follow_line, "mock_calls")
-                           else 1, 0)
-
-    def test_stuck_detection_is_shorter_than_the_advance_timeout(self):
-        """Phát hiện cảm biến bị che phải kịp xảy ra trong một chặng advance."""
-        self.assertLess(config.ADVANCE_STUCK_TIME, config.ADVANCE_TIMEOUT)
-        self.assertGreater(config.ADVANCE_STUCK_CM, 0)
-
     def test_near_target_still_works_when_reading_actually_changes(self):
         """⚠️ HỒI QUY: cơ chế chống-kiện-che KHÔNG được phá đường vào kệ.
 

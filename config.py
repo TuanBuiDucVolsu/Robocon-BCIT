@@ -473,36 +473,22 @@ LINE_END_CONFIRM_TIME = 0.25 # Giây mất line liên tục để kết luận "
 # Motion.advance_to_end. Đủ dài để bù 0.3s chạy mù của _escape_intersection, đủ
 # ngắn để không lao mù ở ADVANCE_SPEED.
 ADVANCE_ACQUIRE_TIME = 0.8
-# Phát hiện siêu âm đang nhìn CHÍNH KIỆN HÀNG robot cõng (nằm trước cảm biến, đi
-# cùng robot nên số đo ĐỨNG YÊN). Cùng cơ chế với RETREAT_STUCK_* ở phần lùi ra.
-# ⚠️ Không có nó thì khi đang cõng kiện, MỌI chặng giao hàng "tới nhà máy" ngay khi
-# vừa rời giao lộ → thả kiện giữa sa bàn, log vẫn xanh hết.
-# ⚠️ Tiêu chí phải là "số đo ĐỨNG YÊN", KHÔNG phải "chưa giảm đủ". Bản trước đòi
-# giảm ≥5cm mới tin, và khi không đạt thì advance chạy tới HẾT LINE — mà line kéo
-# tới tận chân kệ, tức ĐÂM THẲNG VÀO KỆ. Đã gặp thật ở option 8.
-# ⛔ CHẶN CỨNG của advance_to_end: siêu âm báo dưới mức này là DỪNG, bất kể logic
-# nào phía trên nghĩ gì. Cần vì nhánh "đi tới khi hết line" VỀ BẢN CHẤT là đâm vào
-# kệ — line kéo tới cách chân kệ 1mm (SA_BAN.md mục 3b). Nhánh đó chỉ an toàn ở khu
-# nhà máy, nơi line dừng ở mép khu.
+# ✅ ĐO NGÀY 02/08 (tools.check_load_blocks_sonar): KIỆN HÀNG CÕNG KHÔNG CHE SIÊU ÂM.
+#     càng ở SÀN 74.6cm · TẦNG 1 76.8cm · TẦNG 2 72.6cm  (phía trước trống)
+# Nên luồng giao hàng dùng siêu âm BÌNH THƯỜNG. Cơ chế "chống kiện che" từng thêm
+# ngày 02/08 đã bị XOÁ: nó dựa trên giả định sai này và gây 2 lần robot lao vào kệ,
+# vì nhánh dự phòng của nó là "đi tới khi hết line" — mà line kéo tới tận chân kệ.
+# ⚠️ Bài học: đừng thêm phòng thủ cho một tình huống chưa ai đo. Số đo mất 2 phút.
+
+# ⛔ CHẶN CỨNG của advance_to_end: siêu âm báo dưới mức này là DỪNG, đặt TRƯỚC mọi
+# logic khác trong vòng lặp. Giữ lại DÙ giả định "kiện che cảm biến" đã bị bác bỏ —
+# nó là lưới an toàn cho MỌI nguyên nhân, không riêng nguyên nhân nào.
+# Cần vì nhánh "đi tới khi hết line" của advance VỀ BẢN CHẤT là đâm vào kệ: line kéo
+# tới cách chân kệ 1mm (SA_BAN.md mục 3b). Nhánh đó chỉ an toàn ở khu nhà máy, nơi
+# line dừng ở mép khu.
+# An toàn với hàng đang cõng: kiện đọc 72-77cm, xa hơn mốc này rất nhiều.
 ADVANCE_HARD_STOP_CM = 11.9
 
-# ⚠️ TẮT cơ chế chống-kiện-che. Nó dựa trên một giả định CHƯA AI ĐO: rằng kiện hàng
-# robot cõng che mất cảm biến siêu âm. Trong một ngày nó gây HAI hồi quy — cả hai
-# đều làm robot lao vào kệ, vì nhánh dự phòng của nó là "đi tới khi hết line".
-# Bật lại SAU KHI làm bài B5 trong NGHIEM_THU (2 phút): đặt pallet lên càng, nâng
-# tầng 1, đẩy robot ra chỗ trống ≥60cm, đọc siêu âm.
-#   ra > 60cm       → kiện KHÔNG chắn → xoá hẳn cơ chế này
-#   ra số nhỏ cố định → kiện CÓ chắn  → bật lại, và lúc đó biết đúng ngưỡng cần đặt
-ADVANCE_LOAD_BLOCK_DETECT = False
-
-ADVANCE_STUCK_TIME = 0.8     # Giây quan sát trước khi kết luận cảm biến bị che
-ADVANCE_STUCK_CM = 1.0       # Đổi ít hơn ngần này trong khoảng trên = bị che
-# ⚠️ Điều kiện thứ HAI, bắt buộc: số đo phải đứng yên Ở MỨC GẦN
-# (≤ APPROACH_SLOW_DISTANCE). Kiện hàng cõng cho ~4cm và không đổi; MẤT TIẾNG VỌNG
-# cho ~100cm (kịch trần) và cũng không đổi. Bản đầu chỉ kiểm "không đổi" nên gộp hai
-# thứ làm một → mất tiếng vọng vài nhịp đầu là bỏ qua siêu âm, đi tới khi hết line,
-# mà line kéo tới tận chân kệ = LAO VÀO KỆ. Đã gặp thật ở option 8, hỏng NHỊ PHÂN
-# (lúc dừng đúng 11.9cm, lúc lao vào kệ).
 ADVANCE_TIMEOUT = 6.0
 
 # ============================================================

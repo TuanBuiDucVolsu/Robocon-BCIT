@@ -246,17 +246,25 @@ Lặp lại với càng ở **tầng 2**.
 **Nếu ra số nhỏ cố định:** trong luồng thi đấu, robot cõng kiện đi giao và siêu âm
 chỉ nhìn thấy kiện đó. Ba chỗ dùng siêu âm lúc đang cõng:
 
-| Chỗ | Trạng thái 02/08 |
-|---|---|
-| `retreat_from_shelf` sau khi bốc | ✅ phát hiện "số đo không tăng" → lùi theo giờ |
-| `advance_to_end` khi tới nhà máy | ⚠️ **ĐÃ TẮT** (`ADVANCE_LOAD_BLOCK_DETECT = False`) |
-| `approach_shelf` khi thả hàng | ❌ chưa có gì |
+## ✅ B5 ĐÃ ĐO XONG — 02/08
 
-Cơ chế ở dòng giữa bị tắt vì nó dựa trên giả định chưa đo và đã gây **hai** lần
-robot lao vào kệ — nhánh dự phòng của nó là "đi tới khi hết line", mà line kéo tới
-tận chân kệ. Thay vào đó có **chặn cứng** `ADVANCE_HARD_STOP_CM = 11.9`.
-⚠️ Nếu B5 cho ra "kiện CÓ chắn ở khoảng cách < 11.9cm" thì chặn cứng đó sẽ nổ ngay
-khi robot vừa cõng hàng rời giao lộ — công cụ tự cảnh báo chuyện này.
+```
+càng ở SÀN 74.6cm · TẦNG 1 76.8cm · TẦNG 2 72.6cm   (phía trước trống)
+```
+
+**Kiện hàng cõng KHÔNG che siêu âm.** Luồng giao hàng dùng siêu âm bình thường.
+
+Toàn bộ cơ chế "chống kiện che" từng thêm trong ngày đã bị **xoá** — nó dựa trên
+giả định sai này và gây **hai** lần robot lao vào kệ, vì nhánh dự phòng của nó là
+"đi tới khi hết line" mà line kéo tới tận chân kệ. Giữ lại **chặn cứng**
+`ADVANCE_HARD_STOP_CM = 11.9` vì đó là lưới an toàn cho mọi nguyên nhân, và kiện
+đọc 72-77cm nên không bao giờ chạm mốc đó.
+
+Vụ `retreat_from_shelf` timeout hoá ra do `APPROACH_SPEED = 30` quá sát vùng chết
+(25) — cõng hàng thì không thắng nổi ma sát. Nâng lên 40 là hết.
+
+**Bài học ghi lại:** đừng thêm phòng thủ cho một tình huống chưa ai đo. Số đo mất
+2 phút; bốn lần sửa hỏng dựa trên suy luận mất cả buổi chiều.
 
 Chỗ thứ ba là lỗi **im lặng hoàn toàn**: IR vẫn xác nhận thả, `packages_delivered`
 vẫn tăng, log toàn ✅. Báo lại số đo được để chốt cách sửa.

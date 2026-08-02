@@ -82,6 +82,16 @@
         "SPEED_DEFAULT": 50
       },
       "ghi_chu": "Chiều LÙI chưa xác nhận bằng phép đo này — LEFT_REV = 0.952 vẫn là số từ encoder."
+    },
+    {
+      "ten": "B5 — kiện hàng cõng có che siêu âm không",
+      "ngay": "2026-08-02",
+      "ket_qua": "ĐẠT — KHÔNG che. Đo bằng tools.check_load_blocks_sonar, phía trước trống: càng ở SÀN 74.6cm · TẦNG 1 76.8cm · TẦNG 2 72.6cm",
+      "gia_tri": {
+        "ULTRASONIC_QUEUE_LEN": 3,
+        "ADVANCE_HARD_STOP_CM": 11.9
+      },
+      "ghi_chu": "Bác bỏ giả định đã gây 4 lần sửa hỏng trong ngày. Cơ chế chống-kiện-che đã được XOÁ khỏi advance_to_end. Chặn cứng 11.9cm giữ lại vì nó là lưới an toàn cho mọi nguyên nhân — kiện đọc 72-77cm nên không đụng tới mốc đó."
     }
   ]
 }
