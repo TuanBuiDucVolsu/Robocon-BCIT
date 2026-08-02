@@ -114,9 +114,23 @@ class TestLiftTiming(unittest.TestCase):
                 pickup = self.lift._move_duration(side, 0, level, raising=True)
                 after_drop = self.lift._move_duration(side, 0, level, raising=True)
                 self.assertAlmostEqual(pickup, after_drop)
-                self.assertNotAlmostEqual(
-                    pickup, self.lift._time_for_level(level),
-                    msg=f"{side} tầng {level}: phải KHÁC thời gian thô (đã bù)")
+                # Bù có thể ĐÚNG BẰNG 0 sau khi calibrate — nghĩa là càng đó không
+                # cần bù, hoàn toàn hợp lệ. Bản cũ khẳng định "đã bù thì phải KHÁC
+                # thời gian thô" nên báo đỏ ngay khi ai đó chỉnh bù về 0, dù không
+                # có gì sai. Thứ cần canh là thao tác càng lẻ có ĐI QUA đường bù
+                # hay không, chứ không phải bù có khác 0 hay không.
+                extra = (config.LIFT_LEFT_EXTRA if side == "left"
+                         else config.LIFT_RIGHT_EXTRA)
+                raw = self.lift._time_for_level(level)
+                if abs(extra) > 1e-9:
+                    self.assertNotAlmostEqual(
+                        pickup, raw,
+                        msg=f"{side} tầng {level}: bù={extra:+.3f} mà vẫn ra thời gian thô "
+                            "— càng lẻ đang bỏ qua đường bù (đúng lỗi cũ)")
+                else:
+                    self.assertAlmostEqual(
+                        pickup, raw, places=6,
+                        msg=f"{side} tầng {level}: bù=0 thì phải bằng đúng thời gian thô")
 
     def test_move_duration_is_symmetric(self):
         for side in ("left", "right"):

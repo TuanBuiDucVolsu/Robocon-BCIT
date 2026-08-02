@@ -100,21 +100,29 @@ PWM_COMPENSATION_LEFT_REV = 1.00  # Bù bánh TRÁI khi lùi
 # ============================================================
 LIFT_TIME_FLOOR = 0.0
 LIFT_TIME_SHELF_1 = 0.800
-LIFT_TIME_SHELF_2 = 3.9
+# ⚠️ ĐANG DÒ giữa 2.6 và 3.9. Thử 2.6 trên robot thì càng lên KHÔNG TỚI tầng 2.
+# Cách suy "hai tầng cách đều nhau nên tầng 2 ≈ 2× tầng 1" là SAI — cơ cấu nâng
+# không tuyến tính theo chiều cao (dây curoa, tải trọng, ma sát tăng dần).
+# Cũng không scale theo tỉ lệ tầng 1 vừa giảm (0.8/1.2) được, vì lý do trên.
+# → chỉ còn cách dò trên robot. Quá NGẮN nguy hiểm hơn quá dài: càng chưa lên tới
+# tầng 2 mà tiến vào là đâm thẳng vào mặt tầng 1.
+LIFT_TIME_SHELF_2 = 3.5
 
 # Không có limit switch — home_to_floor() hạ liên tục bấy nhiêu giây để ép chạm đáy.
 # ⚠️ PHẢI > LIFT_TIME_SHELF_2, không thì đang ở tầng 2 sẽ không hạ hết và
 # _current_level bị khai sai = 0. Stall vài giây không sao, đừng để quá lâu.
-LIFT_HOME_DURATION = 4.0   # = min_home_duration() sau calibrate (3.9 + LOWER_EXTRA
-                           # trái 0.1). Hạ từ 4.5 vì motor là DigitalOutputDevice
-                           # (100% duty), kịch sàn rồi vẫn ghì → curoa trượt. Thấp
-                           # hơn nữa vô ích: home_to_floor() kẹp ngược lên 4.0.
+LIFT_HOME_DURATION = 3.7   # min_home_duration() = LIFT_TIME_SHELF_2 + LOWER_EXTRA lớn
+                           # nhất = 3.5 + 0.1 = 3.6 → chỉ còn dư 0.1s.
+                           # ⚠️ NÂNG LIFT_TIME_SHELF_2 là PHẢI nâng số này theo, không
+                           # thì home_to_floor() tự kẹp lên và ghi WARNING mỗi lần.
+                           # Giữ sát ngưỡng vì motor là DigitalOutputDevice (100% duty),
+                           # kịch sàn rồi vẫn ghì → mỗi giây thừa là mòn dây curoa.
 
 # Bù lệch 2 càng theo VỊ TRÍ TUYỆT ĐỐI: thời gian từ SÀN lên tầng n = LIFT_TIME_SHELF_n
 # + bù. Thời gian mỗi lần chạy = hiệu 2 mốc (Lift._level_time) → không cộng dồn khi đi
 # 0→1→2, và càng lẻ dùng chung hệ số với khi chạy cả 2 càng.
-LIFT_LEFT_EXTRA = 0.050          # Càng TRÁI khi nâng
-LIFT_RIGHT_EXTRA = 0.200         # Càng PHẢI khi nâng
+LIFT_LEFT_EXTRA = -0.050          # Càng TRÁI khi nâng
+LIFT_RIGHT_EXTRA = 0.000         # Càng PHẢI khi nâng
 LIFT_LEFT_LOWER_EXTRA = 0.100     # Càng TRÁI khi hạ (tăng nếu bên đó khó hạ)
 LIFT_RIGHT_LOWER_EXTRA = 0.050      # Càng PHẢI khi hạ
 

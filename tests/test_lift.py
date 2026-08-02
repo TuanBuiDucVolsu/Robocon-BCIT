@@ -590,7 +590,16 @@ def main():
 
     try:
         print("\nCàng KHÔNG có limit switch → phần mềm không đo được càng đang ở đâu.")
-        homed = _home(lift, "chuẩn mốc SÀN đầu phiên (bỏ qua được nếu chắc càng đã ở sàn)")
+        # Từ khi config.HOME_AT_INIT = False, đội LUÔN tự hạ càng về sàn bằng tay
+        # trước khi chạy — nên "đã ở sàn sẵn" mới là trường hợp thường gặp, và bắt
+        # nó chạy home đầy đủ mỗi lần mở menu chỉ tổ ghì motor vào đáy vô ích.
+        # Hỏi thẳng vị trí càng thay vì hỏi vòng qua câu "dưới càng có vật cản không".
+        print("\n  Càng ĐANG ở đâu?")
+        print(f"    y = đã ở SÀN sẵn      → chỉ ép nhẹ {lift.home_from(0):.2f}s cho chắc")
+        print(f"    n = không chắc / ở trên → home đầy đủ "
+              f"{max(config.LIFT_HOME_DURATION, lift.min_home_duration()):.2f}s")
+        at_floor = _yes("  Càng đã ở sàn sẵn? (y/N): ")
+        homed = _home(lift, "chuẩn mốc SÀN đầu phiên", quick=at_floor)
         if not homed:
             print("  ⚠ Chưa home: mọi option sẽ tính thời gian theo giả định "
                   "càng ĐANG Ở SÀN. Sai thì motor đội cữ.")
