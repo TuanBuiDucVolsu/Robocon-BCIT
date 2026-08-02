@@ -1018,8 +1018,10 @@ class Motion:
 
         if active_count >= config.INTERSECTION_THRESHOLD:
             self.stop()
-            logger.info("Phát hiện giao lộ (active=%d, cảm biến %s)",
-                        active_count, values)
+            logger.info("Phát hiện giao lộ (active=%d, cảm biến %s, ADC %s, ngưỡng %.0f)",
+                        active_count, values,
+                        [int(round(v * 1023)) for v in raw],
+                        LineSensor.nguong_cho(raw) * 1023)
             return True, values
 
         self._steer(raw, base_speed, reverse)
@@ -1301,7 +1303,14 @@ class Motion:
         self.stop()
         dt = time.time() - start
         if thoat:
-            logger.info("Rời giao lộ sau %.2fs (cảm biến %s)", dt, values)
+            # Bình thường ~0.4s. Lâu hơn hẳn = cảm biến CHẬP CHỜN giữa "giao lộ" và
+            # "sạch", phải chờ mãi mới đủ khoảng sạch liên tục — dấu hiệu robot đang
+            # nằm ở MÉP một mảng đen chứ không phải đã ra hẳn.
+            if dt > config.ESCAPE_CLEAR_TIME * 2 + config.ESCAPE_MIN_TIME:
+                logger.warning("Rời giao lộ mất tới %.2fs (cảm biến %s) — chập chờn, "
+                               "robot có thể đang ở MÉP mảng đen chứ chưa ra hẳn", dt, values)
+            else:
+                logger.info("Rời giao lộ sau %.2fs (cảm biến %s)", dt, values)
         else:
             logger.warning("Rời giao lộ: hết %.2fs mà cảm biến vẫn báo giao lộ — "
                            "robot có thể đang nằm trên mảng đen lớn, không phải vạch", dt)
