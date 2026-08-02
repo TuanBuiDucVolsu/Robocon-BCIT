@@ -557,14 +557,17 @@ EXIT_START_TIMEOUT = 5.0     # Giây, không thấy line thì báo lỗi
 # nhanh hơn thế thì phải hạ xuống. Cách đo: forward 1.0s ở EXIT_START_SPEED trên sàn
 # thi, đo bằng thước ra cm/s; giá trị an toàn = 45 / (cm/s).
 EXIT_START_BLIND_TIME = 1.5
-# Nới 0.4 → 1.0: robot vượt khoảng đứt 245mm bằng forward() MÙ (không lái), hai bánh
-# chưa cân nên nó tới line theo đường CHÉO — chạm mép line rồi mà 0.4s chưa đủ để bám
-# vào và duỗi thẳng, thành ra vào route với hướng lệch sẵn.
+# Nới 0.4 → 1.0: robot vượt khoảng đứt ở ô xuất phát bằng forward() MÙ (không lái),
+# hai bánh chưa cân nên nó tới line theo đường CHÉO — chạm mép line rồi mà 0.4s chưa
+# đủ để bám vào và duỗi thẳng, thành ra vào route với hướng lệch sẵn.
 # ⚠️ Đây chỉ là ĐỠ TRIỆU CHỨNG. Gốc rễ là forward() không chạy thẳng — sửa bằng
 # test_motion option `f` (calibrate PWM_COMPENSATION bằng encoder). Mọi chỗ chạy mù
-# khác (tiếp cận kệ, luồn càng, lùi ra, dò nửa sân) đều lệch theo cùng nguyên nhân.
+# khác (tiếp cận kệ, luồn càng, lùi ra) đều lệch theo cùng nguyên nhân.
 # Đừng nới quá tay: căn lâu quá thì robot bám line tới tận giao lộ C0R0, lúc đó lệnh
 # "tiến 1 giao lộ" của route sẽ đếm sang giao lộ KẾ TIẾP và đi lố.
+# (Viết trên phantom trước 02/08. Hai chi tiết nay đã lạc hậu: khoảng đứt KHÔNG phải
+#  245mm — số đó là bề rộng con mascot TRẮNG, do tiêu chí quét thang xám đếm nhầm nền
+#  xanh bão hoà là line; xem docs/SA_BAN.md mục 3b/3c. Và bước dò nửa sân đã tắt.)
 EXIT_START_ALIGN_TIME = 1.0  # Giây bám line ngắn để căn giữa sau khi chạm line
 
 MATCH_DURATION = 240
