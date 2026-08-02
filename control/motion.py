@@ -592,12 +592,32 @@ class Motion:
             speed = (config.APPROACH_SLOW_SPEED
                      if dist <= config.APPROACH_SLOW_DISTANCE
                      else config.APPROACH_FAST_SPEED)
-            self.forward(speed)
+            self._forward_guided(speed)
             time.sleep(0.02)
 
         self.stop()
         logger.warning("Timeout tiếp cận kệ sau %.1fs!", config.APPROACH_TIMEOUT)
         return False
+
+    def _forward_guided(self, speed: float) -> None:
+        """Tiến, CÓ LÁI theo line nếu còn thấy line; mất line thì chạy thẳng như cũ.
+
+        Dùng cho 2 chỗ tiến sát kệ (approach_shelf, creep_until) vốn chạy thẳng MÙ.
+        Đo trên robot: robot không đi thẳng nên trên quãng ~10cm cuối nó lệch dần,
+        càng không luồn hết vào khe pallet, pallet không lên càng, IR không báo →
+        bốc hàng hỏng. Chữa ở mắt xích ĐẦU (đi thẳng) chứ không phải mắt xích cuối
+        (ngưỡng IR / INSERT_MIN_DISTANCE).
+
+        An toàn kể cả khi line không kéo tới tận kệ: hết line thì rơi về forward(),
+        đúng hành vi cũ. Cờ giao lộ của follow_line() bị BỎ QUA ở đây — sát kệ thì
+        nền kệ có thể làm mọi mắt thấy đen, mà ta chỉ cần phần LÁI chứ không đếm.
+        """
+        if self._line_sensor.available:
+            values = self.read_line_sensor()
+            if sum(values) > 0:
+                self.follow_line(speed)
+                return
+        self.forward(speed)
 
     def creep_until(self, check, speed: float = config.INSERT_SPEED,
                     timeout: float = config.INSERT_TIMEOUT,
@@ -640,7 +660,7 @@ class Motion:
                              dist, min_distance)
                 return False
 
-            self.forward(speed)
+            self._forward_guided(speed)
             time.sleep(0.02)
 
             try:

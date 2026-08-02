@@ -832,6 +832,44 @@ class TestFollowLineReverse(unittest.TestCase):
         self.assertTrue(at_intersection, "lùi vẫn phải nhận ra giao lộ")
 
 
+class TestForwardGuided(unittest.TestCase):
+    """Tiến sát kệ phải CÓ LÁI khi còn thấy line, và chỉ chạy thẳng khi mất line.
+
+    approach_shelf() và creep_until() trước đây chạy forward() MÙ suốt ~10cm cuối.
+    Robot không đi thẳng tuyệt đối nên nó lệch dần, càng không luồn hết vào khe
+    pallet, IR không báo có hàng → bốc hàng hỏng. Đây là mắt xích ĐẦU của chuỗi đó.
+    """
+
+    def _motion(self, values):
+        m = object.__new__(Motion)
+        m._line_sensor = MagicMock()
+        m._line_sensor.available = True
+        m.read_line_sensor = lambda: values
+        m.follow_line = MagicMock(return_value=(False, values))
+        m.forward = MagicMock()
+        return m
+
+    def test_steers_while_line_is_visible(self):
+        m = self._motion([0, 0, 1, 1, 0, 0])
+        m._forward_guided(30)
+        m.follow_line.assert_called_once()
+        m.forward.assert_not_called()
+
+    def test_falls_back_to_straight_when_line_is_gone(self):
+        """Line không kéo tới tận kệ thì phải giữ ĐÚNG hành vi cũ, không đứng im."""
+        m = self._motion([0, 0, 0, 0, 0, 0])
+        m._forward_guided(30)
+        m.forward.assert_called_once_with(30)
+        m.follow_line.assert_not_called()
+
+    def test_falls_back_when_sensor_unavailable(self):
+        m = self._motion([0, 0, 1, 1, 0, 0])
+        m._line_sensor.available = False
+        m._forward_guided(30)
+        m.forward.assert_called_once_with(30)
+        m.follow_line.assert_not_called()
+
+
 class TestBackToIntersection(unittest.TestCase):
     """back_to_intersection — vòng lặp lùi tới giao lộ."""
 
