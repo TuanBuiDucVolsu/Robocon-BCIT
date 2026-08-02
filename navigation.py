@@ -35,7 +35,11 @@ HƯỚNG (heading): EAST=0 (về phía nhà máy), NORTH=1 (về phía R4), WEST
 kệ), SOUTH=3 (về phía R0/Kệ4). Xoay trái = +1, xoay phải = -1.
 
 LỆNH ROUTE sinh ra: ("forward", N) | ("back", N) | ("left",) | ("right",) | ("advance",)
-    ("advance",) = bám line đến HẾT line (vào kệ / khu nhà máy / Kệ 4) — những chỗ
+    ("advance",) = vào ĐIỂM CUỐI (kệ / khu nhà máy / Kệ 4). Bám line, nhưng ở kệ thì
+        thứ dừng nó là SIÊU ÂM (config.APPROACH_SLOW_DISTANCE) chứ không phải hết
+        line — "hết line" chỉ là nhánh dự phòng khi không có gì để siêu âm nhìn.
+        Xem Motion.advance_to_end. Sau đó approach_shelf() canh nốt về
+        APPROACH_DISTANCE. Đây là những chỗ
     này là ĐIỂM CUỐI của line, không phải giao lộ nên không đếm được bằng forward.
     ("back", N) = LÙI ra khỏi điểm cuối, vẫn bám line, vẫn quay mặt vào kệ/nhà máy.
     Có nó thì không phải xoay 180° mỗi lần rút khỏi kệ — xem config.REVERSE_SPEED.
@@ -142,7 +146,8 @@ EDGES: list[tuple[str, str, int, str]] = [
 # ============================================================
 # tên → (node gắn vào, hướng robot khi đứng tại đó, mô tả)
 # Quy ước: "hướng" là hướng robot quay mặt khi ở điểm cuối (nhìn vào kệ/nhà máy).
-#   - Từ node vào điểm cuối: lệnh ("advance",) — bám line tới hết line.
+#   - Từ node vào điểm cuối: lệnh ("advance",) — bám line vào điểm cuối, dừng khi
+#     siêu âm thấy mục tiêu (hoặc hết line nếu không có gì để nhìn).
 #   - Từ điểm cuối ra node: quay về hướng ngược lại rồi ("forward", 1).
 #     (Sau retreat robot vẫn nằm giữa điểm cuối và node, chưa qua giao lộ.)
 
@@ -519,7 +524,12 @@ def route_to_text(route: list) -> str:
         elif cmd[0] == "right":
             parts.append("xoay phải")
         elif cmd[0] == "advance":
-            parts.append("bám line tới hết line")
+            # KHÔNG ghi "tới hết line": ở kệ thì siêu âm dừng trước, tại
+            # APPROACH_SLOW_DISTANCE. Nhãn cũ làm người đọc route tưởng robot bò
+            # tới sát chân kệ rồi mới dừng, và tưởng nó dừng SAI khi thấy nó đứng
+            # cách kệ 20cm — trong khi đó mới là hành vi đúng.
+            parts.append(f"vào điểm cuối (dừng ở {config.APPROACH_SLOW_DISTANCE}cm "
+                         f"hoặc hết line)")
         else:
             parts.append(str(cmd))
     return " → ".join(parts)

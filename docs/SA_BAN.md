@@ -151,8 +151,9 @@ VIỀN Ô KỆ chứ không phải line; **hàng** R4 y≈128, R2 y≈374, R1 y�
 2. **Line ngang dừng ở mép khu nhà máy**, không cắt sống giữa sân → **giữa các khu
    nhà máy KHÔNG có line nối dọc**. Giao kiện thứ 2 phải quay về cột C1 rồi đi dọc C1.
 3. **Khu nhà máy / kệ / Kệ 4 là ĐIỂM CUỐI của line, không phải giao lộ** → không đếm
-   được bằng `("forward", N)`. Dùng lệnh `("advance",)` (bám line tới hết line) rồi
-   `approach_shelf()` canh nốt bằng siêu âm.
+   được bằng `("forward", N)`. Dùng lệnh `("advance",)` — bám line vào điểm cuối, dừng
+   khi siêu âm thấy mục tiêu ở `APPROACH_SLOW_DISTANCE` (20cm) — rồi `approach_shelf()`
+   canh nốt về `APPROACH_DISTANCE` (11.9cm).
 4. **Hàng R2 bị vòng tròn ROBOCON cắt đứt 560mm** → cấm đi thẳng Kệ 2 ↔ cột giữa;
    robot phải vòng qua R4 hoặc R0. Khoảng đứt 245mm ở ô xuất phát thì vượt được
    (xem `config.LINE_GAP_COAST_TIME`) nhưng bị tính thêm chi phí để ưu tiên tuyến sạch.

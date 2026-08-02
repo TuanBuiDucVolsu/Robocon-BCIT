@@ -171,7 +171,10 @@ cost            = navigation.route_cost(pose, goal)     # so sánh thứ tự gi
 - **Node giao lộ**: `C0R0/C0R2/C0R4` (cột kệ — CHỈ 3 giao lộ vì R1/R3 không kéo tới
   cột kệ) và `C1R0..C1R4` (cột giữa — đủ 5 hàng).
 - **Điểm cuối (terminal)**: kệ, khu nhà máy, Kệ 4 — là CUỐI đường line, không phải
-  giao lộ. Vào bằng lệnh `("advance",)` (bám line tới hết line), ra bằng `forward 1`.
+  giao lộ. Vào bằng lệnh `("advance",)`, ra bằng `forward 1`. **`advance` KHÔNG bò tới
+  sát chân kệ**: ở kệ/nhà máy thì siêu âm dừng nó trước, tại `APPROACH_SLOW_DISTANCE`
+  (20cm), rồi `approach_shelf()` canh nốt về `APPROACH_DISTANCE` (11.9cm). "Hết line"
+  chỉ là nhánh dự phòng khi không có gì để siêu âm nhìn.
 - **Cạnh bị cấm**: `C0R2 ↔ C1R2` — hàng R2 đứt ~560mm ở vòng tròn ROBOCON.
 - **Cạnh bị phạt**: `C0R0 ↔ C1R0` (+`EDGE_COST_START_GAP`) — đứt ~245mm ở ô xuất phát.
 - Xem/kiểm tra: `python3 -m tools.show_routes`; test mô phỏng trong `tests/test_logic.py`.
@@ -233,7 +236,7 @@ trong log. `navigation.set_factory_order(label)` đổi được giữa lúc ch�
 4. Tốn 2-4s đầu trận.
 
 Thứ nó bảo vệ chỉ là giả thuyết "bản in sai chiều" — kiểm bằng mắt 5 giây trên sân.
-Route giờ đi thẳng: `START → SHELF0` = `tiến 1 giao lộ → bám line tới hết line`.
+Route giờ đi thẳng: `START → SHELF0` = `tiến 1 giao lộ → vào điểm cuối`.
 
 Cơ chế vẫn còn trong code và bật lại được; `tests/test_match_sim.py::TestAutoDetectSide`
 tự ép cờ `True` trong phạm vi test để vẫn kiểm được nó.
