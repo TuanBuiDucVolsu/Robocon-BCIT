@@ -206,7 +206,10 @@ APPROACH_DISTANCE = 11.9     # ĐÃ ĐO — measure_pickup ① (APPROACH_STANDOF
 #     dừng muộn → càng còn ở SÀN lúc này, chui vào gầm kệ → hỏng lượt bốc
 # 2.0 nhắm phủ hết mức trôi quan sát được. Đo cm/s (NGHIEM_THU A3) rồi tính đúng:
 #     bù = cm/s × 0.09s.  Đo khoảng dừng 5 lần (B3) thì cộng thêm nửa độ tản.
-APPROACH_STOP_MARGIN = 2.0
+# ĐÃ ĐO trên robot 02/08 (approach_shelf tự in): lúc quyết định báo 13.3cm, đo lại
+# khi đứng yên 9.8cm → trôi 3.5cm. Khớp phân tích: trễ siêu âm ~1.4 + ramp 0.06s
+# ~0.9 + quãng phanh ~1.0. Bù 2.0 thiếu 2.1 → 4.1.
+APPROACH_STOP_MARGIN = 4.1
 
 # --- ② LÙI RA ----------------------------------------------------------------
 # Sau khi nhấc/thả xong, robot lùi tới khi đọc được ≥ số này thì dừng.
@@ -290,7 +293,13 @@ STOP_RAMP_STEPS = 4          # Số bậc giảm
 STOP_SETTLE_TIME = 0.15      # Giây đứng yên cho khung xe hết chòng chành
 
 APPROACH_TIMEOUT = 5.0       # Timeout tiếp cận / lùi ra (giây)
-APPROACH_SPEED = 30          # Tốc độ lùi ra
+# ⚠️ 30 QUÁ SÁT VÙNG CHẾT (MOTOR_MIN_DUTY = 25). Đo trên robot 02/08: lùi ra khỏi
+# kệ TIMEOUT sau 5s — robot cõng 2 kiện nên càng ì, 30% không đủ thắng ma sát.
+# Cùng đúng lý do đã buộc nâng INSERT_SPEED 25 → 32. Nâng 30 → 40.
+# Lùi ra là thao tác ÍT RỦI RO nhất để chạy nhanh: phía sau trống, và điểm dừng do
+# siêu âm quyết định chứ không phải thời gian. Trong trận mọi tuyến giao đều mở đầu
+# bằng lùi, nên chặng này hỏng là hỏng cả lượt.
+APPROACH_SPEED = 40          # Tốc độ lùi ra
 APPROACH_FAST_SPEED = 60     # Pha xa
 # ⚠️ 25 là QUÁ THẤP với JGA25-370 qua L298N (sụt ~2V): robot chỉ nhích từng tí,
 # chậm hơn ngưỡng 0.83cm/s của cơ chế chống húc kệ → approach_shelf() bị dừng oan

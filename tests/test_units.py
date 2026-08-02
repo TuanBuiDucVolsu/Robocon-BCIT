@@ -881,6 +881,31 @@ class TestApproachShelf(unittest.TestCase):
         self.assertGreater(config.APPROACH_STOP_MARGIN, 0,
                            "bù âm = dừng muộn = càng chui vào gầm kệ")
 
+    def test_stop_trigger_stays_inside_the_slow_phase(self):
+        """Điểm dừng phải nằm DƯỚI mốc chuyển tốc, không thì dừng lúc còn chạy nhanh.
+
+        approach_shelf chạy 60% khi xa, 32% khi dưới APPROACH_SLOW_DISTANCE. Nếu
+        APPROACH_DISTANCE + APPROACH_STOP_MARGIN vượt mốc đó thì robot dừng khi VẪN
+        đang ở pha nhanh — quãng trôi lớn hơn hẳn, và cả phép bù mất ý nghĩa vì nó
+        được đo ở tốc độ chậm.
+        """
+        kich_hoat = config.APPROACH_DISTANCE + config.APPROACH_STOP_MARGIN
+        self.assertLess(
+            kich_hoat, config.APPROACH_SLOW_DISTANCE,
+            f"dừng ở {kich_hoat:.1f}cm nhưng chỉ chậm lại dưới "
+            f"{config.APPROACH_SLOW_DISTANCE}cm — nới APPROACH_SLOW_DISTANCE")
+
+    def test_retreat_speed_clears_the_dead_zone(self):
+        """Lùi ra phải đủ nhanh để thắng ma sát khi robot đang CÕNG 2 KIỆN.
+
+        Đo trên robot 02/08: APPROACH_SPEED = 30 (chỉ hơn vùng chết 5) làm
+        retreat_from_shelf TIMEOUT sau 5s. Trong trận mọi tuyến giao đều mở đầu bằng
+        lùi, nên chặng này hỏng là hỏng cả lượt.
+        """
+        self.assertGreaterEqual(
+            config.APPROACH_SPEED, config.MOTOR_MIN_DUTY + 10,
+            "lùi ra quá sát vùng chết — cõng hàng là không thắng nổi ma sát")
+
     def test_fails_without_distance_sensor(self):
         m = object.__new__(Motion)
         m._distance_sensor = None

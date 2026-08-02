@@ -688,7 +688,12 @@ class Motion:
                 time.sleep(config.ULTRASONIC_QUEUE_LEN * 0.06 + 0.05)
                 that = self.get_distance()
                 if that >= 0:
-                    logger.info(
+                    # Lệch quá 1cm thì WARNING, không phải INFO: dòng ✅ của smoke in
+                    # ra bất kể, nên nếu chôn ở INFO thì "robot tiến quá vị trí" trông
+                    # y hệt "chạy đúng". Đã gặp thật.
+                    ghi = (logger.info if abs(that - target_cm) <= 1.0
+                           else logger.warning)
+                    ghi(
                         "Đã đến vị trí kệ — lúc quyết định báo %.1fcm, ĐO LẠI khi "
                         "đứng yên %.1fcm (trôi thêm %.1fcm). Mốc %.1f + bù %.1f. "
                         "%s", dist, that, dist - that, target_cm,
