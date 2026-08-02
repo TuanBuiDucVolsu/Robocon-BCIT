@@ -661,7 +661,21 @@ class Motion:
             # KHI HẾT LINE — mà line kéo tới tận chân kệ, tức LAO THẲNG VÀO KỆ.
             # Đo trên robot: option 8 lúc dừng đúng 11.9cm, lúc lao vào kệ — hỏng
             # kiểu NHỊ PHÂN, đúng dấu hiệu một nhánh lật qua lật lại.
-            if (dist_dau is not None and not ke_bi_che
+            # ⛔ CHẶN CỨNG — đứng trên MỌI logic khác.
+            # Nhánh "đi tới khi hết line" của hàm này VỀ BẢN CHẤT là đâm vào kệ: line
+            # kéo tới cách chân kệ 1mm (SA_BAN.md 3b). Nhánh đó chỉ an toàn ở khu nhà
+            # máy (line dừng ở mép khu). Nên dù cơ chế nào phía trên quyết định bỏ qua
+            # siêu âm, hễ số đo xuống dưới mốc này là DỪNG.
+            if 0 <= dist <= config.ADVANCE_HARD_STOP_CM:
+                self.stop_gently(base_speed)
+                logger.warning("Advance: CHẶN CỨNG ở %.1fcm (mốc %.1f) — dừng bất kể "
+                               "logic phía trên. Nếu tới đây thì hoặc siêu âm mất tín "
+                               "hiệu ở xa, hoặc cơ chế chống-kiện-che bật nhầm.",
+                               dist, config.ADVANCE_HARD_STOP_CM)
+                return True
+
+            if (config.ADVANCE_LOAD_BLOCK_DETECT
+                    and dist_dau is not None and not ke_bi_che
                     and troi >= config.ADVANCE_STUCK_TIME
                     and abs(dist - dist_dau) < config.ADVANCE_STUCK_CM
                     and dist <= config.APPROACH_SLOW_DISTANCE):

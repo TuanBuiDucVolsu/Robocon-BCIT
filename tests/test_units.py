@@ -1213,6 +1213,28 @@ class TestAdvanceToEnd(unittest.TestCase):
         m.get_distance = lambda: seq.pop(0) if len(seq) > 1 else seq[0]
         self.assertTrue(m.advance_to_end(timeout=3.0))
 
+    def test_hard_stop_fires_even_when_line_never_ends(self):
+        """⛔ CHẶN CỨNG: số đo dưới mốc là dừng, dù logic nào phía trên nghĩ gì.
+
+        Nhánh "đi tới khi hết line" VỀ BẢN CHẤT là đâm vào kệ — line kéo tới cách
+        chân kệ 1mm. Đây là lưới an toàn cuối cùng cho mọi đường dẫn tới đó.
+        """
+        m = self._motion([[0, 0, 1, 1, 0, 0]] * 400)   # line KHÔNG bao giờ hết
+        m.get_distance = lambda: config.ADVANCE_HARD_STOP_CM - 1.0
+        t0 = time.time()
+        self.assertTrue(m.advance_to_end(timeout=3.0))
+        self.assertLess(time.time() - t0, 1.0, "chặn cứng phải nổ ngay, không chờ")
+        m.stop.assert_called()   # stop_gently() thật gọi tới stop()
+
+    def test_load_block_detect_is_off_until_measured(self):
+        """Cơ chế chống-kiện-che phải TẮT cho tới khi làm bài B5.
+
+        Nó dựa trên giả định chưa ai đo, và đã gây 2 hồi quy trong một ngày — cả hai
+        đều làm robot lao vào kệ, vì nhánh dự phòng của nó là "đi tới khi hết line".
+        """
+        self.assertFalse(config.ADVANCE_LOAD_BLOCK_DETECT,
+                         "bật lại chỉ sau khi B5 xác nhận kiện có che cảm biến")
+
     def test_constant_FAR_reading_is_lost_echo_not_a_carried_load(self):
         """⚠️ HỒI QUY: mất tiếng vọng (số kịch trần, đứng yên) KHÔNG phải kiện che.
 
