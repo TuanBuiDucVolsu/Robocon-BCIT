@@ -415,6 +415,8 @@ tại điểm giao, line cắt ngang nằm dọc thanh cảm biến nên xoay ki
 | `tools/measure_phases.py` | Đọc `robot_log.txt` → 6 tham số cho `estimate_time` + dự báo điểm. Chạy sau mỗi lượt `practice.sh` |
 | `tools/estimate_time.py` | "Worst case giao được mấy kiện trong 240s" — nạp số đo từ `measure_phases` |
 | `tools/sim_ui.py` | Xuất trang HTML **mô phỏng robot chạy** — phát lại các bước state machine thật sinh ra, đổi tốc độ ngay trên trang |
+| `tools/check_regression.py` | **Đổi hằng số có làm mất hiệu lực bài test nào đã ĐẠT trên robot không?** Đối chiếu `tests/da_nghiem_thu.json` với config hiện tại. **CHẠY TRƯỚC VÀ SAU mỗi lần sửa hằng số** |
+| `tests/da_nghiem_thu.json` | Sổ ghi cái gì đã xác nhận chạy được TRÊN ROBOT và nó dựa vào hằng số nào. Chỉ thêm mục sau khi ĐẠT 3/3. **Đừng sửa cho khớp config** — như vậy là xoá bằng chứng |
 | `tests/NGHIEM_THU.md` | **Tiêu chí ĐẠT/CHƯA ĐẠT bằng SỐ** cho vòng A(số nền)→B(cơ cấu)→C(ghép nối)→D(ngân sách). Mọi bước phải lặp **3 lần** mới tính đạt. Có bảng ghi số |
 | `tests/LO_TRINH_TEST.md` | **Lộ trình test đánh số theo thứ tự phải làm** — bắt đầu từ đây |
 | `tests/DIEN_TAP.md` | 9 bài diễn tập sát thi đấu: ngân sách 240s, kiện xấu nhất, reset, pin, ánh sáng |
@@ -653,6 +655,36 @@ git pull /tmp/sync.bundle HEAD
 ⚠️ **Luôn `git status --short` trên phantom TRƯỚC.** Đã hai lần suýt xoá mất số
 calibrate người dùng vừa đo (`PWM_COMPENSATION`, `LIFT_RIGHT_LOWER_EXTRA`) — những
 số đó chỉ tồn tại trên phantom, không ở đâu khác.
+
+## ⚠️ Đừng phá thứ đã chạy được
+
+Sửa một hằng số rất dễ vô hiệu hoá **âm thầm** một bài test đã ĐẠT trên robot, vì
+không chỗ nào ghi "bài X dựa vào hằng số nào". Đã xảy ra 3 lần trong một buổi:
+
+| Đổi gì | Phá cái gì |
+|---|---|
+| `REVERSE_SPEED` 35 → 40 | `REVERSE_RECENTER_TIME = 1.3s` đo ở 35% → tiến bù quá vạch, xoay xong mất line |
+| `MOTOR_MIN_DUTY` 25 → 30 | quên rà `APPROACH_SLOW_SPEED`/`REVERSE_SPEED` → mất lực lái |
+| thêm `ADVANCE_MIN_APPROACH_CM` | nhánh dự phòng thành "chạy tới hết line" = ĐÂM VÀO KỆ |
+
+**Quy trình bắt buộc khi sửa bất kỳ hằng số nào:**
+
+```bash
+python3 -m tools.check_regression --ngan    # TRƯỚC: đang có gì mất hiệu lực?
+# ... sửa ...
+python3 -m tools.check_regression --ngan    # SAU: mình vừa phá thêm cái gì?
+```
+
+Có bài mới hỏng thì **nói ra**, đừng lặng lẽ đi tiếp. Chạy lại trên robot rồi cập
+nhật `tests/da_nghiem_thu.json` (giá trị **và** ngày). Tuyệt đối **không** sửa file
+đó cho khớp config — làm vậy là xoá mất bằng chứng, và lần sau không ai biết bài đó
+từng đạt ở cấu hình nào.
+
+Hai nhóm ràng buộc hay bị bỏ sót:
+- **Hằng số THỜI GIAN gắn với TỐC ĐỘ nó được đo ra** (quãng đường tỉ lệ thẳng với
+  tốc độ): `REVERSE_RECENTER_TIME`, `EXIT_START_BLIND_TIME`, `RETREAT_BLIND_TIME`,
+  `PROBE_TRAVEL_TIME`, `LINE_GAP_COAST_TIME`.
+- **Mọi tốc độ dùng với `follow_line` phải cách `MOTOR_MIN_DUTY` ≥ 8** — có test quét.
 
 ## Quy tắc quan trọng
 

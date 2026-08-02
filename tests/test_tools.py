@@ -439,5 +439,43 @@ def parse_log_string(text: str):
         os.unlink(path)
 
 
+
+class TestSoNghiemThu(unittest.TestCase):
+    """Sổ nghiệm thu phải đọc được và trỏ đúng hằng số có thật.
+
+    Sổ hỏng thì công cụ chống hồi quy im lặng vô dụng — mà nó sinh ra chính vì lỗi
+    im lặng: đổi hằng số làm mất hiệu lực một bài đã ĐẠT trên robot mà không ai biết.
+    """
+
+    def setUp(self):
+        import json
+        from pathlib import Path
+        self.so = json.loads(
+            (Path(__file__).resolve().parent / "da_nghiem_thu.json")
+            .read_text(encoding="utf-8"))
+
+    def test_parses_and_has_entries(self):
+        self.assertGreater(len(self.so["muc"]), 0)
+
+    def test_every_entry_has_the_required_fields(self):
+        for muc in self.so["muc"]:
+            for khoa in ("ten", "ngay", "ket_qua", "gia_tri"):
+                self.assertIn(khoa, muc, f"mục '{muc.get('ten', '?')}' thiếu '{khoa}'")
+            self.assertGreater(len(muc["gia_tri"]), 0,
+                               f"mục '{muc['ten']}' không ghi hằng số nào — "
+                               "vậy thì không phát hiện được hồi quy")
+
+    def test_every_referenced_constant_exists_in_config(self):
+        """Trỏ vào hằng số đã bị xoá/đổi tên thì công cụ báo nhầm là 'phải chạy lại'."""
+        import config
+        thieu = [(m["ten"], t) for m in self.so["muc"] for t in m["gia_tri"]
+                 if not hasattr(config, t)]
+        self.assertEqual(thieu, [], f"hằng số không có trong config: {thieu}")
+
+    def test_checker_runs(self):
+        from tools.check_regression import kiem
+        ket = kiem()
+        self.assertEqual(len(ket), len(self.so["muc"]))
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

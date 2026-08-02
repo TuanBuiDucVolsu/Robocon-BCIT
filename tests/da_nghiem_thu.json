@@ -1,0 +1,76 @@
+{
+  "_doc": [
+    "SỔ NGHIỆM THU — cái gì đã xác nhận CHẠY ĐƯỢC TRÊN ROBOT, và nó dựa vào hằng số nào.",
+    "",
+    "Mục đích: đổi một hằng số thì biết ngay mình vừa vô hiệu hoá bài test nào.",
+    "Chạy `python3 -m tools.check_regression` để đối chiếu với config hiện tại.",
+    "",
+    "Thêm mục mới SAU KHI đã chạy thật trên robot và ĐẠT 3/3 lần (xem NGHIEM_THU.md).",
+    "Ghi `gia_tri` đúng bằng giá trị config lúc bài đó ĐẠT — đó là bằng chứng, đừng sửa",
+    "cho khớp config mới; khớp lại chỉ bằng cách CHẠY LẠI bài test rồi cập nhật ngày.",
+    "Chỉ soi hằng số trong config.py. Hằng số nằm ở module khác (vd ORB_FEATURES ở vision/shape_match.py) thì ghi vào 'ghi_chu'."
+  ],
+  "muc": [
+    {
+      "ten": "test_motion 10 — xoay trái 90°",
+      "ngay": "2026-08-01",
+      "ket_qua": "ĐẠT — đúng 90° (chiều PHẢI chưa kiểm)",
+      "gia_tri": {
+        "TURN_TIME": 0.95,
+        "SPEED_TURN": 62
+      }
+    },
+    {
+      "ten": "test_motion 15 — lùi tới giao lộ",
+      "ngay": "2026-08-01",
+      "ket_qua": "ĐẠT — lùi thẳng, dừng đúng giao lộ, cảm biến [0,0,0,0,0,1]",
+      "gia_tri": {
+        "REVERSE_SPEED": 35,
+        "REVERSE_RECENTER_TIME": 1.3,
+        "LINE_THRESHOLD": 200,
+        "LINE_KP": 16.0,
+        "LINE_KD": 6.5
+      }
+    },
+    {
+      "ten": "test_lift d/e — độ cao 2 tầng + bù lệch 2 càng",
+      "ngay": "2026-08-01",
+      "ket_qua": "ĐẠT — càng tới đúng 2 tầng, 2 bên bằng nhau",
+      "gia_tri": {
+        "LIFT_TIME_SHELF_1": 0.8,
+        "LIFT_TIME_SHELF_2": 3.5,
+        "LIFT_LEFT_EXTRA": -0.05,
+        "LIFT_RIGHT_EXTRA": 0.0,
+        "LIFT_LEFT_LOWER_EXTRA": 0.1,
+        "LIFT_HOME_DURATION": 3.7
+      }
+    },
+    {
+      "ten": "test_vision 9 — nhận diện 4/4 ô",
+      "ngay": "2026-08-01",
+      "ket_qua": "ĐẠT — cả 4 ô đúng qua CẢ ORB lẫn HSV",
+      "gia_tri": {
+        "CAMERA_RESOLUTION": [
+          1296,
+          972
+        ],
+        "ROI_HEIGHT": 0.3,
+        "ROI_MARGIN_X": 0.1,
+        "CONFIDENCE_THRESHOLD": 0.08,
+        "SHAPE_MIN_INLIERS": 6
+      },
+      "ghi_chu": "ORB_FEATURES nằm ở vision/shape_match.py chứ không ở config, công cụ này chỉ soi config.py — đổi số đó thì phải nhớ chạy lại tay."
+    },
+    {
+      "ten": "test_motion 9 — tiếp cận + lùi khỏi kệ",
+      "ngay": "2026-08-01",
+      "ket_qua": "ĐẠT — chạy sạch, không dừng oan giữa đường",
+      "gia_tri": {
+        "APPROACH_SLOW_SPEED": 32,
+        "APPROACH_FAST_SPEED": 60,
+        "APPROACH_DISTANCE": 11.9,
+        "APPROACH_SLOW_DISTANCE": 20
+      }
+    }
+  ]
+}
