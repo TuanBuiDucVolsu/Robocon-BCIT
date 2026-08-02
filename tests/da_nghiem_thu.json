@@ -75,13 +75,13 @@
     {
       "ten": "test_motion f — cân 2 bánh chiều LÙI bằng encoder",
       "ngay": "2026-08-02",
-      "ket_qua": "ĐẠT — lệch xung 4.8% → 0.6% sau 1 vòng chỉnh (trái=336 phải=338)",
+      "ket_qua": "NGỜ VỰC — encoder đo được 4.8% → 0.6% sau 1 vòng, nhưng đo lại ở chiều tiến cho thấy nhiễu của chính phép đo là ±5% (tỉ lệ tản 0.093, tổng xung tản 10%). Con số 0.952 có thể chỉ là may.",
       "gia_tri": {
         "PWM_COMPENSATION_REV": 1.0,
         "PWM_COMPENSATION_LEFT_REV": 0.952,
         "SPEED_DEFAULT": 50
       },
-      "ghi_chu": "Chiều TIẾN chưa đo lại bằng công cụ mới — PWM_COMPENSATION 0.924 là số cũ."
+      "ghi_chu": "PHẢI xác nhận lại bằng phép đo VẬT LÝ: chạy 2m dọc vạch thẳng, trôi ngang ≤2cm. Encoder không đủ phân giải cho việc này."
     }
   ]
 }

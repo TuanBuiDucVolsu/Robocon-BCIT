@@ -353,9 +353,22 @@ def test_calibrate_pwm_by_encoder(m: Motion):
               + "  ".join(f"{l}/{r}" for l, r in mau))
         print(f"  Trung vị: trái={left} xung   phải={right} xung")
         tan = [l / r for l, r in mau if r]
-        if tan and (max(tan) - min(tan)) > 0.05:
-            print(f"  ⚠ Tỉ lệ tản {max(tan) - min(tan):.3f} giữa 3 lượt — phép đo "
-                  "KHÔNG đáng tin. Kiểm dây encoder, pin, và bánh có vướng gì không.")
+        do_tan = (max(tan) - min(tan)) if tan else 0.0
+        tong = [l + r for l, r in mau]
+        tan_tong = (max(tong) - min(tong)) / max(max(tong), 1) * 100
+        if do_tan > 0.05:
+            print(f"  ⚠ TỈ LỆ TẢN {do_tan:.3f} giữa 3 lượt, tổng xung tản {tan_tong:.0f}% "
+                  "— PHÉP ĐO KHÔNG DÙNG ĐƯỢC.")
+            print("     Nhiễu đang LỚN HƠN thứ cần đo (lệch 2 bánh thường chỉ 2-5%),")
+            print("     nên mọi kết luận rút ra ở đây đều vô nghĩa — kể cả 'đã cân'.")
+            print("     Nguyên nhân: encoder JGA25-370 xung rất dày, callback gpiozero")
+            print("     RỚT XUNG và 2 bên rớt không như nhau.")
+            print("     → Cân 2 bánh bằng PHÉP ĐO VẬT LÝ thay vì encoder:")
+            print("       dán vạch thẳng 2m dưới sàn, cho robot chạy dọc theo, đo TRÔI")
+            print("       NGANG ở cuối. Đạt = ≤2cm/2m. Chỉnh hệ số bên trôi về, mỗi")
+            print("       lần 0.02. Xem tests/NGHIEM_THU.md bước A2.")
+            print("     → Hoặc chuyển phần encoder sang pigpio (xem WheelEncoder).")
+            continue
         if left == 0 or right == 0:
             print("  Không đọc được xung ở 1 trong 2 bánh — kiểm tra dây encoder "
                   "(C1/VCC/GND) trước khi calibrate.")

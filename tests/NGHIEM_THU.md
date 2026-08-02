@@ -34,19 +34,22 @@ kịp kéo lại. **Chênh lệch giữa hai chiều quan trọng hơn trị tuy
 
 ### A2 · Bù PWM CẢ 2 CHIỀU — `test_motion` **f** 🔑
 
-Kê robot lên đế (bánh không chạm đất). Trong `f` chọn **t** (tiến) rồi **l** (lùi),
-mỗi chiều lặp cho tới khi đạt.
+⚠️ **ĐO BẰNG THƯỚC MỚI LÀ CHÍNH, encoder chỉ để tham khảo.** Đo trên robot 02/08:
+tỉ lệ xung 2 bánh tản **±5%** và tổng xung tản **±10%** giữa 3 lượt **cùng cấu hình**
+— nhiễu LỚN HƠN thứ cần đo (lệch 2 bánh thường 2-5%). Nguyên nhân: encoder
+JGA25-370 xung rất dày, callback gpiozero rớt xung và 2 bên rớt không như nhau.
+Vòng chỉnh theo encoder đã dao động thật: 3.8% → 7.9% → 9.0%.
 
-| | |
-|---|---|
-| **ĐẠT** | Cả 2 chiều: lệch xung 2 bánh **< 1%** |
-| **CHƯA ĐẠT** | ≥ 1% ở chiều nào → lưu giá trị đề xuất, đo lại chiều đó |
+Encoder (`f` → **t**/**l**) chỉ dùng để **thấy nhanh bên nào nhanh hơn**; nếu nó báo
+"TỈ LỆ TẢN ... PHÉP ĐO KHÔNG DÙNG ĐƯỢC" thì bỏ qua, xuống thẳng phép đo thước.
 
-Rồi hạ robot xuống, dán vạch thẳng 2m, chạy dọc theo và đo trôi ngang:
+**Phép đo quyết định:** hạ robot xuống, dán vạch thẳng 2m, chạy dọc theo, đo trôi ngang:
 
 | | Tiến | Lùi |
 |---|---|---|
 | **ĐẠT** | ≤ **2cm / 2m** | ≤ **2cm / 2m** |
+| **Sửa** | trôi sang trái → hạ `PWM_COMPENSATION_LEFT` 0.02 | trôi sang trái → hạ `PWM_COMPENSATION_LEFT_REV` 0.02 |
+| | trôi sang phải → hạ `PWM_COMPENSATION` 0.02 | trôi sang phải → hạ `PWM_COMPENSATION_REV` 0.02 |
 
 2cm/2m ≈ 0.6°. **Chiều lùi bắt buộc phải đạt** — mọi tuyến giao hàng đều mở đầu
 bằng `LÙI 1 giao lộ`, khoảng 28 lần mỗi trận.
