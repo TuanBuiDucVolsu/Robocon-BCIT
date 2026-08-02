@@ -227,8 +227,14 @@ Bài dừng ở bước [3/5] cho bạn **đo tay khoảng cách tới kệ** �
 **Làm bài này TRƯỚC mọi bài có giao hàng.** 2 phút, và nó quyết định luồng thi đấu
 có chạy được không.
 
-Đặt tay 1 pallet lên càng, nâng càng lên **tầng 1** (`test_lift` option 2), đẩy robot
-ra giữa sa bàn **cách mọi vật ≥ 60cm**, rồi chạy `test_motion` option **8**.
+```bash
+python3 -m tools.check_load_blocks_sonar
+```
+
+Nó tự làm cả bài: đặt tay 1 pallet lên càng, đẩy robot ra chỗ trống (phía trước
+không có gì trong 60cm), rồi công cụ **nâng càng qua SÀN → TẦNG 1 → TẦNG 2**, đọc
+siêu âm ở từng mức, hạ càng về, và in thẳng kết luận + việc phải sửa trong config.
+Bánh xe KHÔNG chạy.
 
 | Đọc được | Nghĩa | Hệ quả |
 |---|---|---|
@@ -240,11 +246,17 @@ Lặp lại với càng ở **tầng 2**.
 **Nếu ra số nhỏ cố định:** trong luồng thi đấu, robot cõng kiện đi giao và siêu âm
 chỉ nhìn thấy kiện đó. Ba chỗ dùng siêu âm lúc đang cõng:
 
-| Chỗ | Đã xử lý chưa |
+| Chỗ | Trạng thái 02/08 |
 |---|---|
 | `retreat_from_shelf` sau khi bốc | ✅ phát hiện "số đo không tăng" → lùi theo giờ |
-| `advance_to_end` khi tới nhà máy | ✅ phát hiện số đo ĐỨNG YÊN (`ADVANCE_STUCK_*`) |
-| `approach_shelf` khi thả hàng | ❌ **CHƯA** — sẽ "tới nơi" ngay, thả kiện giữa sa bàn |
+| `advance_to_end` khi tới nhà máy | ⚠️ **ĐÃ TẮT** (`ADVANCE_LOAD_BLOCK_DETECT = False`) |
+| `approach_shelf` khi thả hàng | ❌ chưa có gì |
+
+Cơ chế ở dòng giữa bị tắt vì nó dựa trên giả định chưa đo và đã gây **hai** lần
+robot lao vào kệ — nhánh dự phòng của nó là "đi tới khi hết line", mà line kéo tới
+tận chân kệ. Thay vào đó có **chặn cứng** `ADVANCE_HARD_STOP_CM = 11.9`.
+⚠️ Nếu B5 cho ra "kiện CÓ chắn ở khoảng cách < 11.9cm" thì chặn cứng đó sẽ nổ ngay
+khi robot vừa cõng hàng rời giao lộ — công cụ tự cảnh báo chuyện này.
 
 Chỗ thứ ba là lỗi **im lặng hoàn toàn**: IR vẫn xác nhận thả, `packages_delivered`
 vẫn tăng, log toàn ✅. Báo lại số đo được để chốt cách sửa.
