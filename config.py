@@ -107,12 +107,23 @@ PWM_FREQUENCY = 100          # Hz
 SPEED_DEFAULT = 50           # Duty cycle % — mức bring-up an toàn (cũ: 82)
 SPEED_SLOW = 40              # Căn chỉnh, đặt hàng
 SPEED_TURN = 62              # ⚠️ CHỐT trước khi calibrate TURN_TIME (đổi sau làm sai lại)
-PWM_COMPENSATION = 0.924           # Bù bánh PHẢI khi tiến
+# Hệ số giảm chấn khi calibrate bù PWM (test_motion option f): mỗi vòng chỉ đi
+# ngần này phần đường tới giá trị tính được. Áp đủ 100% hiệu chỉnh dựa trên một
+# phép đo có nhiễu là công thức chuẩn để DAO ĐỘNG — đã xảy ra thật khi đo chiều
+# tiến 02/08: lệch 3.8% → 7.9% → 9.0%, biên độ tăng dần thay vì hội tụ.
+PWM_CALIB_DAMPING = 0.5
+
+# ĐẶT LẠI VỀ 1.000 ngày 02/08. Vòng calibrate chiều tiến DAO ĐỘNG chứ không hội tụ
+# (lệch 3.8% → 7.9% → 9.0%) vì công cụ lúc đó đo 1 lượt và áp đủ 100% hiệu chỉnh —
+# tức chỉnh theo nhiễu. Mọi giá trị sinh ra từ vòng đó (0.851 / 0.962 / 0.875) đều
+# vô nghĩa, kể cả 0.924 cũ cũng đo bằng cách đó.
+# Đo lại từ 1.000 bằng option f bản mới (trung vị 3 lượt + giảm chấn 0.5).
+PWM_COMPENSATION = 1.000           # Bù bánh PHẢI khi tiến
 # ĐO trên robot 02/08 (option f, chiều lùi): 0.95 → 1.000. Bánh phải KHÔNG cần hãm
 # khi lùi. Đo tiếp thấy bánh TRÁI nhanh hơn 2.3% → phần cân còn lại nằm ở
 # PWM_COMPENSATION_LEFT_REV, không phải ở đây (hệ số kẹp ≤ 1.0, không tăng thêm được).
 PWM_COMPENSATION_REV = 1.000      # Bù bánh PHẢI khi lùi
-PWM_COMPENSATION_LEFT = 1.00      # Bù bánh TRÁI khi tiến
+PWM_COMPENSATION_LEFT = 1.000     # Bù bánh TRÁI khi tiến (đặt lại 02/08, xem trên)
 # ĐÃ CALIBRATE trên robot 02/08 (option f, chiều lùi, hội tụ sau 1 vòng):
 #     trước: trái=356 phải=339  → lệch 4.8%
 #     sau  : trái=336 phải=338  → lệch 0.6%  ĐÃ CÂN

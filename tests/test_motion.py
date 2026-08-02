@@ -319,6 +319,7 @@ def test_calibrate_pwm_by_encoder(m: Motion):
     print("     LÙI 1 giao lộ (~28 lần/trận). Lùi không thẳng thì robot tới giao lộ")
     print("     trong tư thế CHÉO, xoay xong văng khỏi line — đã gặp ở smoke option 8.\n")
 
+    lech_truoc = []
     while True:
         importlib.reload(config)
         # In CẢ 4 hệ số: từ khi công cụ biết hãm bánh trái, chỉ in 2 hệ số bánh phải
@@ -334,17 +335,39 @@ def test_calibrate_pwm_by_encoder(m: Motion):
             continue
 
         lui = cmd == "l"
-        (m.backward if lui else m.forward)(config.SPEED_DEFAULT)
-        left, right = m.sample_wheel_pulses(1.0)
-        m.stop()
-
-        print(f"  [{'LÙI' if lui else 'TIẾN'}] trái={left} xung   phải={right} xung")
+        # ⚠️ ĐO NHIỀU LƯỢT RỒI LẤY TRUNG VỊ. Một lượt 1s không đủ tin: đo trên robot
+        # 02/08, GIỮ NGUYÊN cấu hình mà xung bánh phải nhảy 305 → 343 (+12%) giữa hai
+        # lượt liền nhau. Chỉnh theo một lượt là chỉnh theo NHIỄU, và vòng lặp dao
+        # động với biên độ tăng dần (3.8% → 7.9% → 9.0%) thay vì hội tụ.
+        # Nguồn nhiễu đã biết: encoder JGA25-370 cho xung rất dày, callback gpiozero
+        # RỚT xung — và hai bên không rớt như nhau.
+        mau = []
+        for _ in range(3):
+            (m.backward if lui else m.forward)(config.SPEED_DEFAULT)
+            mau.append(m.sample_wheel_pulses(1.5))
+            m.stop()
+            time.sleep(0.4)
+        mau.sort(key=lambda lr: (lr[0] / lr[1]) if lr[1] else 0)
+        left, right = mau[1]          # trung vị theo TỈ LỆ trái/phải
+        print(f"  [{'LÙI' if lui else 'TIẾN'}] 3 lượt: "
+              + "  ".join(f"{l}/{r}" for l, r in mau))
+        print(f"  Trung vị: trái={left} xung   phải={right} xung")
+        tan = [l / r for l, r in mau if r]
+        if tan and (max(tan) - min(tan)) > 0.05:
+            print(f"  ⚠ Tỉ lệ tản {max(tan) - min(tan):.3f} giữa 3 lượt — phép đo "
+                  "KHÔNG đáng tin. Kiểm dây encoder, pin, và bánh có vướng gì không.")
         if left == 0 or right == 0:
             print("  Không đọc được xung ở 1 trong 2 bánh — kiểm tra dây encoder "
                   "(C1/VCC/GND) trước khi calibrate.")
             continue
 
         lech = abs(left - right) / max(left, right) * 100
+        lech_truoc.append(lech)
+        if len(lech_truoc) >= 3 and lech_truoc[-1] > lech_truoc[-3]:
+            print(f"  ⚠ ĐANG DAO ĐỘNG, không hội tụ: "
+                  + " → ".join(f"{x:.1f}%" for x in lech_truoc[-3:]))
+            print("     Nghĩa là đang chỉnh theo NHIỄU chứ không theo lệch thật.")
+            print("     Đặt lại cả 4 hệ số về 1.000 rồi đo lại từ đầu, và kiểm pin.")
         if lech < 1.0:
             print(f"  Lệch {lech:.1f}% — dưới 1%, coi như ĐÃ CÂN. Không cần đổi.")
             continue
@@ -363,7 +386,10 @@ def test_calibrate_pwm_by_encoder(m: Motion):
             ty_le = left / right
             nhanh_hon = "phải"
         hien = getattr(config, khoa)
-        suggested = max(0.5, min(1.0, hien * ty_le))
+        # GIẢM CHẤN: chỉ đi NỬA đường tới giá trị tính được. Áp đủ 100% hiệu chỉnh
+        # dựa trên một phép đo có nhiễu là công thức chuẩn để dao động — đã xảy ra.
+        ty_le_giam_chan = 1.0 + (ty_le - 1.0) * config.PWM_CALIB_DAMPING
+        suggested = max(0.5, min(1.0, hien * ty_le_giam_chan))
         print(f"  Bánh {nhanh_hon.upper()} quay nhanh hơn {lech:.1f}% → hãm bánh đó lại.")
         print(f"  Đề xuất {khoa} = {suggested:.3f} (hiện {hien:.3f})")
         if abs(suggested - hien) < 0.002:
