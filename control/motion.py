@@ -680,9 +680,28 @@ class Motion:
                 # Giảm tốc rồi mới cắt: phanh gấp ở đây làm robot lệch vài độ, mà
                 # bước luồn càng kế tiếp không còn line để tự sửa.
                 self.stop_gently(speed)
-                logger.info("Đã đến vị trí kệ — khoảng cách %.1fcm "
-                            "(mốc %.1f + bù trễ %.1f)",
-                            dist, target_cm, config.APPROACH_STOP_MARGIN)
+                # ĐO LẠI sau khi đứng hẳn. Lúc chạy, siêu âm trễ ~90ms nên số nó
+                # báo là quá khứ; đứng yên thì hàng đợi đầy toàn giá trị hiện tại,
+                # không còn trễ — số này là khoảng cách THẬT, thay được cây thước.
+                # Chênh lệch giữa hai số CHÍNH LÀ độ trôi, in ra mỗi lần chạy để
+                # chỉnh APPROACH_STOP_MARGIN mà không phải đo tay.
+                time.sleep(config.ULTRASONIC_QUEUE_LEN * 0.06 + 0.05)
+                that = self.get_distance()
+                if that >= 0:
+                    logger.info(
+                        "Đã đến vị trí kệ — lúc quyết định báo %.1fcm, ĐO LẠI khi "
+                        "đứng yên %.1fcm (trôi thêm %.1fcm). Mốc %.1f + bù %.1f. "
+                        "%s", dist, that, dist - that, target_cm,
+                        config.APPROACH_STOP_MARGIN,
+                        "→ bù ĐÚNG" if abs(that - target_cm) <= 1.0 else
+                        ("→ bù THỪA, hạ APPROACH_STOP_MARGIN %.1f cm"
+                         % (that - target_cm) if that > target_cm else
+                         "→ bù THIẾU, nâng APPROACH_STOP_MARGIN %.1f cm"
+                         % (target_cm - that)))
+                else:
+                    logger.info("Đã đến vị trí kệ — khoảng cách %.1fcm "
+                                "(mốc %.1f + bù trễ %.1f); đo lại lỗi",
+                                dist, target_cm, config.APPROACH_STOP_MARGIN)
                 return True
 
             # KHÔNG TIẾN THÊM ĐƯỢC → dừng, đừng húc tiếp.

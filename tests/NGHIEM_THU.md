@@ -126,8 +126,18 @@ việc luồn, để biết hỏng nằm ở đâu.
 
 ### B3 · Khoảng dừng trước kệ — `test_motion` **9** 🔑
 
-**Đây là bước bắt lỗi trôi thêm của `stop_gently`.** Chạy **5 lần**, mỗi lần đo bằng
-thước từ mặt cảm biến siêu âm tới mặt trước kệ.
+**Đây là bước bắt lỗi trôi thêm của `stop_gently`.** Chạy **5 lần**.
+
+**KHÔNG cần thước** — `approach_shelf()` tự đo lại sau khi robot đứng hẳn và in ra:
+
+```
+Đã đến vị trí kệ — lúc quyết định báo 13.9cm, ĐO LẠI khi đứng yên 11.8cm
+(trôi thêm 2.1cm). Mốc 11.9 + bù 2.0. → bù ĐÚNG
+```
+
+Đo lại khi ĐỨNG YÊN mới là khoảng cách thật: độ trễ ~90ms của siêu âm chỉ tồn tại
+lúc robot đang chạy, đứng yên thì hàng đợi đầy toàn giá trị hiện tại. Dòng cuối nói
+thẳng phải nâng hay hạ `APPROACH_STOP_MARGIN` bao nhiêu cm.
 
 | | |
 |---|---|
