@@ -715,11 +715,19 @@ class Motion:
         # Tốc độ của nhịp GẦN NHẤT — stop_gently() cần biết đang chạy nhanh cỡ nào
         # để giảm dần từ đó. Khởi tạo cho vòng lặp đầu (chưa qua nhánh chọn tốc độ).
         speed = config.APPROACH_FAST_SPEED
+        # Vệt đo để soi khi hỏng. Siêu âm chạy chập chờn (gpiozero cảnh báo mỗi lần
+        # khởi động: "use the pigpio pin factory for more accurate readings" — bấm
+        # giờ xung echo bằng phần mềm nên bị hệ điều hành ngắt quãng). Chỉ nhìn con
+        # số CUỐI thì không phân biệt được: nhiễu lẻ, đọc cao đều đều, hay mất tiếng
+        # vọng. Ba nguyên nhân đó cách sửa khác hẳn nhau.
+        vet = []
 
         while time.time() - start < config.APPROACH_TIMEOUT:
             if self._aborted():
                 return False
             dist = self.get_distance()   # gpiozero đã lấy trung vị sẵn (ULTRASONIC_QUEUE_LEN)
+            if not vet or abs(dist - vet[-1][1]) > 0.05:
+                vet.append((time.time() - start, dist))
             if dist < 0:
                 # Lỗi đọc mẫu này — KHÔNG hiểu nhầm thành "đã tới", thử lại
                 time.sleep(0.02)
@@ -740,6 +748,8 @@ class Motion:
                 # không còn trễ — số này là khoảng cách THẬT, thay được cây thước.
                 # Chênh lệch giữa hai số CHÍNH LÀ độ trôi, in ra mỗi lần chạy để
                 # chỉnh APPROACH_STOP_MARGIN mà không phải đo tay.
+                logger.info("Vệt siêu âm (%d mẫu đổi): %s", len(vet),
+                            " ".join(f"{t:.2f}s:{d:.1f}" for t, d in vet[-18:]))
                 time.sleep(config.ULTRASONIC_QUEUE_LEN * 0.06 + 0.05)
                 that = self.get_distance()
                 if that >= 0:
@@ -775,6 +785,8 @@ class Motion:
                 best_at = time.time()
             elif time.time() - best_at > config.APPROACH_NO_PROGRESS_TIME:
                 self.stop()
+                logger.warning("Vệt siêu âm (%d mẫu đổi): %s", len(vet),
+                               " ".join(f"{t:.2f}s:{d:.1f}" for t, d in vet[-18:]))
                 logger.error("Tiếp cận: %.1fs không lại gần thêm được (đang %.1fcm, "
                              "cần %.1fcm) — DỪNG, nhiều khả năng càng đã chạm kệ. "
                              "Kiểm APPROACH_DISTANCE có đúng khoảng cách CẢM BIẾN→kệ "
@@ -789,6 +801,8 @@ class Motion:
                 # Không được chạy tiếp hết APPROACH_TIMEOUT: ở tốc độ này robot sẽ
                 # lao ra khỏi sa bàn hoặc sang sân đối phương (bị reset −10 điểm).
                 self.stop()
+                logger.warning("Vệt siêu âm (%d mẫu đổi): %s", len(vet),
+                               " ".join(f"{t:.2f}s:{d:.1f}" for t, d in vet[-18:]))
                 logger.error("Tiếp cận: chạy mù %.1fs mà không thấy mục tiêu trong %.0fcm "
                              "(đo được %.1fcm) — dừng an toàn",
                              config.APPROACH_BLIND_TIMEOUT,
@@ -803,7 +817,9 @@ class Motion:
             time.sleep(0.02)
 
         self.stop()
-        logger.warning("Timeout tiếp cận kệ sau %.1fs!", config.APPROACH_TIMEOUT)
+        logger.warning("Timeout tiếp cận kệ sau %.1fs! Vệt siêu âm (%d mẫu đổi): %s",
+                       config.APPROACH_TIMEOUT, len(vet),
+                       " ".join(f"{t:.2f}s:{d:.1f}" for t, d in vet[-18:]))
         return False
 
     def _forward_guided(self, speed: float) -> None:

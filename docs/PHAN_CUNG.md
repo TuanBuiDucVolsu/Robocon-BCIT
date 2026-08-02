@@ -457,3 +457,38 @@ python3 -m tools.raw_spi_test loopback    # self-test SPI Pi (nối MOSI↔MISO)
 > [../tests/DEBUG_CAM_BIEN_LINE.md](../tests/DEBUG_CAM_BIEN_LINE.md).
 > Tóm tắt: **toàn 0** = lỗi cấp chip (cắm ngược / MISO pin 12 hở / VREF pin 15 mất
 > 3.3V / AGND pin 14 hở), **không** phải lỗi QTR.
+
+## Siêu âm HC-SR04 chạy chập chờn — cài `pigpio`
+
+gpiozero in cảnh báo này ở **mọi** lần khởi động:
+
+```
+PWMSoftwareFallback: For more accurate readings, use the pigpio pin factory.
+```
+
+HC-SR04 đo bằng cách **bấm giờ xung echo**. Với pin factory mặc định (`LGPIOFactory`)
+việc bấm giờ đó làm bằng phần mềm và bị hệ điều hành ngắt quãng → số đo nhảy. Đo
+trên robot 02/08: cùng một quãng tiếp cận, độ trôi khi dừng tản từ **0.7 đến 3.5cm**
+giữa các lượt, và có lượt robot lao thẳng vào kệ.
+
+`pigpio` bấm giờ ở tầng thấp hơn nhiều. Đây là khuyến cáo của chính gpiozero.
+
+**Cài (CẦN INTERNET — phantom thường chỉ có tailscale):**
+
+```bash
+sudo apt update && sudo apt install -y pigpio python3-pigpio
+sudo systemctl enable --now pigpiod
+python3 -c "import pigpio; print(pigpio.pi().connected)"   # phải in True
+```
+
+Rồi dùng RIÊNG cho cảm biến siêu âm (không đổi pin factory toàn cục, để motor/nút
+giữ nguyên đường đang chạy tốt):
+
+```python
+from gpiozero.pins.pigpio import PiGPIOFactory
+DistanceSensor(..., pin_factory=PiGPIOFactory())
+```
+
+Chưa cài được thì đọc vệt đo trong log (`Vệt siêu âm (N mẫu đổi): 0.12s:34.5 ...`)
+để biết đang gặp nhiễu lẻ, đọc cao đều đều, hay mất tiếng vọng — ba nguyên nhân đó
+cách sửa khác hẳn nhau.
