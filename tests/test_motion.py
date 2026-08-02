@@ -330,8 +330,6 @@ def test_calibrate_pwm_by_encoder(m: Motion):
             continue
 
         lui = cmd == "l"
-        khoa = "PWM_COMPENSATION_REV" if lui else "PWM_COMPENSATION"
-        hien = getattr(config, khoa)
         (m.backward if lui else m.forward)(config.SPEED_DEFAULT)
         left, right = m.sample_wheel_pulses(1.0)
         m.stop()
@@ -343,12 +341,31 @@ def test_calibrate_pwm_by_encoder(m: Motion):
             continue
 
         lech = abs(left - right) / max(left, right) * 100
-        suggested = max(0.5, min(1.0, hien * (left / right)))
-        nhanh_hon = "phải" if right > left else "trái"
-        print(f"  Bánh {nhanh_hon} quay nhanh hơn {lech:.1f}%.")
-        print(f"  Đề xuất {khoa} = {suggested:.3f} (hiện {hien:.3f})")
         if lech < 1.0:
-            print("  Lệch dưới 1% — coi như đã cân, không cần đổi.")
+            print(f"  Lệch {lech:.1f}% — dưới 1%, coi như ĐÃ CÂN. Không cần đổi.")
+            continue
+
+        # ⚠️ Luôn HÃM bánh đang nhanh hơn, không cố tăng bánh chậm.
+        # Hệ số bị kẹp ≤ 1.0 (không thể chạy quá 100% duty), nên nếu bánh TRÁI nhanh
+        # hơn mà ta lại đi chỉnh hệ số bánh PHẢI thì nó đã ở trần 1.0 và đề xuất ra
+        # đúng bằng giá trị cũ — công cụ báo "1.000 → 1.000" và KHÔNG SỬA ĐƯỢC GÌ.
+        # Đã gặp thật khi đo chiều lùi (trái nhanh hơn 2.3%).
+        if left > right:
+            khoa = "PWM_COMPENSATION_LEFT_REV" if lui else "PWM_COMPENSATION_LEFT"
+            ty_le = right / left
+            nhanh_hon = "trái"
+        else:
+            khoa = "PWM_COMPENSATION_REV" if lui else "PWM_COMPENSATION"
+            ty_le = left / right
+            nhanh_hon = "phải"
+        hien = getattr(config, khoa)
+        suggested = max(0.5, min(1.0, hien * ty_le))
+        print(f"  Bánh {nhanh_hon.upper()} quay nhanh hơn {lech:.1f}% → hãm bánh đó lại.")
+        print(f"  Đề xuất {khoa} = {suggested:.3f} (hiện {hien:.3f})")
+        if abs(suggested - hien) < 0.002:
+            print("  ⚠ Đề xuất trùng giá trị cũ — hệ số đã kịch sàn 0.5. "
+                  "Lệch này là CƠ KHÍ (ma sát/bánh/dây), không chỉnh bằng PWM được.")
+            continue
 
         if input(f"  Lưu vào config.py? (y/N): ").strip().lower() == "y":
             save_config(khoa, suggested)
