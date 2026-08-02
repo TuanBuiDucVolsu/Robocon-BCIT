@@ -90,7 +90,7 @@ PWM_FREQUENCY = 100          # Hz
 SPEED_DEFAULT = 50           # Duty cycle % — mức bring-up an toàn (cũ: 82)
 SPEED_SLOW = 40              # Căn chỉnh, đặt hàng
 SPEED_TURN = 62              # ⚠️ CHỐT trước khi calibrate TURN_TIME (đổi sau làm sai lại)
-PWM_COMPENSATION = 0.95           # Bù bánh PHẢI khi tiến
+PWM_COMPENSATION = 0.924           # Bù bánh PHẢI khi tiến
 PWM_COMPENSATION_REV = 0.95       # Bù bánh PHẢI khi lùi
 PWM_COMPENSATION_LEFT = 1.00      # Bù bánh TRÁI khi tiến
 PWM_COMPENSATION_LEFT_REV = 1.00  # Bù bánh TRÁI khi lùi
@@ -206,17 +206,40 @@ RETREAT_DISTANCE = 12.9      # ĐÃ ĐO — measure_pickup ④
 # phanh phải đặt dưới cái NHỎ HƠN (3.6), nếu không tầng 1 bị chặn giữa chừng.
 # ⚠️ Giá trị cũ 4.0 LỚN HƠN 3.6 → phanh siêu âm cắt bước luồn tầng 1 trước khi càng
 #   vào hết khe pallet. Đó là lỗi thật, số đo mới vừa phơi ra.
-INSERT_MIN_DISTANCE = 3.0    # ĐÃ ĐO gián tiếp — dưới ② (3.6) một khoảng an toàn
+# ⚠️ 3.0 CHẶN QUÁ SỚM. Thử trên robot: càng vào ĐÚNG khe pallet nhưng chưa đủ sâu,
+# robot dừng ở 2.6cm vì chạm phanh này, IR chưa thấy pallet nên bốc hàng thất bại.
+# Số 3.0 vốn suy ra từ "measure_pickup ② = 3.6cm luồn xong tầng 1" — thực tế cho
+# thấy 3.6 KHÔNG phải điểm luồn xong.
+# Hạ 3.0 → 1.5 để càng vào sâu thêm ~1.1cm. Vẫn giữ phanh vì đây là thứ duy nhất
+# chặn robot ủi đổ giá kệ khi càng trượt ra NGOÀI khe pallet.
+# Đã kẹp được hai đầu trên robot:
+#     3.0 → dừng thật ở 2.6cm: càng trong khe nhưng CHƯA đủ sâu, IR không báo
+#     1.5 → dừng thật ~1.1cm : QUÁ sâu, nâng lên là pallet chạm mặt tầng trên
+# 2.2 nhắm dừng thật quanh 1.8cm — giữa hai mốc đó. Độ trễ siêu âm làm robot lố
+# thêm ~0.4cm sau khi con số chạm ngưỡng, đã trừ hao.
+INSERT_MIN_DISTANCE = 2.2    # ĐANG DÒ — cửa sổ đúng rất hẹp, chỉnh từng 0.2
 
 # --- ④ NHẤC BỔNG (giây, không phải cm) --------------------------------------
 # Càng đã luồn vào pallet rồi thì nâng THÊM bao nhiêu giây nữa để pallet rời hẳn
 # mặt kệ. Chỉ vài phần mười giây — đây là phần dôi ra NGOÀI thang tầng.
 #   Quá ngắn → pallet còn tì lên kệ, kéo ra là đổ.
 #   Quá dài  → càng đội lên tầng trên (tầng 1) hoặc nóc kệ (tầng 2).
-LIFT_PICKUP_RAISE_TIME = 0.2    # ĐÃ ĐO — measure_pickup ⑤
+# Tăng 0.2 → 0.4: 0.2s không thấy càng nhúc nhích. Dây curoa có độ rơ, một xung
+# ngắn có thể bị tiêu hết vào việc căng dây mà chưa kịp sinh chuyển động thật.
+# ⚠️ ĐÂY LÀ HẰNG SỐ CÓ TRẦN. Nhấc quá tay thì ở TẦNG 1 càng đội vào mặt tầng 2,
+# ở tầng 2 thì đội vào nóc kệ. Khe hở phía trên kiện hàng không nhiều — tăng tiếp
+# thì phải nhìn tận mắt, đừng tăng mò.
+LIFT_PICKUP_RAISE_TIME = 0.3    # ĐANG DÒ (measure_pickup ⑤ đo được 0.2, không đủ)
 
 # --- Tốc độ & timeout của bước luồn ------------------------------------------
-INSERT_SPEED = 25            # % — bò chậm khi luồn càng
+# ⚠️ Nâng 25 → 32. Ở 25% robot bò CHÉO khi luồn càng, đẩy pallet lệch đi.
+# 25% nằm trong VÙNG CHẾT của JGA25-370 qua L298N — đo được ở pha tiếp cận: 25% thì
+# bò dưới 8mm/s và bị dừng oan, 32% mới chạy sạch. Trong vùng đó đường đặc tính
+# duty–tốc độ dựng đứng và HAI MOTOR KHÔNG DỰNG GIỐNG NHAU, nên một bên còn ì trong
+# khi bên kia đã quay → robot đi chéo.
+# PWM_COMPENSATION không cứu được ca này: nó là MỘT hệ số dùng chung cho mọi tốc độ,
+# đo ở tốc độ cao; sát vùng chết thì sai lệch 2 bánh không còn tỉ lệ.
+INSERT_SPEED = 32            # % — bò chậm khi luồn càng, trên vùng chết của motor
 INSERT_TIMEOUT = 4.0         # Giây, IR không báo thì dừng (đừng đẩy đổ kệ)
 
 # ============================================================
@@ -340,7 +363,15 @@ CAMERA_RESOLUTION = (1296, 972)
 # hoạt và chặn amkor lại.
 # ⚠️ PHẢI đi kèm việc nâng sàn S của samsung lên 90. Hạ ngưỡng một mình thì samsung
 # (31.1% trên kiện AMKOR) sẽ thắng ở ô đó — chữa ô này hỏng ô kia.
-CONFIDENCE_THRESHOLD = 0.12  # Tỷ lệ pixel tối thiểu (đường HSV)
+CONFIDENCE_THRESHOLD = 0.08  # Tỷ lệ pixel tối thiểu (đường HSV)
+# Hạ tiếp 0.12 → 0.08. Ở 0.12, hana chỉ vượt ngưỡng đúng 0.5 điểm phần trăm
+# (đo được 12.5%) — ánh sáng đổi chút hoặc robot dừng lệch vài mm là tụt xuống dưới,
+# cơ chế ưu tiên chromatic không kích hoạt, và amkor (23.9%) thắng. ĐÃ GẶP THẬT.
+# Toàn bộ số đo cho thấy có một khoảng trống rất rộng để đặt ngưỡng vào giữa:
+#     dải hana trên kiện hana thật : 12.5% – 26.9%
+#     dải hana trên 3 loại kia     :  0.6% –  1.3%
+#     dương tính giả của samsung/foxconn sau khi siết sàn S: 0.7% – 4.9%
+# 0.08 nằm trên mọi dương tính giả đo được, mà vẫn để hana dư 1.6x ở ca xấu nhất.
 MAX_SCAN_RETRIES = 3         # Số lần chụp lại trong 1 lượt quét
 MAX_PAIR_SCAN_ATTEMPTS = 2   # Số lần quét lại cả cặp sau khi tiếp cận kệ
 SCAN_RETRY_DELAY = 0.05      # Giây chờ giữa 2 lần chụp
@@ -457,7 +488,15 @@ MAX_TIER_RETRIES = 1         # Số lần thử lại tầng kệ trước khi b
 # về phía Kệ 3. exit_start_zone() KHÔNG đếm giao lộ — bộ tìm đường lo phần đó.
 EXIT_START_SPEED = 50
 EXIT_START_TIMEOUT = 5.0     # Giây, không thấy line thì báo lỗi
-EXIT_START_ALIGN_TIME = 0.4  # Giây bám line ngắn để căn giữa sau khi chạm line
+# Nới 0.4 → 1.0: robot vượt khoảng đứt 245mm bằng forward() MÙ (không lái), hai bánh
+# chưa cân nên nó tới line theo đường CHÉO — chạm mép line rồi mà 0.4s chưa đủ để bám
+# vào và duỗi thẳng, thành ra vào route với hướng lệch sẵn.
+# ⚠️ Đây chỉ là ĐỠ TRIỆU CHỨNG. Gốc rễ là forward() không chạy thẳng — sửa bằng
+# test_motion option `f` (calibrate PWM_COMPENSATION bằng encoder). Mọi chỗ chạy mù
+# khác (tiếp cận kệ, luồn càng, lùi ra, dò nửa sân) đều lệch theo cùng nguyên nhân.
+# Đừng nới quá tay: căn lâu quá thì robot bám line tới tận giao lộ C0R0, lúc đó lệnh
+# "tiến 1 giao lộ" của route sẽ đếm sang giao lộ KẾ TIẾP và đi lố.
+EXIT_START_ALIGN_TIME = 1.0  # Giây bám line ngắn để căn giữa sau khi chạm line
 
 MATCH_DURATION = 240
 SAFETY_MARGIN = 10           # Giây dừng sớm trước khi hết giờ
