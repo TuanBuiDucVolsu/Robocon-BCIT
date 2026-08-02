@@ -349,6 +349,87 @@ def smoke_task2_full(m: Motion, lift: Lift, **_):
     return dropped, None
 
 
+# ==========================================================
+# SMOKE 8 — Đường dài, KHÔNG bốc hàng
+# ==========================================================
+
+def smoke_route_to_samsung(m: Motion, **_):
+    """Ô xuất phát → trước Kệ 3 → lùi ra → nhà máy Samsung. KHÔNG bốc hàng.
+
+    Vì sao tách thành bài riêng: đây là ĐƯỜNG ĐI dài nhất mà không đụng tới lift hay
+    camera. Bốc hàng hỏng thì mọi bài có pickup đều dừng ở đó và ta không bao giờ
+    chạy tới phần điều hướng phía sau — mà phần đó mới là chỗ dùng những hằng số
+    chưa ai đo: bù PWM chiều LÙI, TURN_TIME chiều PHẢI.
+
+    Tuyến Kệ 3 → Samsung là tuyến ĐẮT NHẤT trong 12 tuyến kệ→nhà máy:
+        LÙI 1 giao lộ → xoay phải → tiến 2 giao lộ → xoay phải → tiến 1 → vào điểm cuối
+    Hai lần xoay PHẢI và một lần lùi — đúng ba thứ chưa xác nhận, cộng dồn sai số.
+
+    ⚠️ Samsung nằm hàng nào là do NỬA SÂN quyết định. Bài này in rõ ra để kiểm bằng
+    mắt: đi nhầm nhà máy là lỗi DUY NHẤT không có tín hiệu báo nào.
+    """
+    hang = "R4 (xa ô xuất phát nhất)" if nav.FACTORY_AT_START_ROW == "foxconn" else "R0 (CÙNG hàng ô xuất phát)"
+    print("\n[SMOKE 8] Ô xuất phát → trước Kệ 3 → lùi ra → Samsung (KHÔNG bốc hàng)")
+    print(f"  Nửa sân: nhà máy cùng hàng ô xuất phát = {nav.FACTORY_AT_START_ROW.upper()}")
+    print(f"  → SAMSUNG nằm ở hàng {hang}")
+    print("  ⚠ NHÌN LÊN TƯỜNG XÁC NHẬN trước khi chạy. Sai nửa sân = robot đi tới")
+    print("    đúng vị trí nó tin là Samsung, và không có gì báo lỗi.")
+    if _ask("  Đúng chưa? (y/N): ") != "y":
+        print("  Dừng. Chạy lại và chọn nửa sân khác ở đầu phiên.")
+        return False, None
+
+    print("  Đặt robot trong ô start, quay mặt về phía Kệ 3.")
+    _pause("Sẵn sàng?")
+
+    # --- 1. Rời ô xuất phát ---
+    if not m.exit_start_zone():
+        print("  ❌ [1/5] exit_start_zone THẤT BẠI")
+        return False, nav.START_POSE
+    print("  ✅ [1/5] rời ô xuất phát")
+    pose = nav.START_POSE
+
+    # --- 2. Tới Kệ 3 ---
+    ok, pose = _run(m, "SHELF0", pose)
+    if not ok:
+        print("  ❌ [2/5] không tới được Kệ 3")
+        return False, pose
+    print("  ✅ [2/5] tới Kệ 3")
+
+    # --- 3. Tiếp cận kệ (như thật, chỉ không bốc) ---
+    if not m.approach_shelf():
+        print("  ⚠ [3/5] approach_shelf thất bại — vẫn chạy tiếp để xem phần điều hướng")
+    else:
+        print("  ✅ [3/5] đứng trước kệ")
+    print(f"     ĐO TAY: cách kệ bao nhiêu? (kỳ vọng {config.APPROACH_DISTANCE}cm)")
+    _pause("Đo xong nhấn Enter để lùi ra và đi Samsung")
+
+    # --- 4. Lùi ra (main.py cũng lùi ngay sau khi bốc, dù thành hay bại) ---
+    if not m.retreat_from_shelf():
+        print("  ⚠ [4/5] retreat timeout")
+    else:
+        print("  ✅ [4/5] lùi ra khỏi kệ")
+
+    # --- 5. Kệ 3 → Samsung ---
+    print("\n  --- [5/5] Kệ 3 → Samsung ---")
+    print("  ⚠ Đoạn này dùng 3 hằng số CHƯA xác nhận: bù PWM chiều LÙI,")
+    print("    REVERSE_RECENTER_TIME, và TURN_TIME chiều PHẢI (mới đo chiều trái).")
+    ok, pose = _run(m, nav.FACTORY_TERMINAL["samsung"], pose)
+    if not ok:
+        print("  ❌ [5/5] không tới được Samsung")
+        print("     Gãy ở lệnh nào? Xem log. Lùi → option 15/18 của test_motion.")
+        print("     Xoay → option 10. Bám line → option 7.")
+        return False, pose
+
+    print("  ✅ [5/5] tới khu Samsung")
+    print("\n  KIỂM BẰNG MẮT — cả ba đều phải đúng:")
+    print("    1. Robot có đang ở ĐÚNG khu SAMSUNG không (nhìn ảnh in trên tường)?")
+    print("    2. Robot có quay mặt VÀO nhà máy không?")
+    print("    3. Lệch ngang so với tâm khu ≤ 3cm?")
+    print("  Sai nhà máy = chọn sai nửa sân. Đúng nhà máy nhưng lệch = tích luỹ")
+    print("  sai số xoay/lùi, quay lại test_motion option 18.")
+    return True, pose
+
+
 SMOKES = {
     "1": ("Xuất phát: exit start → Kệ 3 (dò nửa sân nếu BOARD_AUTO_DETECT)",
           smoke_exit_and_navigate),
@@ -358,6 +439,8 @@ SMOKES = {
     "5": ("★ MỘT LƯỢT ĐẦY ĐỦ: pickup → giao 2 NM → quay về tầng 2", smoke_full_lap),
     "6": ("Chặn chạy mù của approach_shelf", smoke_approach_blind_guard),
     "7": ("NHIỆM VỤ 2 đầy đủ: Kệ 4 → nhà máy liên hợp", smoke_task2_full),
+    "8": ("Đường dài KHÔNG bốc hàng: xuất phát → trước Kệ 3 → lùi → Samsung",
+          smoke_route_to_samsung),
 }
 
 # Smoke nào cần camera — tránh khởi tạo Vision (mất ~2s) khi không dùng

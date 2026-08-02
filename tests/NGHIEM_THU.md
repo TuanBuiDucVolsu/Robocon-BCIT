@@ -166,6 +166,29 @@ Chạy `test_smoke`, **chọn đúng nửa sân** ở câu hỏi đầu phiên.
 | **CHƯA ĐẠT** — dừng ngay trên hình mascot | Cửa sổ mù quá ngắn, hoặc cơ chế thoát sớm không kích hoạt |
 | **CHƯA ĐẠT** — dừng cách kệ > 25cm | Siêu âm bắt phải vật khác |
 
+### C1b · Đường dài, KHÔNG bốc hàng — smoke **8** 🔑
+
+Xuất phát → trước Kệ 3 → lùi ra → **Samsung**. Chạy **trước C2**.
+
+Vì sao xen vào đây: bốc hàng hỏng thì mọi bài có pickup đều dừng tại đó, và phần
+điều hướng phía sau **không bao giờ được chạy** — mà đó mới là chỗ dùng những hằng
+số chưa ai đo. Bài này tách hẳn đường đi ra khỏi lift và camera.
+
+Kệ 3 → Samsung là tuyến **đắt nhất** trong 12 tuyến kệ→nhà máy: `LÙI 1 giao lộ →
+xoay phải → tiến 2 giao lộ → xoay phải → tiến 1 → vào điểm cuối`. Hai lần xoay
+**phải** và một lần **lùi** — đúng ba thứ chưa xác nhận, sai số cộng dồn.
+
+| | |
+|---|---|
+| **ĐẠT** | Cả 5 bước ✅; robot đứng ở **đúng khu Samsung**, **quay mặt vào** nhà máy, lệch ngang so với tâm khu **≤ 3cm**; **3/3 lần** |
+| **CHƯA ĐẠT** — sai nhà máy | **Chọn sai nửa sân.** Không có tín hiệu nào báo — chỉ kiểm được bằng mắt |
+| **CHƯA ĐẠT** — đúng nhà máy nhưng lệch > 3cm | Tích luỹ sai số xoay/lùi → quay lại A5 (option 18) |
+| **CHƯA ĐẠT** — gãy ở bước lùi | option **15** / **18** của `test_motion` |
+| **CHƯA ĐẠT** — gãy ở bước xoay | option **10**, chạy riêng chiều PHẢI |
+| **CHƯA ĐẠT** — gãy ở bám line | option **7** |
+
+Bài dừng ở bước [3/5] cho bạn **đo tay khoảng cách tới kệ** — đối chiếu với B3.
+
 ### C2 · Bốc hàng — smoke **2** 🔑 **BÀI QUAN TRỌNG NHẤT**
 
 Ngồi ngang tầm mắt với bánh xe. **Nhìn kỹ 10cm cuối.**
