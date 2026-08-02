@@ -851,13 +851,42 @@ class TestExitStartZone(unittest.TestCase):
         m.follow_line = MagicMock(return_value=(False, values))
         return m
 
+    def _motion_seq(self, frames):
+        """frames: đọc lần lượt; hết thì lặp giá trị cuối."""
+        m = self._motion([0] * 6)
+        seq = list(frames)
+
+        def read():
+            return seq.pop(0) if len(seq) > 1 else seq[0]
+
+        m.read_line_sensor = read
+        m.follow_line = MagicMock(return_value=(False, [0] * 6))
+        return m
+
     def test_ignores_line_during_blind_window(self):
-        """Thấy 'line' ngay từ đầu (mascot) thì KHÔNG được dừng trong cửa sổ mù."""
+        """Thấy 'line' suốt (mascot) thì KHÔNG được dừng trong cửa sổ mù."""
         m = self._motion([1, 1, 1, 0, 0, 0])
         t0 = time.time()
         with patch.object(config, "EXIT_START_BLIND_TIME", 0.4):
             self.assertTrue(m.exit_start_zone(timeout=3.0))
         self.assertGreaterEqual(time.time() - t0, 0.4)
+
+    def test_blind_window_ends_early_once_art_is_cleared(self):
+        """Thấy đen (mascot) rồi thấy SẠCH = đã ra khỏi hình in → tìm line ngay.
+
+        Đây mới là đường chạy BÌNH THƯỜNG. Nhờ nó, điểm kết thúc cửa sổ mù bám
+        theo HÌNH IN chứ không theo đồng hồ, nên không phụ thuộc cm/s (chưa đo)
+        lẫn chỗ đặt robot trong ô 400x400mm.
+        """
+        # mascot (đen) → sạch → line thật
+        m = self._motion_seq([[1, 1, 0, 0, 0, 0]] * 3 + [[0] * 6] * 2
+                             + [[0, 0, 1, 1, 0, 0]])
+        t0 = time.time()
+        with patch.object(config, "EXIT_START_BLIND_TIME", 5.0):
+            with patch.object(config, "EXIT_START_ALIGN_TIME", 0.0):
+                self.assertTrue(m.exit_start_zone(timeout=3.0))
+        self.assertLess(time.time() - t0, 5.0,
+                        "phải thoát sớm khi qua hết vùng in, không chờ hết chặn trên")
 
     def test_finds_line_immediately_when_no_blind_window(self):
         """Đặt 0 thì giữ ĐÚNG hành vi cũ — dừng ngay khi thấy line."""
@@ -883,8 +912,8 @@ class TestExitStartZone(unittest.TestCase):
         đó đặt một con số lớn tới mức KHÔNG có tốc độ hợp lý nào còn an toàn:
         ở 20cm/s (chậm nhất còn tin được) thì 2.5s đã là 50cm, sát C0R0.
         """
-        self.assertLess(config.EXIT_START_BLIND_TIME, 2.5,
-                        "≥2.5s thì ngay ở 20cm/s cũng đã chạm giao lộ C0R0 (51.2cm)")
+        self.assertLessEqual(config.EXIT_START_BLIND_TIME, 1.5,
+                             "chặn trên: 1.5s an toàn tới 34cm/s (1.5×34=51cm, sát C0R0)")
         self.assertGreater(config.EXIT_START_BLIND_TIME, 0.0,
                            "0 = quay lại lỗi bắt nhầm mascot làm line")
 

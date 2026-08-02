@@ -289,7 +289,8 @@ class Motion:
         Thoát ô start (GAP — không có line trên R0).
 
         Robot đặt quay mặt sang trái (9h, về Kệ 3):
-        1. Tiến thẳng MÙ `EXIT_START_BLIND_TIME` giây (bỏ qua cảm biến)
+        1. Tiến thẳng MÙ cho tới khi ĐI QUA HẾT vùng in (thấy đen rồi thấy sạch),
+           hoặc hết `EXIT_START_BLIND_TIME` giây — cái nào tới trước
         2. Tiến tiếp cho đến khi chạm line ngang R0
         3. Bám line ngắn để căn giữa — KHÔNG đếm giao lộ ở đây
         Giao lộ do route của navigation.plan() đếm, tránh đếm kép.
@@ -309,9 +310,13 @@ class Motion:
         Cửa sổ mù phải kết thúc trong khoảng **10.2cm → 51.2cm** kể từ chỗ đặt:
         ngắn quá thì vẫn dính mascot, dài quá thì vượt qua giao lộ C0R0 mà không
         đếm được, và lệnh `("forward", 1)` sau đó sẽ chạy tới tận kệ mà không thấy
-        giao lộ nào. Vì đo bằng THỜI GIAN chứ không phải quãng đường, nó phụ thuộc
-        `EXIT_START_SPEED` và cả chỗ đặt robot trong ô 400x400mm — đo lại khi đổi
-        một trong hai. Xem config.EXIT_START_BLIND_TIME.
+        giao lộ nào.
+
+        Điểm kết thúc bám theo HÌNH IN chứ không theo đồng hồ: thấy đen rồi thấy
+        SẠCH = vừa ra khỏi mascot, và sau mascot là 11.7cm sạch trước line thật.
+        Nhờ vậy nó không phụ thuộc cm/s (chưa đo được) lẫn chỗ đặt robot trong ô
+        400x400mm. `EXIT_START_BLIND_TIME` chỉ còn là CHẶN TRÊN, dùng khi robot
+        được đặt ở chỗ không có hình in nào dưới cảm biến.
         """
         blind = getattr(config, "EXIT_START_BLIND_TIME", 0.0)
         logger.info("Thoát ô start — mù %.2fs (qua vùng in mascot) rồi tìm line R0 "
@@ -320,15 +325,34 @@ class Motion:
         self.forward(speed)
 
         found = False
+        saw_art = False              # đã đi qua vùng in đen (mascot) chưa
+        blind_done = blind <= 0
         while time.time() - start < timeout:
             if self._aborted():
                 return False
             values = self.read_line_sensor()
-            # Trong cửa sổ mù thì KHÔNG đọc kết quả — vẫn gọi read_line_sensor() để
-            # nhịp vòng lặp và trạng thái cảm biến giống hệt phần sau.
-            if time.time() - start < blind:
-                time.sleep(0.01)
-                continue
+
+            if not blind_done:
+                # THOÁT SỚM khi đã qua hết vùng in: thấy đen rồi thấy SẠCH nghĩa là
+                # vừa ra khỏi mascot, và sau mascot là 11.7cm sạch trước line R0
+                # thật. Nhờ vậy điểm kết thúc cửa sổ mù bám theo HÌNH IN chứ không
+                # theo đồng hồ — không còn phụ thuộc cm/s (thứ chưa đo được) lẫn chỗ
+                # đặt robot trong ô 400x400mm. EXIT_START_BLIND_TIME tụt xuống chỉ
+                # còn là CHẶN TRÊN cho trường hợp không thấy đen lần nào.
+                if sum(values) > 0:
+                    saw_art = True
+                elif saw_art:
+                    blind_done = True
+                    logger.info("Thoát ô start: đã qua hết vùng in sau %.2fs — "
+                                "bắt đầu tìm line R0", time.time() - start)
+                if not blind_done and time.time() - start >= blind:
+                    blind_done = True
+                    logger.info("Thoát ô start: hết cửa sổ mù %.2fs (không thấy vùng "
+                                "in nào) — bắt đầu tìm line R0", blind)
+                if not blind_done:
+                    time.sleep(0.01)
+                    continue
+
             if sum(values) > 0:
                 self.stop()
                 logger.info("Chạm line R0! sensor=%s", values)
