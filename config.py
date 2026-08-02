@@ -262,6 +262,21 @@ INSERT_TIMEOUT = 4.0         # Giây, IR không báo thì dừng (đừng đẩy
 # ============================================================
 # TIẾP CẬN — 2 pha nhanh/chậm tới VỊ TRÍ CHỜ ①
 # ============================================================
+# --- Dừng có giảm tốc (Motion.stop_gently) ---
+# stop() đặt cả 4 chân PWM về 0; EN của L298N nối cứng mức cao nên hai đầu motor
+# cùng bị kéo xuống đất = PHANH ĐỘNG, không phải thả trôi. Phanh gấp ngay trước kệ
+# sinh mô-men giật, hai bánh không phanh giống hệt nhau, cộng 2 bánh caster tự xoay
+# → robot lệch vài độ TẠI CHỖ. Vài độ đó đủ làm càng không luồn thẳng vào khe
+# pallet, mà bước đó không còn line để tự sửa.
+# Dùng ở 3 chỗ tư thế robot quan trọng: cuối approach_shelf, cuối creep_until (càng
+# đang trong khe pallet), cuối advance_to_end.
+# ⚠️ Giảm dần thì robot TRÔI THÊM so với phanh gấp. Đo lại APPROACH_DISTANCE sau khi
+# bật; dừng sát kệ hơn trước thì HẠ STOP_RAMP_TIME, đừng vội đổi APPROACH_DISTANCE
+# (khoảng cách đó còn ràng buộc với vị trí khe pallet).
+STOP_RAMP_TIME = 0.12        # Giây giảm dần PWM về 0
+STOP_RAMP_STEPS = 4          # Số bậc giảm
+STOP_SETTLE_TIME = 0.15      # Giây đứng yên cho khung xe hết chòng chành
+
 APPROACH_TIMEOUT = 5.0       # Timeout tiếp cận / lùi ra (giây)
 APPROACH_SPEED = 30          # Tốc độ lùi ra
 APPROACH_FAST_SPEED = 60     # Pha xa

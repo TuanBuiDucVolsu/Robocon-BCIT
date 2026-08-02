@@ -833,6 +833,57 @@ class TestFollowLineReverse(unittest.TestCase):
         self.assertTrue(at_intersection, "lùi vẫn phải nhận ra giao lộ")
 
 
+class TestStopGently(unittest.TestCase):
+    """Dừng có giảm tốc ở những chỗ TƯ THẾ robot quyết định bước sau.
+
+    stop() là PHANH ĐỘNG (cả 4 chân về 0, EN nối cứng mức cao → 2 đầu motor cùng
+    xuống đất). Phanh gấp ngay trước kệ làm robot lệch vài độ tại chỗ, và bước luồn
+    càng kế tiếp không còn line để tự sửa.
+    """
+
+    def _motion(self):
+        m = object.__new__(Motion)
+        m.forward = MagicMock()
+        m.backward = MagicMock()
+        m.stop = MagicMock()
+        return m
+
+    def test_ramps_down_before_cutting(self):
+        m = self._motion()
+        with patch.object(config, "STOP_RAMP_TIME", 0.04), \
+             patch.object(config, "STOP_RAMP_STEPS", 4), \
+             patch.object(config, "STOP_SETTLE_TIME", 0):
+            m.stop_gently(40)
+        speeds = [c.args[0] for c in m.forward.call_args_list]
+        self.assertEqual(speeds, [30.0, 20.0, 10.0], "phải giảm dần đều rồi mới cắt")
+        m.stop.assert_called_once()
+
+    def test_uses_backward_when_reversing(self):
+        m = self._motion()
+        with patch.object(config, "STOP_RAMP_TIME", 0.04), \
+             patch.object(config, "STOP_SETTLE_TIME", 0):
+            m.stop_gently(40, reverse=True)
+        m.backward.assert_called()
+        m.forward.assert_not_called()
+
+    def test_zero_ramp_is_plain_stop(self):
+        """Đặt 0 thì giữ ĐÚNG hành vi cũ — cắt phụt, không trôi thêm."""
+        m = self._motion()
+        with patch.object(config, "STOP_RAMP_TIME", 0), \
+             patch.object(config, "STOP_SETTLE_TIME", 0):
+            m.stop_gently(40)
+        m.forward.assert_not_called()
+        m.stop.assert_called_once()
+
+    def test_settle_pause_is_honoured(self):
+        m = self._motion()
+        t0 = time.time()
+        with patch.object(config, "STOP_RAMP_TIME", 0), \
+             patch.object(config, "STOP_SETTLE_TIME", 0.2):
+            m.stop_gently(40)
+        self.assertGreaterEqual(time.time() - t0, 0.2)
+
+
 class TestExitStartZone(unittest.TestCase):
     """Cửa sổ mù đầu ô xuất phát: bỏ qua hình MASCOT in ngay dưới robot.
 
@@ -932,6 +983,9 @@ class TestAdvanceToEnd(unittest.TestCase):
         m._aborted = lambda: False
         m.get_distance = lambda *a, **k: dist
         m.stop = MagicMock()
+        # advance_to_end dừng bằng stop_gently() → cần forward/backward để giảm tốc
+        m.forward = MagicMock()
+        m.backward = MagicMock()
         m._escape_intersection = MagicMock()
         seq = list(frames)
 

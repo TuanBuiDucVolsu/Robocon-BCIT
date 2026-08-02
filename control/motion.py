@@ -279,6 +279,38 @@ class Motion:
         self._left_rev.value = 0
         self._right_rev.value = 0
 
+    def stop_gently(self, from_speed: float, reverse: bool = False,
+                    ramp: float | None = None, settle: float | None = None):
+        """Giảm dần PWM rồi mới cắt — dùng ở những chỗ TƯ THẾ robot quan trọng.
+
+        VÌ SAO: `stop()` đặt cả 4 chân về 0, mà EN của L298N nối cứng mức cao nên
+        hai đầu motor cùng bị kéo xuống đất — đó là PHANH ĐỘNG, không phải thả
+        trôi. Phanh gấp ở đây sinh mô-men giật; hai bánh không phanh giống hệt
+        nhau, cộng 2 bánh caster tự xoay, là robot lệch đi vài độ ngay tại chỗ.
+        Vài độ đó đủ làm càng không luồn thẳng vào khe pallet ở bước kế tiếp — mà
+        bước kế tiếp không còn line để tự sửa nữa.
+
+        Rồi `settle` đứng yên một nhịp cho khung xe hết chòng chành trước khi làm
+        việc tiếp.
+
+        ⚠️ ĐÁNH ĐỔI: giảm dần thì robot trôi thêm một đoạn so với phanh gấp. Đo
+        lại `APPROACH_DISTANCE` sau khi bật cái này — nếu robot dừng sát kệ hơn
+        trước thì hạ `STOP_RAMP_TIME` chứ đừng vội đổi `APPROACH_DISTANCE`, vì
+        khoảng cách đó còn ràng buộc với vị trí khe pallet.
+        """
+        ramp = config.STOP_RAMP_TIME if ramp is None else ramp
+        settle = config.STOP_SETTLE_TIME if settle is None else settle
+        steps = max(1, int(getattr(config, "STOP_RAMP_STEPS", 4)))
+        drive = self.backward if reverse else self.forward
+
+        if ramp > 0 and from_speed > 0:
+            for i in range(steps - 1, 0, -1):
+                drive(from_speed * i / steps)
+                time.sleep(ramp / steps)
+        self.stop()
+        if settle > 0:
+            time.sleep(settle)
+
     # ----------------------------------------------------------
     # Xuất phát — tìm line đầu tiên
     # ----------------------------------------------------------
@@ -562,7 +594,7 @@ class Motion:
             if 0 <= dist <= config.APPROACH_SLOW_DISTANCE:
                 near_streak += 1
                 if near_streak >= 2:
-                    self.stop()
+                    self.stop_gently(base_speed)
                     logger.info("Advance: đã tới gần mục tiêu (%.1fcm)", dist)
                     return True
             else:
@@ -622,6 +654,9 @@ class Motion:
         # Mốc "gần nhất từng tới được" — dùng để phát hiện robot không tiến thêm nữa
         best_dist = float("inf")
         best_at = start
+        # Tốc độ của nhịp GẦN NHẤT — stop_gently() cần biết đang chạy nhanh cỡ nào
+        # để giảm dần từ đó. Khởi tạo cho vòng lặp đầu (chưa qua nhánh chọn tốc độ).
+        speed = config.APPROACH_FAST_SPEED
 
         while time.time() - start < config.APPROACH_TIMEOUT:
             if self._aborted():
@@ -632,7 +667,9 @@ class Motion:
                 time.sleep(0.02)
                 continue
             if dist <= target_cm:
-                self.stop()
+                # Giảm tốc rồi mới cắt: phanh gấp ở đây làm robot lệch vài độ, mà
+                # bước luồn càng kế tiếp không còn line để tự sửa.
+                self.stop_gently(speed)
                 logger.info("Đã đến vị trí kệ — khoảng cách %.1fcm", dist)
                 return True
 
@@ -744,7 +781,9 @@ class Motion:
 
             try:
                 if check():
-                    self.stop()
+                    # Càng ĐANG NẰM TRONG khe pallet — phanh gấp ở đây là giật cả
+                    # pallet, có thể làm nó tụt khỏi càng trước khi kịp nhấc.
+                    self.stop_gently(speed)
                     logger.info("Luồn càng: điều kiện đạt sau %.2fs",
                                 time.time() - start)
                     return True

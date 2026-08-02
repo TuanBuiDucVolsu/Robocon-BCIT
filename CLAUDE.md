@@ -319,6 +319,19 @@ tại điểm giao, line cắt ngang nằm dọc thanh cảm biến nên xoay ki
   **Chặn chạy mù**: nếu sau `APPROACH_BLIND_TIMEOUT` chưa lần nào thấy vật trong
   `APPROACH_DETECT_DISTANCE` → dừng + trả `False` (trước đây chạy hết 5s ở 60% tốc độ
   = lao ra khỏi sa bàn / sang sân đối phương khi mất echo).
+- **Dừng có giảm tốc (`Motion.stop_gently`)**: `stop()` đặt cả 4 chân PWM về 0, mà
+  EN của L298N nối cứng mức cao nên hai đầu motor cùng bị kéo xuống đất — đó là
+  **PHANH ĐỘNG**, không phải thả trôi. Phanh gấp ngay trước kệ sinh mô-men giật,
+  hai bánh không phanh giống hệt nhau, cộng 2 bánh caster tự xoay → robot **lệch
+  vài độ tại chỗ**. Vài độ đó đủ làm càng không luồn thẳng vào khe pallet, mà bước
+  đó không còn line để tự sửa. Dùng ở 3 chỗ tư thế quyết định bước sau: cuối
+  `approach_shelf()`, cuối `creep_until()` (càng đang TRONG khe pallet — phanh gấp
+  là giật cả pallet), cuối `advance_to_end()`. Kèm `STOP_SETTLE_TIME` đứng yên một
+  nhịp cho khung xe hết chòng chành.
+  ⚠️ Giảm dần thì robot **trôi thêm** so với phanh gấp. Đo lại `APPROACH_DISTANCE`;
+  nếu dừng sát kệ hơn trước thì **hạ `STOP_RAMP_TIME`**, đừng vội đổi
+  `APPROACH_DISTANCE` (khoảng cách đó còn ràng buộc với vị trí khe pallet).
+  Đặt `STOP_RAMP_TIME = 0` là quay về đúng hành vi cũ.
 - **`advance_to_end()`**: bám line tới HẾT line — dùng cho đoạn cuối vào kệ / khu nhà
   máy / Kệ 4 (những chỗ đó không phải giao lộ nên không đếm bằng `forward` được).
 - **Vượt khoảng đứt**: mất line thì trôi thẳng `LINE_GAP_COAST_TIME` giây rồi mới quét
