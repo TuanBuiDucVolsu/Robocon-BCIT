@@ -653,14 +653,24 @@ class Motion:
             # ≥5cm rồi mới tin, và khi điều kiện đó không đạt thì advance chạy tới
             # HẾT LINE — mà line kéo tới tận chân kệ, tức đâm thẳng vào kệ. Tiêu chí
             # sai, không phải cơ chế sai.
+            # ⚠️ ĐỨNG YÊN thôi CHƯA đủ — phải đứng yên Ở GIÁ TRỊ NHỎ.
+            # Kiện hàng robot cõng nằm sát cảm biến → số đo ~4cm và không đổi.
+            # MẤT TIẾNG VỌNG thì gpiozero trả giá trị kịch trần ~100cm, cũng không
+            # đổi. Bản trước chỉ kiểm "không đổi" nên gộp hai thứ làm một: mất tiếng
+            # vọng vài nhịp đầu là code tưởng bị kiện che, bỏ qua siêu âm, rồi đi tới
+            # KHI HẾT LINE — mà line kéo tới tận chân kệ, tức LAO THẲNG VÀO KỆ.
+            # Đo trên robot: option 8 lúc dừng đúng 11.9cm, lúc lao vào kệ — hỏng
+            # kiểu NHỊ PHÂN, đúng dấu hiệu một nhánh lật qua lật lại.
             if (dist_dau is not None and not ke_bi_che
                     and troi >= config.ADVANCE_STUCK_TIME
-                    and abs(dist - dist_dau) < config.ADVANCE_STUCK_CM):
+                    and abs(dist - dist_dau) < config.ADVANCE_STUCK_CM
+                    and dist <= config.APPROACH_SLOW_DISTANCE):
                 ke_bi_che = True
                 logger.warning(
-                    "Advance: sau %.1fs mà siêu âm chỉ đổi %.1fcm (%.1f→%.1f) — nhiều "
-                    "khả năng đang nhìn CHÍNH KIỆN HÀNG robot cõng. Bỏ qua siêu âm, "
-                    "đi tới khi hết line.", troi, abs(dist - dist_dau), dist_dau, dist)
+                    "Advance: sau %.1fs mà siêu âm chỉ đổi %.1fcm (%.1f→%.1f) và đứng "
+                    "yên ở mức GẦN — nhiều khả năng đang nhìn CHÍNH KIỆN HÀNG robot "
+                    "cõng. Bỏ qua siêu âm, đi tới khi hết line.",
+                    troi, abs(dist - dist_dau), dist_dau, dist)
 
             if not ke_bi_che and 0 <= dist <= config.APPROACH_SLOW_DISTANCE:
                 near_streak += 1

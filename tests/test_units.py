@@ -1213,6 +1213,21 @@ class TestAdvanceToEnd(unittest.TestCase):
         m.get_distance = lambda: seq.pop(0) if len(seq) > 1 else seq[0]
         self.assertTrue(m.advance_to_end(timeout=3.0))
 
+    def test_constant_FAR_reading_is_lost_echo_not_a_carried_load(self):
+        """⚠️ HỒI QUY: mất tiếng vọng (số kịch trần, đứng yên) KHÔNG phải kiện che.
+
+        gpiozero trả ~100cm khi không bắt được tiếng vọng — đứng yên y như kiện hàng
+        cõng. Bản trước chỉ kiểm "không đổi" nên gộp hai thứ: mất tiếng vọng vài nhịp
+        đầu là bỏ qua siêu âm rồi đi tới KHI HẾT LINE — mà line kéo tới tận chân kệ,
+        tức LAO VÀO KỆ. Ở đây số đo đứng yên ở 100cm rồi mới giảm dần về mục tiêu:
+        phải dừng bằng siêu âm.
+        """
+        m = self._motion([[0, 0, 1, 1, 0, 0]] * 400)   # line KHÔNG bao giờ hết
+        seq = [100.0] * 120 + [40.0, 30.0, config.APPROACH_SLOW_DISTANCE - 1]
+        m.get_distance = lambda: seq.pop(0) if len(seq) > 1 else seq[0]
+        self.assertTrue(m.advance_to_end(timeout=5.0),
+                        "phải dừng bằng siêu âm, không chạy tới hết line")
+
     def test_constant_near_reading_is_the_carried_load_not_the_target(self):
         """Số đo NHỎ NGAY TỪ ĐẦU và ĐỨNG YÊN = siêu âm đang nhìn KIỆN HÀNG đang cõng.
 

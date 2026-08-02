@@ -482,6 +482,12 @@ ADVANCE_ACQUIRE_TIME = 0.8
 # tới tận chân kệ, tức ĐÂM THẲNG VÀO KỆ. Đã gặp thật ở option 8.
 ADVANCE_STUCK_TIME = 0.8     # Giây quan sát trước khi kết luận cảm biến bị che
 ADVANCE_STUCK_CM = 1.0       # Đổi ít hơn ngần này trong khoảng trên = bị che
+# ⚠️ Điều kiện thứ HAI, bắt buộc: số đo phải đứng yên Ở MỨC GẦN
+# (≤ APPROACH_SLOW_DISTANCE). Kiện hàng cõng cho ~4cm và không đổi; MẤT TIẾNG VỌNG
+# cho ~100cm (kịch trần) và cũng không đổi. Bản đầu chỉ kiểm "không đổi" nên gộp hai
+# thứ làm một → mất tiếng vọng vài nhịp đầu là bỏ qua siêu âm, đi tới khi hết line,
+# mà line kéo tới tận chân kệ = LAO VÀO KỆ. Đã gặp thật ở option 8, hỏng NHỊ PHÂN
+# (lúc dừng đúng 11.9cm, lúc lao vào kệ).
 ADVANCE_TIMEOUT = 6.0
 
 # ============================================================
