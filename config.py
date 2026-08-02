@@ -379,6 +379,22 @@ APPROACH_NO_PROGRESS_CM = 1.0    # cm — giảm ít hơn mức này coi như đ
 # ============================================================
 LINE_SENSOR_COUNT = 6        # CH0-CH5, bỏ 2 mắt ngoài cùng (dành CH6-7 cho IR)
 LINE_THRESHOLD = 200         # ADC 0-1023: < ngưỡng = trên line (đen)
+
+# --- Ngưỡng TƯƠNG ĐỐI, tự trôi theo ánh sáng (LineSensor.nguong_cho) ---
+# QTR-8A đo PHẢN XẠ: ánh sáng nền tối đi thì nền trắng phản xạ ít hơn, mọi giá trị
+# tụt xuống, và mắt ở RÌA vạch rơi xuống dưới LINE_THRESHOLD cố định → bị đếm là
+# đen → đủ 4 mắt là báo GIAO LỘ GIẢ giữa đoạn thẳng.
+# Đo trên robot buổi tối 02/08: hay nhầm giao lộ dù đang đi trên đường thẳng.
+# Thể lệ ghi rõ ánh sáng ở sân thi KHÔNG đảm bảo ổn định, nên đây không phải chuyện
+# riêng của buổi tối.
+# ⚠️ KHÔNG chữa được bằng cách nâng INTERSECTION_THRESHOLD lên 5: C0R0 là NGÃ BA,
+# chỉ cho 4/6 mắt — nâng lên là mất luôn giao lộ thật.
+# Ngưỡng = min + (max−min) × FRACTION, tính lại MỖI lần đọc nên trôi theo ánh sáng.
+# Khi cả thanh cùng đen (giữa giao lộ) hoặc cùng trắng (mất line) thì dải hẹp hơn
+# MIN_RANGE, công thức vô nghĩa → rơi về LINE_THRESHOLD tuyệt đối như cũ.
+LINE_ADAPTIVE = True
+LINE_ADAPTIVE_FRACTION = 0.30   # 0.3 = ngả về phía TỐI, ưu tiên không nhận nhầm đen
+LINE_ADAPTIVE_MIN_RANGE = 250   # ADC: dải hẹp hơn ngần này thì dùng ngưỡng tuyệt đối
 # ⚠️ Nhiều module QTR-8A đọc bề mặt ĐEN ra giá trị CAO (ngược giả định của code).
 # Chạy `python3 -m tools.calibrate_line` để chốt cờ này — code tự đảo tại nguồn.
 LINE_BLACK_IS_HIGH = True

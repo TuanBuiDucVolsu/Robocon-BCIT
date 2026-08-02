@@ -353,6 +353,17 @@ tại điểm giao, line cắt ngang nằm dọc thanh cảm biến nên xoay ki
   tìm lại — sa bàn có khoảng đứt thật 245mm ở ô xuất phát.
 - **Siêu âm median**: `approach_shelf` / `retreat_from_shelf` dùng `get_distance(samples=3)`
   (median) chống nhiễu HC-SR04 → tránh dừng sai gây retry tầng.
+- **Ngưỡng đen/trắng TƯƠNG ĐỐI** (`LineSensor.nguong_cho`, `LINE_ADAPTIVE`): tính từ
+  chính dải sáng-tối của mỗi lần đọc — `min + (max−min) × 0.30` — nên nó **trôi theo
+  ánh sáng**. QTR-8A đo PHẢN XẠ: tối đi thì nền trắng phản xạ ít hơn, mắt ở **rìa
+  vạch** tụt xuống dưới ngưỡng cố định và bị đếm là đen → đủ 4 mắt là **GIAO LỘ GIẢ**
+  giữa đoạn thẳng. Đo trên robot buổi tối: hay nhầm giao lộ dù đang đi thẳng. Thể lệ
+  ghi rõ **ánh sáng sân thi KHÔNG đảm bảo ổn định**.
+  ⚠️ **KHÔNG chữa bằng cách nâng `INTERSECTION_THRESHOLD` lên 5** — C0R0 là **ngã ba**,
+  chỉ cho 4/6 mắt (vạch dọc chỉ kéo về một phía), nâng lên là mất luôn giao lộ thật.
+  Dải hẹp hơn `LINE_ADAPTIVE_MIN_RANGE` (cả thanh cùng đen giữa giao lộ, hoặc cùng
+  trắng khi mất line) thì công thức vô nghĩa → rơi về `LINE_THRESHOLD` tuyệt đối.
+  `LINE_ADAPTIVE = False` để về hành vi cũ.
 - **Polarity QTR-8A**: `LineSensor.read_raw()` chuẩn hoá để **0.0 = trên line** bất kể
   loại cảm biến. Cờ `config.LINE_BLACK_IS_HIGH` (hiện đặt True) tự đảo tín hiệu tại
   nguồn nếu QTR đọc đen ra giá trị cao → không phải sửa logic phía dưới. Chốt cờ +

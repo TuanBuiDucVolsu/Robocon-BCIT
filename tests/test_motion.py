@@ -78,7 +78,14 @@ def test_line_sensor(m: Motion):
 
 
 def test_line_sensor_raw(m: Motion):
-    print(f"\n[TEST] Calibrate QTR-8A — raw ADC (ngưỡng LINE_THRESHOLD={config.LINE_THRESHOLD})")
+    print(f"\n[TEST] Calibrate QTR-8A — raw ADC")
+    if getattr(config, "LINE_ADAPTIVE", False):
+        print(f"  Ngưỡng TƯƠNG ĐỐI: min + (max−min)×{config.LINE_ADAPTIVE_FRACTION} — "
+              f"tính lại mỗi lần đọc, trôi theo ánh sáng.")
+        print(f"  Dải hẹp hơn {config.LINE_ADAPTIVE_MIN_RANGE} → rơi về tuyệt đối "
+              f"{config.LINE_THRESHOLD}.")
+    else:
+        print(f"  Ngưỡng TUYỆT ĐỐI {config.LINE_THRESHOLD} (LINE_ADAPTIVE đang tắt)")
     print("  Đặt từng mắt lên line đen / nền trắng để xem giá trị.")
     print(f"  thô = line nằm đâu trên thanh · lái = thô − LINE_CENTER_OFFSET "
           f"({config.LINE_CENTER_OFFSET:+.2f})")
@@ -94,7 +101,10 @@ def test_line_sensor_raw(m: Motion):
             dig_str = "".join("█" if d else "░" for d in digital)
             err = m.compute_line_error_analog(raw)          # THÔ, chưa trừ điểm đặt
             lai = err - config.LINE_CENTER_OFFSET      # sai số bộ bám line THẬT SỰ dùng
-            print(f"  ADC: [{adc_str}]  {dig_str}  thô={err:+.2f}  lái={lai:+.2f}")
+            ng = LineSensor.nguong_cho(raw) * 1023
+            gl = " GIAO LỘ" if sum(values) >= config.INTERSECTION_THRESHOLD else ""
+            print(f"  ADC: [{adc_str}]  {dig_str}  ngưỡng={ng:4.0f}  "
+                  f"thô={err:+.2f}  lái={lai:+.2f}{gl}")
             time.sleep(0.3)
     except KeyboardInterrupt:
         print("\n  Dừng calibrate.")

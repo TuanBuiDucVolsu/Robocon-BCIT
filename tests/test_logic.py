@@ -811,10 +811,21 @@ class TestPlanDelivery(unittest.TestCase):
 
 class TestLineSensorDigital(unittest.TestCase):
     def test_threshold_mapping(self):
-        threshold = config.LINE_THRESHOLD / 1023.0
-        raw = [0.0, threshold - 0.01, threshold + 0.01, 1.0]
-        digital = LineSensor.digital_from_raw(raw)
-        self.assertEqual(digital, [1, 1, 0, 0])
+        """Ngưỡng TUYỆT ĐỐI — ép tắt ngưỡng tương đối để kiểm riêng nhánh này.
+
+        Không ép thì test đo lẫn hai cơ chế: ngưỡng tương đối tính lại theo dải
+        sáng-tối của chính mẫu, nên giá trị sát ngưỡng tuyệt đối rơi về phía khác.
+        Nhánh tương đối có test riêng ở TestNguongTuongDoi (test_units).
+        """
+        with patch.object(config, "LINE_ADAPTIVE", False):
+            threshold = config.LINE_THRESHOLD / 1023.0
+            raw = [0.0, threshold - 0.01, threshold + 0.01, 1.0]
+            self.assertEqual(LineSensor.digital_from_raw(raw), [1, 1, 0, 0])
+
+    def test_absolute_threshold_still_reachable(self):
+        """Dải sáng-tối hẹp thì PHẢI rơi về ngưỡng tuyệt đối, kể cả khi bật tương đối."""
+        gan_nhau = [0.60, 0.61, 0.60, 0.62]      # dải ~20/1023, hẹp hơn MIN_RANGE
+        self.assertEqual(LineSensor.digital_from_raw(gan_nhau), [0, 0, 0, 0])
 
 
 class TestLineSensorPolarity(unittest.TestCase):

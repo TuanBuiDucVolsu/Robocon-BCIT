@@ -36,7 +36,7 @@ os.environ.setdefault("GPIOZERO_MOCK_PIN_CLASS", "mockpwmpin")
 
 import config
 from control.lift import MAX_LEVEL, Lift, PalletSensors
-from control.motion import Motion
+from control.motion import LineSensor, Motion
 from tests.config_editor import save_config
 
 try:
@@ -1326,6 +1326,54 @@ class TestReverseRecenter(unittest.TestCase):
 
     def test_recenter_speed_is_above_the_dead_zone(self):
         self.assertGreater(config.REVERSE_RECENTER_SPEED, config.MOTOR_MIN_DUTY)
+
+
+class TestNguongTuongDoi(unittest.TestCase):
+    """Ngưỡng đen/trắng phải trôi theo ánh sáng, không cố định.
+
+    QTR-8A đo PHẢN XẠ: tối đi thì nền trắng phản xạ ít hơn, mắt ở RÌA vạch tụt xuống
+    dưới ngưỡng cố định và bị đếm là đen → đủ 4 mắt là GIAO LỘ GIẢ giữa đoạn thẳng.
+    Đo trên robot buổi tối 02/08. Thể lệ ghi ánh sáng sân thi KHÔNG đảm bảo ổn định.
+
+    KHÔNG chữa được bằng cách nâng INTERSECTION_THRESHOLD lên 5 — C0R0 là NGÃ BA,
+    chỉ cho 4/6 mắt.
+    """
+
+    def _dig(self, adc):
+        return LineSensor.digital_from_raw([v / 1023 for v in adc])
+
+    def test_dim_light_edge_pixels_are_not_counted_as_line(self):
+        """Ca đã gặp: buổi tối, 2 mắt rìa đọc ~190 — dưới LINE_THRESHOLD = 200."""
+        toi = [600, 190, 10, 15, 185, 610]
+        with patch.object(config, "LINE_ADAPTIVE", False):
+            cu = self._dig(toi)
+        moi = self._dig(toi)
+        self.assertGreaterEqual(sum(cu), config.INTERSECTION_THRESHOLD,
+                                "tiền đề: ngưỡng cố định PHẢI nhận nhầm ca này")
+        self.assertLess(sum(moi), config.INTERSECTION_THRESHOLD,
+                        "ngưỡng tương đối phải KHÔNG nhận nhầm là giao lộ")
+
+    def test_t_junction_still_detected_in_dim_light(self):
+        """Ngã ba C0R0 cho đúng 4/6 — phải VẪN nhận ra, không thì mất giao lộ thật."""
+        self.assertGreaterEqual(sum(self._dig([610, 600, 5, 5, 5, 5])),
+                                config.INTERSECTION_THRESHOLD)
+
+    def test_all_white_stays_all_white(self):
+        """Mất line: dải quá hẹp → rơi về ngưỡng tuyệt đối, không bịa ra mắt đen."""
+        self.assertEqual(sum(self._dig([600, 610, 595, 605, 600, 608])), 0)
+
+    def test_all_black_stays_all_black(self):
+        """Giữa ngã tư: dải hẹp → tuyệt đối, phải ra đủ 6 mắt đen."""
+        self.assertEqual(sum(self._dig([10, 8, 5, 5, 6, 9])), 6)
+
+    def test_bright_light_unchanged(self):
+        """Ban ngày vẫn cho đúng kết quả cũ — không phá thứ đang chạy được."""
+        self.assertEqual(self._dig([925, 900, 10, 15, 910, 920]), [0, 0, 1, 1, 0, 0])
+
+    def test_threshold_follows_the_light_level(self):
+        sang = LineSensor.nguong_cho([v / 1023 for v in [925, 900, 10, 15, 910, 920]])
+        toi = LineSensor.nguong_cho([v / 1023 for v in [600, 590, 10, 15, 585, 610]])
+        self.assertGreater(sang, toi, "trời sáng hơn thì ngưỡng phải cao hơn")
 
 
 class TestLineCenterOffset(unittest.TestCase):

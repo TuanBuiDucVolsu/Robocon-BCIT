@@ -76,8 +76,33 @@ class LineSensor:
         return raw
 
     @staticmethod
+    def nguong_cho(raw: list[float]) -> float:
+        """Ngưỡng đen/trắng cho MỘT lần đọc — tính từ chính dải sáng-tối của nó.
+
+        VÌ SAO KHÔNG DÙNG NGƯỠNG CỐ ĐỊNH: QTR-8A đo PHẢN XẠ. Ánh sáng nền tối đi thì
+        nền trắng phản xạ ít hơn, mọi giá trị tụt xuống — mắt ở RÌA vạch rơi xuống
+        dưới ngưỡng cố định và bị đếm là đen. Đủ 4 mắt là báo GIAO LỘ GIẢ giữa đoạn
+        thẳng. Đo trên robot buổi tối: hay nhầm giao lộ dù đang trên đường thẳng.
+        Mà thể lệ ghi rõ ánh sáng ở sân thi KHÔNG đảm bảo ổn định.
+
+        Không chữa được bằng cách nâng INTERSECTION_THRESHOLD lên 5: C0R0 là NGÃ BA,
+        chỉ cho 4/6 mắt (vạch dọc chỉ kéo về một phía) — nâng lên là mất giao lộ thật.
+
+        Ngưỡng tương đối = min + (max − min) × LINE_ADAPTIVE_FRACTION, nên nó trôi
+        theo ánh sáng. Khi cả thanh cùng đen hoặc cùng trắng thì dải quá hẹp, công
+        thức vô nghĩa — lúc đó rơi về ngưỡng tuyệt đối như cũ.
+        """
+        if not raw or not getattr(config, "LINE_ADAPTIVE", False):
+            return LineSensor._threshold_norm()
+        lo, hi = min(raw), max(raw)
+        dai_toi_thieu = config.LINE_ADAPTIVE_MIN_RANGE / 1023.0
+        if hi - lo < dai_toi_thieu:
+            return LineSensor._threshold_norm()
+        return lo + (hi - lo) * config.LINE_ADAPTIVE_FRACTION
+
+    @staticmethod
     def digital_from_raw(raw: list[float]) -> list[int]:
-        threshold = LineSensor._threshold_norm()
+        threshold = LineSensor.nguong_cho(raw)
         return [1 if v < threshold else 0 for v in raw]
 
     def read(self) -> list[int]:
