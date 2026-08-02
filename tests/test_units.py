@@ -17,6 +17,7 @@ trận): file này khoá lại các hàm nhỏ mà SAI THÌ MẤT ĐIỂM NHƯNG
 
 import os
 import sys
+import time
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -830,6 +831,62 @@ class TestFollowLineReverse(unittest.TestCase):
         self.m.read_line_sensor_raw = lambda: [0.0] * n       # mọi mắt thấy line
         at_intersection, _values = self.m.follow_line(base_speed=40, reverse=True)
         self.assertTrue(at_intersection, "lùi vẫn phải nhận ra giao lộ")
+
+
+class TestExitStartZone(unittest.TestCase):
+    """Cửa sổ mù đầu ô xuất phát: bỏ qua hình MASCOT in ngay dưới robot.
+
+    Ô xuất phát nằm trong khoảng đứt của R0 và chỗ đó in mascot, mặt đen tuyền —
+    đo trên bản in thì thanh cảm biến thấy tới 14/23 px đen ngay tại chỗ đặt. Không
+    có cửa sổ mù thì exit_start_zone() "chạm line" ở mẫu đầu tiên rồi căn giữa 1
+    giây trên mặt con mascot.
+    """
+
+    def _motion(self, values):
+        m = object.__new__(Motion)
+        m._aborted = lambda: False
+        m.forward = MagicMock()
+        m.stop = MagicMock()
+        m.read_line_sensor = lambda: values
+        m.follow_line = MagicMock(return_value=(False, values))
+        return m
+
+    def test_ignores_line_during_blind_window(self):
+        """Thấy 'line' ngay từ đầu (mascot) thì KHÔNG được dừng trong cửa sổ mù."""
+        m = self._motion([1, 1, 1, 0, 0, 0])
+        t0 = time.time()
+        with patch.object(config, "EXIT_START_BLIND_TIME", 0.4):
+            self.assertTrue(m.exit_start_zone(timeout=3.0))
+        self.assertGreaterEqual(time.time() - t0, 0.4)
+
+    def test_finds_line_immediately_when_no_blind_window(self):
+        """Đặt 0 thì giữ ĐÚNG hành vi cũ — dừng ngay khi thấy line."""
+        m = self._motion([1, 1, 1, 0, 0, 0])
+        t0 = time.time()
+        with patch.object(config, "EXIT_START_BLIND_TIME", 0.0):
+            with patch.object(config, "EXIT_START_ALIGN_TIME", 0.0):
+                self.assertTrue(m.exit_start_zone(timeout=3.0))
+        self.assertLess(time.time() - t0, 0.3)
+
+    def test_fails_when_line_never_found(self):
+        """Hết timeout mà không thấy line → False, không báo thành công."""
+        m = self._motion([0, 0, 0, 0, 0, 0])
+        with patch.object(config, "EXIT_START_BLIND_TIME", 0.1):
+            self.assertFalse(m.exit_start_zone(timeout=0.5))
+        m.stop.assert_called()
+
+    def test_blind_window_must_not_exceed_distance_to_intersection(self):
+        """Chốt bằng số: cửa sổ mù dài quá thì vượt giao lộ C0R0 mà không đếm.
+
+        Đo trên bản in: mascot hết ở 10.2cm, line R0 thật bắt đầu 21.9cm, giao lộ
+        C0R0 ở 51.2cm. Test này không đo được cm/s trên PC, nên nó chỉ chặn việc ai
+        đó đặt một con số lớn tới mức KHÔNG có tốc độ hợp lý nào còn an toàn:
+        ở 20cm/s (chậm nhất còn tin được) thì 2.5s đã là 50cm, sát C0R0.
+        """
+        self.assertLess(config.EXIT_START_BLIND_TIME, 2.5,
+                        "≥2.5s thì ngay ở 20cm/s cũng đã chạm giao lộ C0R0 (51.2cm)")
+        self.assertGreater(config.EXIT_START_BLIND_TIME, 0.0,
+                           "0 = quay lại lỗi bắt nhầm mascot làm line")
 
 
 class TestAdvanceToEnd(unittest.TestCase):

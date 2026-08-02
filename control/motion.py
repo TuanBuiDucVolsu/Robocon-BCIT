@@ -289,11 +289,33 @@ class Motion:
         Thoát ô start (GAP — không có line trên R0).
 
         Robot đặt quay mặt sang trái (9h, về Kệ 3):
-        1. Tiến thẳng cho đến khi chạm line ngang R0
-        2. Bám line ngắn để căn giữa — KHÔNG đếm giao lộ ở đây
+        1. Tiến thẳng MÙ `EXIT_START_BLIND_TIME` giây (bỏ qua cảm biến)
+        2. Tiến tiếp cho đến khi chạm line ngang R0
+        3. Bám line ngắn để căn giữa — KHÔNG đếm giao lộ ở đây
         Giao lộ do route của navigation.plan() đếm, tránh đếm kép.
+
+        ⚠️ VÌ SAO CÓ BƯỚC MÙ (1): ô xuất phát nằm trong khoảng ĐỨT của R0, và chỗ
+        đó in hình MASCOT — mặt robot màu đen tuyền. Quét trên bản in, dọc đúng vệt
+        thanh cảm biến sẽ đi qua:
+
+            −10cm → +10.2cm : MASCOT, tới 14/23 px đen  ← robot NGỒI TRÊN vùng này
+            10.2  → 21.9cm  : sạch
+            21.9cm →        : line R0 THẬT, đều đặn 7/23 px
+            51.2cm          : giao lộ C0R0
+
+        Không có bước mù thì `sum(values) > 0` đúng ngay mẫu ĐẦU TIÊN — robot dừng
+        tại chỗ và "căn giữa" 1 giây trên mặt con mascot, rồi coi như đã ra tới R0.
+
+        Cửa sổ mù phải kết thúc trong khoảng **10.2cm → 51.2cm** kể từ chỗ đặt:
+        ngắn quá thì vẫn dính mascot, dài quá thì vượt qua giao lộ C0R0 mà không
+        đếm được, và lệnh `("forward", 1)` sau đó sẽ chạy tới tận kệ mà không thấy
+        giao lộ nào. Vì đo bằng THỜI GIAN chứ không phải quãng đường, nó phụ thuộc
+        `EXIT_START_SPEED` và cả chỗ đặt robot trong ô 400x400mm — đo lại khi đổi
+        một trong hai. Xem config.EXIT_START_BLIND_TIME.
         """
-        logger.info("Thoát ô start — tiến thẳng tìm line R0 (speed=%d%%)", speed)
+        blind = getattr(config, "EXIT_START_BLIND_TIME", 0.0)
+        logger.info("Thoát ô start — mù %.2fs (qua vùng in mascot) rồi tìm line R0 "
+                    "(speed=%d%%)", blind, speed)
         start = time.time()
         self.forward(speed)
 
@@ -302,6 +324,11 @@ class Motion:
             if self._aborted():
                 return False
             values = self.read_line_sensor()
+            # Trong cửa sổ mù thì KHÔNG đọc kết quả — vẫn gọi read_line_sensor() để
+            # nhịp vòng lặp và trạng thái cảm biến giống hệt phần sau.
+            if time.time() - start < blind:
+                time.sleep(0.01)
+                continue
             if sum(values) > 0:
                 self.stop()
                 logger.info("Chạm line R0! sensor=%s", values)

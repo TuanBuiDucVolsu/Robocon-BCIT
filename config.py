@@ -520,6 +520,26 @@ EXIT_START_TIMEOUT = 5.0     # Giây, không thấy line thì báo lỗi
 # khác (tiếp cận kệ, luồn càng, lùi ra, dò nửa sân) đều lệch theo cùng nguyên nhân.
 # Đừng nới quá tay: căn lâu quá thì robot bám line tới tận giao lộ C0R0, lúc đó lệnh
 # "tiến 1 giao lộ" của route sẽ đếm sang giao lộ KẾ TIẾP và đi lố.
+# Giây tiến MÙ khỏi ô xuất phát trước khi bắt đầu tìm line — BỎ QUA cảm biến trong
+# khoảng này. Cần vì ô xuất phát nằm trong khoảng đứt của R0 và chỗ đó IN HÌNH
+# MASCOT, mặt robot đen tuyền: không có bước mù thì exit_start_zone() bắt "line"
+# ngay mẫu đầu tiên rồi căn giữa trên mặt con mascot.
+#
+# Đo trên bản in, dọc vệt thanh cảm biến (docs/SA_BAN.md mục 3c):
+#     −10 → 10.2cm : MASCOT, tới 14/23 px đen — robot NGỒI TRÊN vùng này
+#     10.2 → 21.9  : sạch
+#     21.9cm →     : line R0 thật (7/23 px)
+#     51.2cm       : giao lộ C0R0
+# → cửa sổ mù phải kết thúc trong 10.2..51.2cm. Ngắn quá thì vẫn dính mascot; dài
+#   quá thì vượt C0R0 mà không đếm, và ("forward", 1) sau đó chạy tới tận kệ.
+#
+# ⚠️ ĐANG ĐẶT THEO ƯỚC LƯỢNG, CHƯA ĐO. 0.6s nhắm quãng ~15cm với giả định
+# ~25cm/s ở EXIT_START_SPEED=50 (suy từ --forward 2.5s/giao lộ của tools.dry_run,
+# mà số đó cũng chỉ là placeholder). CÁCH ĐO ĐÚNG: cho robot chạy forward 1.0s ở
+# EXIT_START_SPEED trên sàn thi, đo bằng thước ra cm/s, rồi đặt = 15 / (cm/s).
+# Nhớ đo cả CHỖ ĐẶT robot trong ô 400x400mm — đặt lệch 10cm là lệch cả cửa sổ,
+# nên hãy dán dấu và đặt đúng một chỗ mọi lần.
+EXIT_START_BLIND_TIME = 0.6
 EXIT_START_ALIGN_TIME = 1.0  # Giây bám line ngắn để căn giữa sau khi chạm line
 
 MATCH_DURATION = 240

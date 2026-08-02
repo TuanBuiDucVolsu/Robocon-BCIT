@@ -161,6 +161,39 @@ VIỀN Ô KỆ chứ không phải line; **hàng** R4 y≈128, R2 y≈374, R1 y�
 Bản đồ này được khai báo **một chỗ duy nhất**: `navigation.NODES` / `EDGES` /
 `TERMINALS`. Route không còn viết tay — xem mục 5.
 
+### 3c. Ô xuất phát in MASCOT — cảm biến line đọc nhầm ngay mẫu đầu tiên
+
+Ô xuất phát nằm trong khoảng đứt của R0, và chỗ đó **in hình mascot** — mặt robot
+màu **đen tuyền**. Quét dọc đúng vệt thanh cảm biến sẽ đi (dải 60mm quanh hàng R0),
+tính từ chỗ đặt robot, đi về phía Kệ 3:
+
+| Quãng đã đi | Cảm biến thấy |
+|---|---|
+| −10cm → **10.2cm** | **MASCOT**, tới **14/23 px đen** — robot NGỒI TRÊN vùng này |
+| 10.2 → 21.9cm | sạch |
+| **21.9cm** → | **line R0 thật**, đều đặn **7/23 px** (vạch 19mm trong dải 60mm) |
+| **51.2cm** | giao lộ **C0R0** (10/23 px — có line dọc cắt ngang) |
+
+→ `exit_start_zone()` không có cửa sổ mù thì `sum(values) > 0` đúng ở mẫu ĐẦU TIÊN,
+robot dừng tại chỗ và "căn giữa" 1 giây trên mặt con mascot, rồi coi như đã ra tới
+R0. Đó là lý do có `config.EXIT_START_BLIND_TIME` — cửa sổ mù phải kết thúc trong
+**10.2 → 51.2cm**. Vì tính bằng THỜI GIAN nên nó phụ thuộc `EXIT_START_SPEED` **và
+chỗ đặt robot trong ô 400x400mm**: đặt lệch 10cm là lệch cả cửa sổ. **Dán dấu và
+đặt đúng một chỗ mọi lần.**
+
+Quét lại (đổi `x` khởi điểm nếu đo được chỗ đặt thật):
+
+```bash
+python3 -c "
+import numpy as np
+from PIL import Image
+im = np.array(Image.open('docs/sa_ban.png').convert('RGB')).astype(int)
+den = (im.max(axis=2) < 110) & (np.ptp(im, axis=2) < 45)
+for x in range(800, 330, -10):
+    n = int(den[609:632, x].sum())
+    if n: print(f'{(690-x)*0.1463:7.1f} cm   {n:3d}/23   ' + '#'*n)"
+```
+
 ### 3b. Đoạn line vào kệ dài bao nhiêu — LINE CHẠM SÁT CHÂN KỆ
 
 Câu hỏi thực dụng: robot bò vào kệ thì **còn vạch để bám không**, hay phải chạy mù?
