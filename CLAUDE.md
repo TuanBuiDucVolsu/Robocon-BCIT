@@ -627,6 +627,26 @@ chấp nhận được: nó không nhận SAI, chỉ im lặng, nhờ cơ chế 
 - Chốt dải bằng `python3 -m tools.calibrate_vision` (hỏi tầng, chạy riêng từng tầng;
   `COLOR_RANGES` hiện chỉ có MỘT bộ dùng chung cho cả 2 tầng).
 
+## Đồng bộ code sang phantom khi Pi KHÔNG có Internet
+
+Phantom nhiều lúc chỉ có tailscale, không resolve được `github.com` (`git pull` báo
+*Could not resolve host*). Chuyển bằng **git bundle** — giữ nguyên lịch sử, không
+phải rsync đè file:
+
+```bash
+# trên máy dev — <sha> = commit phantom đang đứng (git log -1 trên phantom)
+git bundle create /tmp/sync.bundle <sha>..HEAD
+scp /tmp/sync.bundle bcit@phantom:/tmp/
+
+# trên phantom — LƯU Ý ref là HEAD, không phải main
+cd ~/Robocon-BCIT && git status --short   # ⚠️ có sửa gì chưa commit không?
+git pull /tmp/sync.bundle HEAD
+```
+
+⚠️ **Luôn `git status --short` trên phantom TRƯỚC.** Đã hai lần suýt xoá mất số
+calibrate người dùng vừa đo (`PWM_COMPENSATION`, `LIFT_RIGHT_LOWER_EXTRA`) — những
+số đó chỉ tồn tại trên phantom, không ở đâu khác.
+
 ## Quy tắc quan trọng
 
 - Bản đồ line trong `navigation.py` đo từ file in chuẩn — vẫn phải **đếm lại tay trên
