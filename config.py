@@ -68,12 +68,29 @@ BOARD_SIDE_SWITCH_PIN = 12       # Công tắc gạt (None = chưa lắp). Cách
 BOARD_SIDE_SWITCH_CLOSED = "samsung"   # Gạt về phía nối GND = nửa nào
 FACTORY_AT_START_ROW = "foxconn"       # Dự phòng khi không đọc được công tắc
 
-# Chiều trái/phải — bản in cho thấy cả 2 nửa đều False. Robot tự dò để kiểm chứng:
-# tại giao lộ Kệ 3 xoay phải, tiến ra xem có nhánh line không (line dọc cột kệ chỉ
-# chạy về một phía). KHÔNG dò được thứ tự nhà máy ở trên — hai nửa giống hệt nhau
-# qua cảm biến line.
+# Chiều trái/phải — bản in cho thấy cả 2 nửa đều False (quay 180° bảo toàn tay
+# thuận). KHÔNG dò được thứ tự nhà máy ở trên — cái đó do CÔNG TẮC GẠT quyết định.
 BOARD_MIRRORED = False
-BOARD_AUTO_DETECT = True
+
+# ⚠️ TẮT TỰ DÒ. Lý do, theo thứ tự sức nặng:
+#
+# 1. THỪA. Công tắc gạt đã cho robot biết nó đang ở NỬA NÀO — đó cũng là thông tin
+#    duy nhất bước dò có thể moi ra. Mà chiều trái/phải KHÔNG đổi theo nửa (cả hai
+#    đều False), nên bước dò đang đo một HẰNG SỐ, không phải biến.
+# 2. NÓ LÀM HỎNG LỆNH NGAY SAU. probe_side_branch() chạy hở hoàn toàn: xoay phải →
+#    tiến 0.45s → lùi 0.45s → xoay trái, rồi tin mình về đúng chỗ cũ. Hai thứ nó
+#    dựa vào đều chưa calibrate (TURN_TIME mới xác nhận chiều TRÁI; bù PWM chiều
+#    LÙI thì option f không ghi), nên robot về LỆCH KHỎI VẠCH và advance_to_end kế
+#    đó không tìm thấy line. Đo trên robot: smoke option 1 dừng ngay tại giao lộ.
+# 3. ĐOÁN SAI THÌ MẤT CẢ TRẬN. Dò xong nó GỌI set_mirrored() — báo nhầm GƯƠNG là
+#    nạp lại toàn bộ bản đồ theo chiều gương, mọi lệnh xoay đảo chiều tới hết trận.
+#    Đã quan sát thấy nó lúc báo CHUẨN lúc báo GƯƠNG.
+# 4. Tốn 2-4s đầu trận.
+#
+# Thứ nó bảo vệ chỉ là giả thuyết "bản in sai chiều" — kiểm bằng mắt 5 giây trên
+# sân. Một cơ chế phòng lỗi mà tự nó gây lỗi nhiều hơn lỗi nó phòng thì nên bỏ.
+# Bật lại: BOARD_AUTO_DETECT = True (main.py có sẵn cả 2 nhánh).
+BOARD_AUTO_DETECT = False
 PROBE_SPEED = 35             # Tốc độ tiến/lùi khi dò (0-100)
 PROBE_TRAVEL_TIME = 0.45     # Giây tiến ra khỏi giao lộ rồi lùi lại đúng bấy nhiêu.
                              # Đủ thoát vạch ngang (~10-15cm), chưa tới mép sa bàn.

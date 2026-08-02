@@ -21,7 +21,7 @@ import random
 import time
 import sys
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -147,7 +147,10 @@ def run_match(seed: int, hw_fail_rate: float = 0.0, line_loss_rate: float = 0.0,
     robot.lift.dropoff_left.return_value = True
     robot.lift.dropoff_right.return_value = True
     robot.vision.get_factory_name.side_effect = lambda label: label
-    robot.vision.classify_pair.side_effect = lambda: (
+    # `*a` là BẮT BUỘC: main.py gọi classify_pair(self.current_tier) — vùng quét
+    # dịch theo tầng. Lambda 0 tham số làm cả 14 test chết bằng TypeError, và vì
+    # test_match_sim không nằm trong lệnh test hay chạy nên nó chết âm thầm.
+    robot.vision.classify_pair.side_effect = lambda *a, **k: (
         (random.choice(LABELS), random.choice(LABELS)) if maybe_fail() else (None, None))
 
     steps_run = 0
@@ -337,12 +340,22 @@ class TestMidMatchReset(unittest.TestCase):
 
 
 class TestAutoDetectSide(unittest.TestCase):
-    """Robot tự dò nửa sân đầu trận: cấu hình sai vẫn phải chạy đúng."""
+    """Robot tự dò nửa sân đầu trận: cấu hình sai vẫn phải chạy đúng.
+
+    ⚠️ `config.BOARD_AUTO_DETECT` hiện là **False** (xem lý do trong config.py).
+    Lớp này BẬT LẠI cờ đó trong phạm vi từng test, vì nó kiểm CƠ CHẾ dò chứ không
+    kiểm cấu hình mặc định — cơ chế vẫn còn trong code và bật lại được. Không ép
+    cờ thì cả 2 test xanh một cách vô nghĩa: state DETECT_SIDE thoát ngay ở dòng
+    đầu, không lần nào gọi tới probe.
+    """
 
     def setUp(self):
         self._saved = nav.MIRRORED
+        self._auto = patch.object(config, "BOARD_AUTO_DETECT", True)
+        self._auto.start()
 
     def tearDown(self):
+        self._auto.stop()
         nav.set_mirrored(self._saved)
 
     def test_wrong_config_is_corrected_by_probe(self):

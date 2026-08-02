@@ -157,7 +157,12 @@ def build_robot(scenario, rec):
         rec.add("căn", f"lùi ra {config.RETREAT_DISTANCE}cm", a.retreat)
         return True
 
-    def classify():
+    # Chữ ký phải khớp Vision.classify_pair(level) — main gọi classify_pair(
+    # self.current_tier) vì vùng quét dịch theo tầng. Bỏ `*a` là TypeError giữa
+    # chừng, mà dry_run bị nuốt lỗi trong setUpClass nên chỉ hiện ra ở test_tools.
+    # KHÔNG đặt tên `*a` — closure này đã dùng `a` cho bảng thời gian ở ngoài,
+    # đặt trùng là che mất và nổ AttributeError ở dòng rec.add ngay dưới.
+    def classify(*_args, **_kw):
         pair = scenario[min(r.pickup_count, len(scenario) - 1)]
         rec.add("quét", f"chụp ảnh, chia đôi khung → TRÁI={pair[0]}  PHẢI={pair[1]}", a.scan)
         return pair

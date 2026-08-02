@@ -50,12 +50,15 @@ def _run(m: Motion, goal: str, pose) -> tuple[bool, tuple]:
 
 
 # ==========================================================
-# SMOKE 1 — Xuất phát: exit start → dò nửa sân → vào Kệ 3
+# SMOKE 1 — Xuất phát: exit start → [dò nửa sân nếu bật] → vào Kệ 3
 # ==========================================================
 
 def smoke_exit_and_navigate(m: Motion, **_):
     """Đúng thứ tự main.py: START → DETECT_SIDE → NAVIGATE_TO_SHELF."""
-    print("\n[SMOKE 1] Xuất phát → dò nửa sân → Kệ 3")
+    buoc_do = "→ dò nửa sân " if getattr(config, "BOARD_AUTO_DETECT", False) else ""
+    print(f"\n[SMOKE 1] Xuất phát {buoc_do}→ Kệ 3")
+    if not buoc_do:
+        print("  (BOARD_AUTO_DETECT=False — bỏ bước xoay phải dò nhánh, đi thẳng ra kệ)")
     print("  Đặt robot trong ô start, quay mặt về phía Kệ 3.")
     _pause("Sẵn sàng?")
 
@@ -347,7 +350,8 @@ def smoke_task2_full(m: Motion, lift: Lift, **_):
 
 
 SMOKES = {
-    "1": ("Xuất phát: exit start → dò nửa sân → Kệ 3", smoke_exit_and_navigate),
+    "1": ("Xuất phát: exit start → Kệ 3 (dò nửa sân nếu BOARD_AUTO_DETECT)",
+          smoke_exit_and_navigate),
     "2": ("Pickup 1 lượt (approach + classify_pair + nâng)", smoke_pickup_cycle),
     "3": ("Thả từng càng + nâng lại / gập càng", smoke_drop_single_side),
     "4": ("NV2 — chỉ nhấc hàng rời", smoke_nv2_pickup),
@@ -360,10 +364,37 @@ SMOKES = {
 NEEDS_VISION = {"2", "5"}
 
 
+def _ask_board_side() -> str:
+    """HỎI đang ở nửa sân nào, thay vì bắt robot tự dò.
+
+    Thi đấu thì CÔNG TẮC GẠT (GPIO 12) quyết định thứ tự nhà máy. Trên bàn test thì
+    công tắc có thể chưa lắp hoặc gạt sai, mà đặt sai KHÔNG có tín hiệu báo lỗi nào
+    — IR vẫn báo thả thành công, log vẫn xanh, chỉ mất sạch điểm. Một câu hỏi rẻ
+    hơn nhiều so với chạy hết một lượt rồi mới biết.
+
+    Đây KHÔNG phải thứ mà `probe_side_branch()` dò được: bước dò chỉ kiểm chiều
+    trái/phải, còn thứ tự nhà máy thì hai nửa giống hệt nhau qua cảm biến line.
+    """
+    hien = nav.FACTORY_AT_START_ROW
+    print("\nĐang ở nửa sân nào? (nhà máy CÙNG HÀNG ô xuất phát)")
+    print("   1. FOXCONN  — đội góc dưới-trái")
+    print("   2. SAMSUNG  — đội góc trên-phải")
+    print("   KIỂM BẰNG MẮT: đứng ở ô xuất phát nhìn sang tường giữa sân.")
+    tra = input(f"  Chọn [1/2, Enter = giữ {hien.upper()}]: ").strip()
+    side = {"1": "foxconn", "2": "samsung"}.get(tra, hien)
+    if side != nav.FACTORY_AT_START_ROW:
+        nav.set_factory_order(side)
+        print(f"  → Đã nạp lại bản đồ: nhà máy cùng hàng ô xuất phát = {side.upper()}")
+    else:
+        print(f"  → Giữ nguyên: nhà máy cùng hàng ô xuất phát = {side.upper()}")
+    return side
+
+
 def main():
     print("=" * 60)
     print("SMOKE TEST TÍCH HỢP — Bảng O2")
     print("=" * 60)
+    _ask_board_side()
     print(f"\n{nav.board_summary()}")
 
     print("\nChọn smoke test:")
