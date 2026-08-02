@@ -245,6 +245,12 @@ class Lift:
     def go_to_level(self, target_level: int):
         """Di chuyển CẢ 2 càng đến tầng mục tiêu."""
         if target_level == self._current_level:
+            # KHÔNG im lặng: không có limit switch nên `_current_level` chỉ là NIỀM
+            # TIN. Tin sai thì đây là chỗ càng đứng yên trong khi cả hệ thống tưởng
+            # nó đã lên đúng tầng — rồi robot tiến vào và càng chui vào gầm kệ.
+            logger.info("Càng đã ở tầng %d (theo _current_level) — KHÔNG chạy motor. "
+                        "Nếu thực tế càng không ở đó thì mọi bước sau đều sai.",
+                        target_level)
             return
         self._move_both(self._current_level, target_level)
         self._current_level = target_level

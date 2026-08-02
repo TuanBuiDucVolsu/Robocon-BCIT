@@ -31,7 +31,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def insert_and_lift_once(motion, lift, tier: int, require_both: bool = True) -> bool:
+def insert_and_lift_once(motion, lift, tier: int, require_both: bool = True,
+                         on_step=None) -> bool:
     """MỘT lần thử bốc hàng. Trả True khi IR xác nhận pallet đã trên càng.
 
     Không tự retry và không tự lùi ra — phần đó thuộc về caller, vì lùi/tiếp cận
@@ -39,8 +40,17 @@ def insert_and_lift_once(motion, lift, tier: int, require_both: bool = True) -> 
     `main.Robot._insert_and_lift()`.
 
     Giả định robot ĐÃ dừng ở vị trí chờ (config.APPROACH_DISTANCE) với càng ở sàn.
+
+    `on_step(ten, mo_ta)` — hook để test QUAN SÁT giữa các bước mà không phải chép
+    lại luồng này. Chép ra là sớm muộn test chạy khác main, và mất đúng cái giá trị
+    mà smoke test sinh ra để có. main.py không truyền gì (None = không làm gì).
+    Thứ tự các bước: raise → creep → lift_off. Bước raise chạy TRƯỚC khi robot tiến;
+    thấy robot tiến rồi mới nâng càng là dấu hiệu `_current_level` sai.
     """
+    buoc = on_step or (lambda *_a: None)
+
     lift.raise_to_insert(tier)
+    buoc("raise", f"đã nâng càng lên ngang tầng {tier} (robot CHƯA tiến)")
 
     need = lift.pallet.has_both if require_both else lift.pallet.has_any
     # `is True` chứ không phải truthy: has_both() trả None khi ĐỌC LỖI SPI/ADC, mà
@@ -49,9 +59,12 @@ def insert_and_lift_once(motion, lift, tier: int, require_both: bool = True) -> 
     # được dừng, cũng không được coi là thành công.
     if not motion.creep_until(lambda: need() is True):
         logger.warning("Bốc hàng: không luồn được càng vào pallet")
+        buoc("creep_fail", "IR KHÔNG báo — càng chưa vào khe pallet")
         return False
+    buoc("creep", "IR đã báo — càng đang NẰM TRONG khe pallet")
 
     lift.lift_off()
+    buoc("lift_off", "đã nhấc bổng, pallet phải RỜI mặt kệ")
     return lift.confirm_pickup(require_both=require_both)
 
 

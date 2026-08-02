@@ -119,7 +119,19 @@ def smoke_pickup_cycle(m: Motion, lift: Lift, vision: Vision, tier: int = 1, **_
     # Luồng THẬT của main.py: nâng ngang tầng → LUỒN càng vào pallet (IR dẫn) →
     # nhấc bổng → xác nhận. Gọi lift.pickup() ở đây là sai: hàm đó nâng tại chỗ,
     # không tiến vào, nên chỉ chạy được khi người test tự tay đặt càng vào pallet.
-    if not insert_and_lift_once(m, lift, tier, require_both=True):
+    # Dừng sau MỖI bước để kiểm bằng mắt. Thứ tự đúng là: nâng càng → tiến → nhấc.
+    # Thấy robot TIẾN rồi mới nâng càng nghĩa là bước nâng không chạy (_current_level
+    # đang tin sai) — và đó chính là lúc càng chui vào gầm kệ thay vì vào khe pallet.
+    def _buoc(ten, mo_ta):
+        print(f"\n  ── [{ten}] {mo_ta}")
+        if ten == "raise":
+            print("     KIỂM BẰNG MẮT trước khi cho tiến:")
+            print("       • Càng có ĐANG NGANG khe pallet không (không phải ở sàn)?")
+            print("       • 2 càng có bằng nhau không?")
+            print("       • Càng có thẳng hàng với 2 khe của pallet không?")
+            input("     Enter để cho robot TIẾN vào (Ctrl+C để dừng)...")
+
+    if not insert_and_lift_once(m, lift, tier, require_both=True, on_step=_buoc):
         print("  ❌ BỐC HÀNG THẤT BẠI (luồn càng hoặc IR không xác nhận)")
         print("     Kiểm: càng có thẳng hàng khe pallet không? APPROACH_DISTANCE "
               "(vị trí chờ) có quá gần/xa không?")
