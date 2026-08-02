@@ -199,6 +199,33 @@ xoay phải → tiến 2 giao lộ → xoay phải → tiến 1 → vào điểm
 
 Bài dừng ở bước [3/5] cho bạn **đo tay khoảng cách tới kệ** — đối chiếu với B3.
 
+### B5 · 🔴 SIÊU ÂM KHI ĐANG CÕNG KIỆN — `test_motion` **8**
+
+**Làm bài này TRƯỚC mọi bài có giao hàng.** 2 phút, và nó quyết định luồng thi đấu
+có chạy được không.
+
+Đặt tay 1 pallet lên càng, nâng càng lên **tầng 1** (`test_lift` option 2), đẩy robot
+ra giữa sa bàn **cách mọi vật ≥ 60cm**, rồi chạy `test_motion` option **8**.
+
+| Đọc được | Nghĩa | Hệ quả |
+|---|---|---|
+| **> 60cm** hoặc báo lỗi | Cảm biến nhìn qua được, kiện không chắn | ✅ luồng giao hàng an toàn |
+| **Số nhỏ cố định** (vd 4cm) | 🔴 Cảm biến đang nhìn CHÍNH KIỆN HÀNG | Xem dưới |
+
+Lặp lại với càng ở **tầng 2**.
+
+**Nếu ra số nhỏ cố định:** trong luồng thi đấu, robot cõng kiện đi giao và siêu âm
+chỉ nhìn thấy kiện đó. Ba chỗ dùng siêu âm lúc đang cõng:
+
+| Chỗ | Đã xử lý chưa |
+|---|---|
+| `retreat_from_shelf` sau khi bốc | ✅ phát hiện "số đo không tăng" → lùi theo giờ |
+| `advance_to_end` khi tới nhà máy | ✅ đòi khoảng cách phải GIẢM ≥ `ADVANCE_MIN_APPROACH_CM` |
+| `approach_shelf` khi thả hàng | ❌ **CHƯA** — sẽ "tới nơi" ngay, thả kiện giữa sa bàn |
+
+Chỗ thứ ba là lỗi **im lặng hoàn toàn**: IR vẫn xác nhận thả, `packages_delivered`
+vẫn tăng, log toàn ✅. Báo lại số đo được để chốt cách sửa.
+
 ### C2 · Bốc hàng — smoke **2** 🔑 **BÀI QUAN TRỌNG NHẤT**
 
 Ngồi ngang tầm mắt với bánh xe. **Nhìn kỹ 10cm cuối.**

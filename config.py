@@ -426,6 +426,14 @@ LINE_END_CONFIRM_TIME = 0.25 # Giây mất line liên tục để kết luận "
 # Motion.advance_to_end. Đủ dài để bù 0.3s chạy mù của _escape_intersection, đủ
 # ngắn để không lao mù ở ADVANCE_SPEED.
 ADVANCE_ACQUIRE_TIME = 0.8
+# Cm khoảng cách phải GIẢM ĐƯỢC kể từ đầu chặng advance thì mới tin "đã tới gần
+# mục tiêu". Lệnh advance luôn xuất phát từ giao lộ, cách điểm cuối ≥35cm, nên vật
+# thật phải cho số đo giảm dần.
+# ⚠️ Không có điều kiện này thì khi robot ĐANG CÕNG KIỆN, siêu âm nhìn thấy chính
+# kiện hàng (nằm trước cảm biến, đi cùng robot, số đo đứng yên ở giá trị nhỏ) và
+# MỌI chặng giao hàng sẽ "tới nhà máy" ngay khi vừa rời giao lộ → thả kiện giữa sa
+# bàn, log vẫn xanh hết. Cùng gốc với vụ lùi ra bị timeout (xem RETREAT_STUCK_*).
+ADVANCE_MIN_APPROACH_CM = 5.0
 ADVANCE_TIMEOUT = 6.0
 
 # ============================================================

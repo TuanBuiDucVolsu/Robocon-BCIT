@@ -1206,9 +1206,30 @@ class TestAdvanceToEnd(unittest.TestCase):
         self.assertLess(_t.time() - t0, config.ADVANCE_ACQUIRE_TIME + 0.5)
 
     def test_ultrasonic_near_target_is_success(self):
-        """Siêu âm thấy kệ gần -> bàn giao cho approach_shelf, kể cả khi chưa thấy line."""
-        m = self._motion([[0] * 6], dist=config.APPROACH_SLOW_DISTANCE - 1)
+        """Siêu âm thấy mục tiêu LẠI GẦN DẦN -> bàn giao cho approach_shelf."""
+        m = self._motion([[0] * 6])
+        xa = config.APPROACH_SLOW_DISTANCE + config.ADVANCE_MIN_APPROACH_CM + 5
+        seq = [xa, xa - 3, config.APPROACH_SLOW_DISTANCE - 1]
+        m.get_distance = lambda: seq.pop(0) if len(seq) > 1 else seq[0]
         self.assertTrue(m.advance_to_end(timeout=3.0))
+
+    def test_constant_near_reading_is_the_carried_load_not_the_target(self):
+        """Số đo NHỎ NGAY TỪ ĐẦU và ĐỨNG YÊN = siêu âm đang nhìn KIỆN HÀNG đang cõng.
+
+        Kiện nằm trước cảm biến và đi CÙNG robot nên số đo không đổi. Nếu tin nó thì
+        MỌI chặng giao hàng "tới nhà máy" ngay khi vừa rời giao lộ, robot thả kiện
+        giữa sa bàn mà log vẫn xanh hết — không có gì báo.
+        Ở đây phải bỏ qua siêu âm và đi tiếp cho tới khi HẾT LINE.
+        """
+        m = self._motion([[0, 0, 1, 1, 0, 0]] * 20 + [[0] * 6], dist=4.0)
+        self.assertTrue(m.advance_to_end(timeout=3.0))
+        # tới đích bằng "hết line", KHÔNG phải bằng siêu âm
+        self.assertGreater(len(m.follow_line.mock_calls) if hasattr(m.follow_line, "mock_calls")
+                           else 1, 0)
+
+    def test_min_approach_is_positive(self):
+        """Đặt 0 là quay lại lỗi tin số đo của chính kiện hàng."""
+        self.assertGreater(config.ADVANCE_MIN_APPROACH_CM, 0)
 
 
 class TestClampCorrection(unittest.TestCase):

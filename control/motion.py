@@ -586,16 +586,31 @@ class Motion:
         # Đã bám được line lần nào chưa. Trước khi True thì "mất line" nghĩa là
         # KHÔNG TÌM THẤY, không phải "đã hết".
         acquired = False
+        # Khoảng cách đọc được lúc BẮT ĐẦU, để biết siêu âm có đang nhìn thấy vật
+        # thật ở phía trước hay chỉ đang nhìn KIỆN HÀNG robot đang cõng. Xem dưới.
+        dist_dau = None
 
         while time.time() - start < timeout:
             if self._aborted():
                 return False
             dist = self.get_distance()
-            if 0 <= dist <= config.APPROACH_SLOW_DISTANCE:
+            if dist >= 0 and dist_dau is None:
+                dist_dau = dist
+            # ⚠️ CHỈ tin "đã tới gần" khi khoảng cách đã THỰC SỰ GIẢM kể từ lúc bắt
+            # đầu. Lệnh advance luôn xuất phát từ một giao lộ, cách điểm cuối 35cm
+            # trở lên — vật thật thì số đo phải giảm dần khi tiến tới.
+            # Số đo NHỎ NGAY TỪ ĐẦU và ĐỨNG YÊN nghĩa là siêu âm đang nhìn chính
+            # KIỆN HÀNG robot cõng: nó nằm trước cảm biến và đi cùng robot. Không có
+            # điều kiện này thì mọi chặng giao hàng đều "tới nhà máy" ngay khi vừa
+            # rời giao lộ, rồi thả kiện giữa sa bàn — mà log vẫn xanh hết.
+            giam = (dist_dau - dist) if dist_dau is not None else 0.0
+            if (0 <= dist <= config.APPROACH_SLOW_DISTANCE
+                    and giam >= config.ADVANCE_MIN_APPROACH_CM):
                 near_streak += 1
                 if near_streak >= 2:
                     self.stop_gently(base_speed)
-                    logger.info("Advance: đã tới gần mục tiêu (%.1fcm)", dist)
+                    logger.info("Advance: đã tới gần mục tiêu (%.1fcm, đã lại gần "
+                                "%.1fcm kể từ đầu chặng)", dist, giam)
                     return True
             else:
                 near_streak = 0
