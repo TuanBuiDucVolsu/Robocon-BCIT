@@ -364,6 +364,18 @@ LINE_THRESHOLD = 200         # ADC 0-1023: < ngưỡng = trên line (đen)
 # Chạy `python3 -m tools.calibrate_line` để chốt cờ này — code tự đảo tại nguồn.
 LINE_BLACK_IS_HIGH = True
 LINE_WEIGHTS = [-2.5, -1.5, -0.5, 0.5, 1.5, 2.5]   # Lệch trái âm, phải dương
+# ĐIỂM ĐẶT của bộ bám line, tính bằng ĐƠN VỊ TRỌNG SỐ (1.0 = một khoảng cách giữa 2
+# mắt ≈ 9.5mm). Trừ thẳng vào sai số, nên robot sẽ giữ line ở đúng chỗ này thay vì
+# giữa thanh cảm biến.
+# ⚠️ ĐO TRÊN ROBOT 02/08, bằng test_motion option 5 (raw ADC), so hai tư thế:
+#     robot LỆCH  → mắt 1,2,3 đen → err = −0.50
+#     robot CHUẨN → mắt 2,3,4 đen → err = +0.50   ← vị trí càng thẳng khe pallet
+# Tức thanh cảm biến LẮP LỆCH TÂM ~5mm so với càng: "line giữa thanh" (err = 0)
+# KHÔNG phải "càng thẳng khe pallet". Không có hằng số này thì follow_line chủ động
+# kéo robot về đúng chỗ SAI, và mọi lần tiếp cận kệ đều chệch một tẹo — đúng triệu
+# chứng đã gặp: càng vướng mép pallet, IR không xác nhận.
+# Đặt 0 để tắt (bám giữa thanh như cũ). Đo lại nếu tháo/lắp lại thanh cảm biến.
+LINE_CENTER_OFFSET = 0.5
 # Duty tối thiểu để bánh CÒN QUAY. Dưới mức này JGA25-370 qua L298N đứng hẳn.
 # Dùng để chặn hiệu chỉnh bám line (Motion._clamp_correction): LINE_KP chỉnh cho
 # SPEED_DEFAULT = 50, nhưng bám line còn chạy ở 32% (APPROACH_SLOW_SPEED,

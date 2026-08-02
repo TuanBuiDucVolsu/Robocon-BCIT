@@ -1232,6 +1232,42 @@ class TestAdvanceToEnd(unittest.TestCase):
         self.assertGreater(config.ADVANCE_MIN_APPROACH_CM, 0)
 
 
+class TestLineCenterOffset(unittest.TestCase):
+    """Điểm đặt bám line phải là "càng thẳng khe pallet", không phải "giữa thanh".
+
+    Số ADC dưới đây ĐO THẬT trên robot 02/08 bằng test_motion option 5, ở hai tư thế
+    do người vận hành xác định bằng mắt. Giữ nguyên số gốc để test này vừa là kiểm
+    thử vừa là BẢN GHI phép đo.
+    """
+
+    # đo thật: thanh 6 mắt, ngưỡng LINE_THRESHOLD, giá trị nhỏ = đen
+    LECH = [908, 19, 0, 0, 926, 926]     # người vận hành: robot LỆCH
+    CHUAN = [891, 925, 0, 0, 0, 911]     # người vận hành: robot CHUẨN
+
+    def _err(self, adc):
+        m = object.__new__(Motion)
+        m._last_error = 0.0
+        return m.compute_line_error_analog([v / 1023 for v in adc])
+
+    def test_aligned_pose_reads_zero_error(self):
+        """Tư thế ĐÚNG phải cho sai số ~0, nếu không bộ bám line sẽ kéo robot đi khỏi nó."""
+        self.assertAlmostEqual(self._err(self.CHUAN), 0.0, delta=0.1)
+
+    def test_skewed_pose_reads_a_correction_toward_the_aligned_one(self):
+        err = self._err(self.LECH)
+        self.assertLess(err, -0.5, "tư thế lệch phải cho sai số đủ lớn để kéo về")
+
+    def test_offset_matches_the_measurement(self):
+        """Bỏ offset thì tư thế ĐÚNG lại báo +0.5 — chính là lỗi đã gặp.
+
+        Không có hằng số này, follow_line lái để đưa sai số về 0, tức chủ động kéo
+        robot về chỗ SAI. Mọi lần tiếp cận kệ đều chệch ~5mm, càng vướng mép pallet,
+        IR không xác nhận.
+        """
+        with patch.object(config, "LINE_CENTER_OFFSET", 0.0):
+            self.assertAlmostEqual(self._err(self.CHUAN), 0.5, delta=0.1)
+
+
 class TestClampCorrection(unittest.TestCase):
     """Hiệu chỉnh bám line không được đẩy bánh chậm xuống dưới vùng chết.
 

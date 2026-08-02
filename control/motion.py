@@ -927,7 +927,7 @@ class Motion:
         weighted_sum = sum(
             w * v for w, v in zip(config.LINE_WEIGHTS, sensor_values)
         )
-        return weighted_sum / active
+        return weighted_sum / active - config.LINE_CENTER_OFFSET
 
     def compute_line_error_analog(self, raw: list[float]) -> float:
         """Weighted average từ analog — mượt hơn trên QTR-8A."""
@@ -937,7 +937,9 @@ class Motion:
         if total == 0:
             return self._last_error
         weighted = sum(w * s for w, s in zip(config.LINE_WEIGHTS, strengths))
-        return weighted / total
+        # Trừ ĐIỂM ĐẶT: xem config.LINE_CENTER_OFFSET. Thanh cảm biến lắp lệch tâm
+        # so với càng, nên "line nằm giữa thanh" KHÔNG phải là "càng thẳng khe pallet".
+        return weighted / total - config.LINE_CENTER_OFFSET
 
     def follow_line(self, base_speed: float = config.SPEED_DEFAULT,
                     reverse: bool = False) -> tuple[bool, list[int]]:
