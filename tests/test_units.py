@@ -1337,18 +1337,35 @@ class TestBackMinTravel(unittest.TestCase):
         m.follow_line = MagicMock(return_value=(luon_bao_giao_lo, [1, 1, 1, 1, 0, 0]))
         return m
 
-    def test_ignores_intersection_signal_in_the_first_moments(self):
+    def _motion_seq(self, frames):
         m = self._motion()
-        t0 = time.time()
-        with patch.object(config, "REVERSE_RECENTER_TIME", 0.0), \
-             patch.object(config, "BACK_MIN_TRAVEL_TIME", 0.4):
-            self.assertTrue(m.back_to_intersection(1))
-        self.assertGreaterEqual(time.time() - t0, 0.4,
-                                "không được chấp nhận giao lộ trước mốc tối thiểu")
+        seq = list(frames)
 
-    def test_min_travel_is_shorter_than_the_reverse_timeout(self):
-        """Mốc tối thiểu dài hơn timeout thì không bao giờ tới được giao lộ."""
-        self.assertLess(config.BACK_MIN_TRAVEL_TIME, config.REVERSE_TIMEOUT)
+        def follow(_speed, reverse=False):
+            v = seq.pop(0) if len(seq) > 1 else seq[0]
+            return sum(v) >= config.INTERSECTION_THRESHOLD, v
+
+        m.follow_line = follow
+        return m
+
+    def test_ignores_intersection_before_seeing_a_plain_line(self):
+        """Báo giao lộ ngay từ đầu (còn trên mảng đen của điểm cuối) → bỏ qua."""
+        giao_lo = [1, 1, 1, 1, 0, 0]
+        vach = [0, 0, 1, 1, 0, 0]
+        m = self._motion_seq([giao_lo] * 5 + [vach] * 3 + [giao_lo] * 50)
+        with patch.object(config, "REVERSE_RECENTER_TIME", 0.0):
+            self.assertTrue(m.back_to_intersection(1))
+
+    def test_accepts_intersection_after_a_plain_line(self):
+        """Đã thấy vạch thường rồi thì giao lộ kế tiếp phải được chấp nhận."""
+        m = self._motion_seq([[0, 0, 1, 1, 0, 0]] * 3 + [[1, 1, 1, 1, 0, 0]] * 50)
+        with patch.object(config, "REVERSE_RECENTER_TIME", 0.0):
+            self.assertTrue(m.back_to_intersection(1))
+
+    def test_no_time_based_gate_left(self):
+        """Không còn cổng chặn theo THỜI GIAN — nó phụ thuộc cm/s chưa ai đo."""
+        self.assertFalse(hasattr(config, "BACK_MIN_TRAVEL_TIME"),
+                         "mốc thời gian đã bị thay bằng bằng chứng 'đã thấy vạch'")
 
 
 class TestReverseRecenter(unittest.TestCase):
@@ -1608,8 +1625,19 @@ class TestBackToIntersection(unittest.TestCase):
 
     def setUp(self):
         n = config.LINE_SENSOR_COUNT
-        # Mọi mắt thấy line = giao lộ ngay lập tức → vòng lặp thoát tức thì
-        self.m.read_line_sensor_raw = lambda: [0.0] * n
+        # Vài nhịp đầu đọc VẠCH THƯỜNG (2 mắt giữa), rồi mới tới giao lộ (mọi mắt).
+        # Không có mấy nhịp vạch thường đó thì back_to_intersection bỏ qua tín hiệu
+        # giao lộ — nó đòi bằng chứng "robot đã rời khỏi mảng đen của điểm cuối"
+        # trước khi tin. Xem TestBackMinTravel.
+        vach = [1.0] * n
+        for i in (n // 2 - 1, n // 2):
+            vach[i] = 0.0
+        # Lặp TUẦN HOÀN: vài nhịp vạch thường rồi tới giao lộ, rồi lại vạch...
+        # Chặng thứ 2 của back_to_intersection(2) cũng cần thấy vạch thường trước,
+        # nên không dùng danh sách cạn được.
+        import itertools
+        vong = itertools.cycle([vach] * 3 + [[0.0] * n] * 3)
+        self.m.read_line_sensor_raw = lambda: next(vong)
 
     def test_stale_pd_error_is_cleared_before_and_after(self):
         """`_last_error` mang từ pha TIẾN sang sẽ tạo đạo hàm giả → giật một cái

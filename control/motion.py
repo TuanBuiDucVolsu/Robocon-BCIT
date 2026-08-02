@@ -1148,6 +1148,7 @@ class Motion:
             start = time.time()
             lost_since = None
             reached = False
+            da_thay_vach = False   # đã đọc được VẠCH LINE THƯỜNG lần nào chưa
 
             while time.time() - start < timeout:
                 if self._aborted():
@@ -1158,10 +1159,22 @@ class Motion:
                 # biến phải lùi HƠN 20cm mới tới giao lộ thật — không thể có giao lộ
                 # ngay lập tức. Nhận nhầm sớm thì bước TIẾN BÙ ngay sau đó (1.3s về
                 # phía kệ) đẩy robot trở lại CHẠM KỆ. Đã gặp thật ở option 8.
-                if at_intersection and time.time() - start < config.BACK_MIN_TRAVEL_TIME:
-                    logger.info("Lùi: bỏ qua tín hiệu giao lộ ở %.2fs (dưới %.2fs) — "
-                                "chưa thể tới giao lộ thật, cảm biến %s",
-                                time.time() - start, config.BACK_MIN_TRAVEL_TIME, values)
+                # Chỉ chấp nhận giao lộ SAU KHI đã thấy VẠCH LINE THƯỜNG ít nhất một
+                # lần. Robot xuất phát từ điểm cuối (kệ/nhà máy), nơi có thể đang
+                # ngồi trên một mảng đen — phải rời khỏi nó, đi qua đoạn vạch bình
+                # thường, rồi mới có quyền nói "tới giao lộ".
+                # ⚠️ Bản trước chặn bằng THỜI GIAN (0.6s). Sai lầm cùng loại đã mắc
+                # nhiều lần trong ngày: hằng số thời gian phụ thuộc cm/s mà cm/s thì
+                # chưa ai đo. Lùi nhanh hơn ước lượng là nó nuốt luôn giao lộ THẬT,
+                # robot lùi tiếp — mà từ C0R0 về phía đông, giao lộ kế cách 100cm.
+                # Đã gặp thật ở option 5: "lùi tự do ra một đoạn dài".
+                # Bằng chứng "đã thấy vạch thường" không phụ thuộc tốc độ.
+                if 0 < sum(values) < config.INTERSECTION_THRESHOLD:
+                    da_thay_vach = True
+                if at_intersection and not da_thay_vach:
+                    logger.info("Lùi: bỏ qua tín hiệu giao lộ ở %.2fs — CHƯA thấy vạch "
+                                "line thường lần nào, robot có thể còn trên mảng đen "
+                                "của điểm cuối. Cảm biến %s", time.time() - start, values)
                     at_intersection = False
                 if at_intersection:
                     reached = True
