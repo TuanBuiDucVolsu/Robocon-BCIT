@@ -220,7 +220,7 @@ chỉ nhìn thấy kiện đó. Ba chỗ dùng siêu âm lúc đang cõng:
 | Chỗ | Đã xử lý chưa |
 |---|---|
 | `retreat_from_shelf` sau khi bốc | ✅ phát hiện "số đo không tăng" → lùi theo giờ |
-| `advance_to_end` khi tới nhà máy | ✅ đòi khoảng cách phải GIẢM ≥ `ADVANCE_MIN_APPROACH_CM` |
+| `advance_to_end` khi tới nhà máy | ✅ phát hiện số đo ĐỨNG YÊN (`ADVANCE_STUCK_*`) |
 | `approach_shelf` khi thả hàng | ❌ **CHƯA** — sẽ "tới nơi" ngay, thả kiện giữa sa bàn |
 
 Chỗ thứ ba là lỗi **im lặng hoàn toàn**: IR vẫn xác nhận thả, `packages_delivered`

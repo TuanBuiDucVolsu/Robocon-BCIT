@@ -589,10 +589,12 @@ class Motion:
         # Khoảng cách đọc được lúc BẮT ĐẦU, để biết siêu âm có đang nhìn thấy vật
         # thật ở phía trước hay chỉ đang nhìn KIỆN HÀNG robot đang cõng. Xem dưới.
         dist_dau = None
+        ke_bi_che = False
 
         while time.time() - start < timeout:
             if self._aborted():
                 return False
+            troi = time.time() - start
             dist = self.get_distance()
             if dist >= 0 and dist_dau is None:
                 dist_dau = dist
@@ -603,14 +605,25 @@ class Motion:
             # KIỆN HÀNG robot cõng: nó nằm trước cảm biến và đi cùng robot. Không có
             # điều kiện này thì mọi chặng giao hàng đều "tới nhà máy" ngay khi vừa
             # rời giao lộ, rồi thả kiện giữa sa bàn — mà log vẫn xanh hết.
-            giam = (dist_dau - dist) if dist_dau is not None else 0.0
-            if (0 <= dist <= config.APPROACH_SLOW_DISTANCE
-                    and giam >= config.ADVANCE_MIN_APPROACH_CM):
+            # Dấu hiệu của "siêu âm đang nhìn KIỆN HÀNG robot cõng" là số đo ĐỨNG
+            # YÊN dù robot chạy — không phải "chưa giảm đủ". Bản trước đòi phải giảm
+            # ≥5cm rồi mới tin, và khi điều kiện đó không đạt thì advance chạy tới
+            # HẾT LINE — mà line kéo tới tận chân kệ, tức đâm thẳng vào kệ. Tiêu chí
+            # sai, không phải cơ chế sai.
+            if (dist_dau is not None and not ke_bi_che
+                    and troi >= config.ADVANCE_STUCK_TIME
+                    and abs(dist - dist_dau) < config.ADVANCE_STUCK_CM):
+                ke_bi_che = True
+                logger.warning(
+                    "Advance: sau %.1fs mà siêu âm chỉ đổi %.1fcm (%.1f→%.1f) — nhiều "
+                    "khả năng đang nhìn CHÍNH KIỆN HÀNG robot cõng. Bỏ qua siêu âm, "
+                    "đi tới khi hết line.", troi, abs(dist - dist_dau), dist_dau, dist)
+
+            if not ke_bi_che and 0 <= dist <= config.APPROACH_SLOW_DISTANCE:
                 near_streak += 1
                 if near_streak >= 2:
                     self.stop_gently(base_speed)
-                    logger.info("Advance: đã tới gần mục tiêu (%.1fcm, đã lại gần "
-                                "%.1fcm kể từ đầu chặng)", dist, giam)
+                    logger.info("Advance: đã tới gần mục tiêu (%.1fcm)", dist)
                     return True
             else:
                 near_streak = 0

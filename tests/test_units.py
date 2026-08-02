@@ -1208,7 +1208,7 @@ class TestAdvanceToEnd(unittest.TestCase):
     def test_ultrasonic_near_target_is_success(self):
         """Siêu âm thấy mục tiêu LẠI GẦN DẦN -> bàn giao cho approach_shelf."""
         m = self._motion([[0] * 6])
-        xa = config.APPROACH_SLOW_DISTANCE + config.ADVANCE_MIN_APPROACH_CM + 5
+        xa = config.APPROACH_SLOW_DISTANCE + 10
         seq = [xa, xa - 3, config.APPROACH_SLOW_DISTANCE - 1]
         m.get_distance = lambda: seq.pop(0) if len(seq) > 1 else seq[0]
         self.assertTrue(m.advance_to_end(timeout=3.0))
@@ -1227,9 +1227,25 @@ class TestAdvanceToEnd(unittest.TestCase):
         self.assertGreater(len(m.follow_line.mock_calls) if hasattr(m.follow_line, "mock_calls")
                            else 1, 0)
 
-    def test_min_approach_is_positive(self):
-        """Đặt 0 là quay lại lỗi tin số đo của chính kiện hàng."""
-        self.assertGreater(config.ADVANCE_MIN_APPROACH_CM, 0)
+    def test_stuck_detection_is_shorter_than_the_advance_timeout(self):
+        """Phát hiện cảm biến bị che phải kịp xảy ra trong một chặng advance."""
+        self.assertLess(config.ADVANCE_STUCK_TIME, config.ADVANCE_TIMEOUT)
+        self.assertGreater(config.ADVANCE_STUCK_CM, 0)
+
+    def test_near_target_still_works_when_reading_actually_changes(self):
+        """⚠️ HỒI QUY: cơ chế chống-kiện-che KHÔNG được phá đường vào kệ.
+
+        Bản trước đòi khoảng cách phải GIẢM ≥5cm mới tin siêu âm. Khi điều kiện đó
+        không đạt, advance chạy tới HẾT LINE — mà line kéo tới tận chân kệ, tức ĐÂM
+        THẲNG VÀO KỆ. Đã gặp thật ở option 8.
+        Ở đây số đo GIẢM DẦN bình thường: phải dừng bằng siêu âm, KHÔNG chạy tới
+        hết line.
+        """
+        m = self._motion([[0, 0, 1, 1, 0, 0]] * 200)   # line KHÔNG bao giờ hết
+        seq = [30.0, 26.0, 22.0, config.APPROACH_SLOW_DISTANCE - 1]
+        m.get_distance = lambda: seq.pop(0) if len(seq) > 1 else seq[0]
+        self.assertTrue(m.advance_to_end(timeout=3.0),
+                        "phải dừng bằng siêu âm chứ không chạy tới hết line")
 
 
 class TestReverseRecenter(unittest.TestCase):
