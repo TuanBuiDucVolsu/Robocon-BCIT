@@ -129,6 +129,9 @@ LIFT_TIME_SHELF_2 = 3.5
 # ⚠️ PHẢI > LIFT_TIME_SHELF_2, không thì đang ở tầng 2 sẽ không hạ hết và
 # _current_level bị khai sai = 0. Stall vài giây không sao, đừng để quá lâu.
 LIFT_HOME_DURATION = 3.7   # min_home_duration() = LIFT_TIME_SHELF_2 + LOWER_EXTRA lớn
+# ⚠️ BIÊN CHỈ CÒN 0.05s. min_home_duration() = LIFT_TIME_SHELF_2 + LOWER_EXTRA lớn
+# hơn = 3.5 + 0.150 = 3.65s. Nâng LIFT_*_LOWER_EXTRA thêm chút nữa là home_to_floor()
+# phải tự kẹp lên và ghi WARNING. Tăng LIFT_HOME_DURATION theo nếu còn calibrate tiếp.
                            # nhất = 3.5 + 0.1 = 3.6 → chỉ còn dư 0.1s.
                            # ⚠️ NÂNG LIFT_TIME_SHELF_2 là PHẢI nâng số này theo, không
                            # thì home_to_floor() tự kẹp lên và ghi WARNING mỗi lần.
@@ -141,7 +144,7 @@ LIFT_HOME_DURATION = 3.7   # min_home_duration() = LIFT_TIME_SHELF_2 + LOWER_EXT
 LIFT_LEFT_EXTRA = -0.050          # Càng TRÁI khi nâng
 LIFT_RIGHT_EXTRA = 0.000         # Càng PHẢI khi nâng
 LIFT_LEFT_LOWER_EXTRA = 0.100     # Càng TRÁI khi hạ (tăng nếu bên đó khó hạ)
-LIFT_RIGHT_LOWER_EXTRA = 0.050      # Càng PHẢI khi hạ
+LIFT_RIGHT_LOWER_EXTRA = 0.150      # Càng PHẢI khi hạ — ĐÃ ĐO trên robot 02/08
 
 # Home RÚT GỌN khi đã biết chắc đang ở tầng nào (Lift.home_from). Hạ từ tầng 1 chỉ
 # cần ~0.9s trong khi home mặc định chạy 4.0s theo tầng cao nhất — hơn 3 giây motor
