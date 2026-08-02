@@ -488,6 +488,20 @@ EDGE_COST_REVERSE = 1        # Phụ phí so với tiến 1 giao lộ → hoà t
 #     xoay sau khi TIẾN → [0,0,0,0,0,0]  TRẮNG HẾT → mất line, route gãy
 REVERSE_RECENTER_SPEED = 35
 REVERSE_RECENTER_TIME = 1.3
+# Giây tiến bù TRƯỚC KHI XOAY, khi vừa TIẾN tới giao lộ (chặng "forward" ngay trước
+# lệnh xoay). TÁCH RIÊNG khỏi REVERSE_RECENTER_TIME để chỉnh/tắt được độc lập —
+# hai chiều dừng ở hai mép khác nhau của vạch nên quãng bù có thể không bằng nhau.
+#   ĐẶT 0 = TẮT HẲN, về đúng hành vi trước ngày 02/08.
+# Vì sao cần: thanh cảm biến ở đầu xe, trục bánh cách nó 12cm về sau. Tiến tới giao
+# lộ thì cảm biến TRÊN vạch còn trục còn CÁCH vạch 12cm — xoay lúc đó là quay quanh
+# điểm nằm TRƯỚC giao lộ, xoay xong cảm biến văng ra vùng trắng. Đo trên robot
+# (smoke option 8): xoay sau khi LÙI → [0,0,0,1,1,0] còn thấy line;
+#                   xoay sau khi TIẾN → [0,0,0,0,0,0] TRẮNG HẾT → route gãy.
+# ⚠️ CHƯA CHỐT ĐƯỢC GIÁ TRỊ. 1.3 lấy tạm từ chiều lùi (≈12cm ở 35%). Bù THỪA thì
+# robot đi quá giao lộ rồi mới xoay — cũng lệch, chỉ là lệch phía kia. Chỉnh dần
+# 1.3 → 0.9 → 0.6 và xem cảm biến ngay sau khi xoay (log "Rời giao lộ ... cảm biến"):
+# còn thấy line = đúng, trắng hết = còn sai.
+TURN_RECENTER_TIME = 1.3
 
 # ============================================================
 # CHI PHÍ TÌM ĐƯỜNG (navigation.py) — quy đổi ra "1 giao lộ đi thẳng"

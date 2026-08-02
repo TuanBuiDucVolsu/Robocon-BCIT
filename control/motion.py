@@ -525,11 +525,11 @@ class Motion:
             # Cả hai chiều đều cần tiến thêm ĐÚNG 12cm, nên dùng chung hằng số.
             if (action in ("left", "right") and i > 0
                     and route[i - 1][0] == "forward"
-                    and config.REVERSE_RECENTER_TIME > 0):
-                logger.info("Tiến bù %.2fs để tâm xoay về đúng giao lộ",
-                            config.REVERSE_RECENTER_TIME)
+                    and config.TURN_RECENTER_TIME > 0):
+                logger.info("Tiến bù %.2fs ở %d%% để tâm xoay về đúng giao lộ",
+                            config.TURN_RECENTER_TIME, config.REVERSE_RECENTER_SPEED)
                 self.forward(config.REVERSE_RECENTER_SPEED)
-                time.sleep(config.REVERSE_RECENTER_TIME)
+                time.sleep(config.TURN_RECENTER_TIME)
                 self.stop()
             if action == "forward":
                 # Gọi MỘT lần cho cả N giao lộ (chia nhỏ sẽ ép dừng ở từng cái, mất

@@ -1273,7 +1273,7 @@ class TestTurnRecenterAfterForward(unittest.TestCase):
 
     def test_nudges_forward_before_turning_after_a_forward_leg(self):
         m = self._motion()
-        with patch.object(config, "REVERSE_RECENTER_TIME", 0.02):
+        with patch.object(config, "TURN_RECENTER_TIME", 0.02):
             self.assertTrue(m.execute_route([("forward", 2), ("right",)]))
         m.forward.assert_called_once_with(config.REVERSE_RECENTER_SPEED)
         m.turn_right_90.assert_called_once()
@@ -1281,21 +1281,21 @@ class TestTurnRecenterAfterForward(unittest.TestCase):
     def test_no_nudge_after_a_reverse_leg(self):
         """back_to_intersection đã tự tiến bù rồi — bù thêm lần nữa là đi lố."""
         m = self._motion()
-        with patch.object(config, "REVERSE_RECENTER_TIME", 0.02):
+        with patch.object(config, "TURN_RECENTER_TIME", 0.02):
             self.assertTrue(m.execute_route([("back", 1), ("right",)]))
         m.forward.assert_not_called()
 
     def test_no_nudge_when_turn_is_the_first_command(self):
         """Xoay ngay đầu route: robot đang đứng sẵn ở đâu đó, không tự ý tiến."""
         m = self._motion()
-        with patch.object(config, "REVERSE_RECENTER_TIME", 0.02):
+        with patch.object(config, "TURN_RECENTER_TIME", 0.02):
             self.assertTrue(m.execute_route([("right",), ("forward", 1)]))
         m.forward.assert_not_called()
 
     def test_two_turns_in_a_row_nudge_only_once(self):
         """Xoay 180° = 2 lệnh xoay liền nhau; chỉ bù trước cái ĐẦU."""
         m = self._motion()
-        with patch.object(config, "REVERSE_RECENTER_TIME", 0.02):
+        with patch.object(config, "TURN_RECENTER_TIME", 0.02):
             self.assertTrue(m.execute_route([("forward", 1), ("right",), ("right",)]))
         self.assertEqual(m.forward.call_count, 1)
 
