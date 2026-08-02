@@ -459,10 +459,21 @@ def _ask_board_side() -> str:
     trái/phải, còn thứ tự nhà máy thì hai nửa giống hệt nhau qua cảm biến line.
     """
     hien = nav.FACTORY_AT_START_ROW
-    print("\nĐang ở nửa sân nào? (nhà máy CÙNG HÀNG ô xuất phát)")
-    print("   1. FOXCONN  — đội góc dưới-trái")
-    print("   2. SAMSUNG  — đội góc trên-phải")
-    print("   KIỂM BẰNG MẮT: đứng ở ô xuất phát nhìn sang tường giữa sân.")
+    print("\n" + "=" * 62)
+    print("  ĐỨNG Ở Ô XUẤT PHÁT, NHÌN SANG TƯỜNG GIỮA SÂN.")
+    print("  Khu nhà máy NGANG TẦM ô xuất phát (cùng hàng với bạn) là khu nào?")
+    print("=" * 62)
+    print("  Đối chiếu CẢ CỤM cho chắc — thứ tự từ chỗ bạn đứng đi RA XA:")
+    print()
+    print("                        chọn 1        chọn 2")
+    print("                       ─────────     ─────────")
+    print("     ngang tầm bạn  →   FOXCONN       SAMSUNG")
+    print("                        Amkor         Hana Micron")
+    print("     giữa sân       →   Liên hợp      Liên hợp      (dùng chung 2 đội)")
+    print("                        Hana Micron   Amkor")
+    print("     xa nhất        →   SAMSUNG       FOXCONN")
+    print()
+    print("  Liên hợp LUÔN ở giữa — dùng nó làm mốc nếu nhìn không rõ hai đầu.")
     tra = input(f"  Chọn [1/2, Enter = giữ {hien.upper()}]: ").strip()
     side = {"1": "foxconn", "2": "samsung"}.get(tra, hien)
     if side != nav.FACTORY_AT_START_ROW:
