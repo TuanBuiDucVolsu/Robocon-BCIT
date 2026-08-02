@@ -527,14 +527,6 @@ MAX_TIER_RETRIES = 1         # Số lần thử lại tầng kệ trước khi b
 # về phía Kệ 3. exit_start_zone() KHÔNG đếm giao lộ — bộ tìm đường lo phần đó.
 EXIT_START_SPEED = 50
 EXIT_START_TIMEOUT = 5.0     # Giây, không thấy line thì báo lỗi
-# Nới 0.4 → 1.0: robot vượt khoảng đứt 245mm bằng forward() MÙ (không lái), hai bánh
-# chưa cân nên nó tới line theo đường CHÉO — chạm mép line rồi mà 0.4s chưa đủ để bám
-# vào và duỗi thẳng, thành ra vào route với hướng lệch sẵn.
-# ⚠️ Đây chỉ là ĐỠ TRIỆU CHỨNG. Gốc rễ là forward() không chạy thẳng — sửa bằng
-# test_motion option `f` (calibrate PWM_COMPENSATION bằng encoder). Mọi chỗ chạy mù
-# khác (tiếp cận kệ, luồn càng, lùi ra, dò nửa sân) đều lệch theo cùng nguyên nhân.
-# Đừng nới quá tay: căn lâu quá thì robot bám line tới tận giao lộ C0R0, lúc đó lệnh
-# "tiến 1 giao lộ" của route sẽ đếm sang giao lộ KẾ TIẾP và đi lố.
 # CHẶN TRÊN cho cửa sổ mù khi rời ô xuất phát — bỏ qua cảm biến trong khoảng này.
 # Cần vì ô xuất phát nằm trong khoảng đứt của R0 và chỗ đó IN HÌNH MASCOT, mặt robot
 # đen tuyền: không có bước mù thì exit_start_zone() bắt "line" ngay mẫu đầu tiên rồi
