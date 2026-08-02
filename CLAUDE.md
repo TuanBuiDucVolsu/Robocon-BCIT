@@ -262,7 +262,18 @@ tại điểm giao, line cắt ngang nằm dọc thanh cảm biến nên xoay ki
   chùm siêu âm dội vào mặt khác và đọc sai — đã gặp thật: robot húc kệ vì được đặt
   hơi lệch, đặt lại đúng line thì chạy sạch. Lúc thi đấu robot tới kệ bằng bám line,
   nên nếu bám line để nó dừng hơi lệch thì cùng lỗi đó xảy ra giữa trận, mà lúc ấy
-  không có tay ai đỡ. Cân nhắc thêm một bước căn thẳng trước khi tiếp cận.
+  không có tay ai đỡ.
+- **`_forward_guided()` — tiến sát kệ CÓ LÁI, không chạy mù** (6fc3e39).
+  `approach_shelf()` và `creep_until()` trước đây gọi `forward()` suốt quãng ~10cm
+  cuối. Robot không đi thẳng tuyệt đối nên nó lệch dần → càng vào khe pallet lệch,
+  không luồn hết → **IR không báo có hàng** → cả chu trình bốc hàng hỏng. Đây là mắt
+  xích ĐẦU của chuỗi đó; hạ `INSERT_MIN_DISTANCE` hay tăng `LIFT_PICKUP_RAISE_TIME`
+  chỉ là chữa mắt xích CUỐI.
+  Còn thấy line thì `follow_line()`, mất line thì rơi về `forward()` — đúng hành vi
+  cũ, nên an toàn kể cả khi vạch line không kéo tới tận chân kệ. Cờ giao lộ của
+  `follow_line()` bị **bỏ qua** ở đây: sát kệ thì nền kệ có thể làm mọi mắt thấy đen,
+  mà ta chỉ cần phần LÁI chứ không đếm giao lộ.
+  ⚠️ **CHƯA XÁC NHẬN TRÊN ROBOT** — mới có unit test. Chạy `test_smoke` option 2.
   ⚠️ `APPROACH_SLOW_SPEED` nằm sát VÙNG CHẾT của JGA25-370 qua L298N — dải dùng được
   rất hẹp: 25 thì robot chỉ nhích từng tí (chậm hơn ngưỡng 0.83cm/s của cơ chế chống
   húc kệ → bị dừng oan giữa đường và báo nhầm "càng đã chạm kệ"), 40 thì vọt quá đà.
@@ -308,10 +319,10 @@ tại điểm giao, line cắt ngang nằm dọc thanh cảm biến nên xoay ki
 
 | Script | Mục đích |
 |--------|----------|
-| `tests/test_logic.py` | 114 unit test — **an toàn chạy cả trên Pi** (tự ép pin factory giả, xem dưới): bản đồ + mô phỏng route tới đúng chỗ + polarity + phân loại màu + reset + resume |
-| `tests/test_units.py` | 70 unit test — **an toàn chạy cả trên Pi**: bám line, lift, ShapeMatcher, classify_pair |
+| `tests/test_logic.py` | 118 unit test — **an toàn chạy cả trên Pi** (tự ép pin factory giả, xem dưới): bản đồ + mô phỏng route tới đúng chỗ + polarity + phân loại màu + reset + resume |
+| `tests/test_units.py` | 82 unit test — **an toàn chạy cả trên Pi**: bám line, lift, ShapeMatcher, classify_pair |
 | `tests/test_match_sim.py` | Mô phỏng TRỌN trận với phần cứng giả lập: **13/13 kiện** (12 NV1 + hàng rời NV2), reset giữa trận, lỗi phần cứng, mất line giữa route — kiểm vị trí main.py tin tưởng có khớp vị trí thật không |
-| `tests/test_tools.py` | 21 unit test — PC (regex của `measure_phases` phải khớp chuỗi log CÓ THẬT trong source + round-trip; `dry_run` chạy hết được và mọi bước đi đều có line thật) |
+| `tests/test_tools.py` | 19 unit test — PC (regex của `measure_phases` phải khớp chuỗi log CÓ THẬT trong source + round-trip; `dry_run` chạy hết được và mọi bước đi đều có line thật) |
 | `tools/show_routes.py` | In toàn bộ route sinh ra để đối chiếu tay trên sa bàn |
 | `tools/dry_run.py` | **Chạy khô trọn trận** — in từng bước robot sẽ đi kèm mốc giây. Cầm đi bộ trên sa bàn để đối chiếu tay |
 | `tools/measure_phases.py` | Đọc `robot_log.txt` → 6 tham số cho `estimate_time` + dự báo điểm. Chạy sau mỗi lượt `practice.sh` |
