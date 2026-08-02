@@ -1120,7 +1120,8 @@ class Motion:
         start = time.time()
         cap = getattr(config, "ESCAPE_MAX_TIME", 1.2)
         san = getattr(config, "ESCAPE_MIN_TIME", 0.15)
-        sach = 0
+        can_sach = getattr(config, "ESCAPE_CLEAR_TIME", 0.25)
+        sach_tu = None
         thoat = False
         while time.time() - start < cap:
             if self._aborted():
@@ -1128,12 +1129,17 @@ class Motion:
             values = self.read_line_sensor()
             if (sum(values) < config.INTERSECTION_THRESHOLD
                     and time.time() - start >= san):
-                sach += 1
-                if sach >= 3:          # 3 nhịp liên tiếp mới tin, chống nhiễu 1 mẫu
+                # Đòi sạch LIÊN TỤC một khoảng, không phải vài nhịp. 3 nhịp chỉ là
+                # 30ms — ở 40% duty robot mới nhích ~0.5cm, tức vừa chớm ra khỏi mép
+                # vạch chứ chưa qua hẳn, lắc nhẹ là cán lại vào và follow_line đọc ra
+                # giao lộ. Trong lúc chờ đủ khoảng này robot VẪN CHẠY nên nó ra hẳn.
+                if sach_tu is None:
+                    sach_tu = time.time()
+                elif time.time() - sach_tu >= can_sach:
                     thoat = True
                     break
             else:
-                sach = 0
+                sach_tu = None
             time.sleep(0.01)
         self.stop()
         dt = time.time() - start

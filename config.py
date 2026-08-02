@@ -336,6 +336,11 @@ INTERSECTION_THRESHOLD = 4   # Số mắt (/6) thấy line cùng lúc để nh�
 # = 40 nằm không xa vùng chết nên 0.3s có thể chỉ đi 1.5-2cm — đúng ranh giới, và
 # smoke option 1 đã gãy thật vì chuyện này ("Advance: gặp giao lộ" ngay tại C0R0).
 ESCAPE_MIN_TIME = 0.15       # Giây tối thiểu vẫn chạy, kể cả khi cảm biến đã sạch ngay
+# Giây cảm biến phải sạch LIÊN TỤC mới coi là đã ra khỏi giao lộ. Không phải "vài
+# nhịp": 3 nhịp chỉ là 30ms, ở ADVANCE_SPEED=40 robot mới nhích ~0.5cm — vừa chớm ra
+# khỏi mép vạch chứ chưa qua hẳn, lắc nhẹ là cán lại vào. Robot VẪN CHẠY trong lúc
+# chờ đủ khoảng này, nên nó vừa là bộ lọc nhiễu vừa là quãng dư an toàn.
+ESCAPE_CLEAR_TIME = 0.25
 ESCAPE_MAX_TIME = 1.2        # Chặn trên: hết ngần này mà vẫn báo giao lộ thì bỏ cuộc
 
 # --- Đếm giao lộ mà KHÔNG dừng lại ở từng cái ---

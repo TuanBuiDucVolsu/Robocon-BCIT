@@ -864,7 +864,8 @@ class TestEscapeIntersection(unittest.TestCase):
         """Còn báo giao lộ thì còn chạy, dù đã quá 0.3s của bản cũ."""
         m = self._motion([self.GIAO_LO] * 60 + [self.LINE])
         t0 = time.time()
-        with patch.object(config, "ESCAPE_MIN_TIME", 0.0):
+        with patch.object(config, "ESCAPE_MIN_TIME", 0.0), \
+             patch.object(config, "ESCAPE_CLEAR_TIME", 0.05):
             self.assertTrue(m._escape_intersection(40))
         self.assertGreater(time.time() - t0, 0.3,
                            "bản cũ dừng ở 0.3s và đó chính là lỗi")
@@ -881,13 +882,25 @@ class TestEscapeIntersection(unittest.TestCase):
         """Sạch ngay từ đầu cũng phải chạy đủ sàn, không thì gần như không nhúc nhích."""
         m = self._motion([self.LINE])
         t0 = time.time()
-        with patch.object(config, "ESCAPE_MIN_TIME", 0.2):
+        with patch.object(config, "ESCAPE_MIN_TIME", 0.2), \
+             patch.object(config, "ESCAPE_CLEAR_TIME", 0.0):
             m._escape_intersection(40)
         self.assertGreaterEqual(time.time() - t0, 0.2)
 
+    def test_requires_sustained_clear_not_a_few_samples(self):
+        """Sạch chớp nhoáng rồi đen lại thì KHÔNG được coi là đã ra khỏi giao lộ."""
+        chop = [self.GIAO_LO] * 5 + [self.LINE] * 2 + [self.GIAO_LO] * 200
+        m = self._motion(chop)
+        with patch.object(config, "ESCAPE_MIN_TIME", 0.0), \
+             patch.object(config, "ESCAPE_CLEAR_TIME", 0.25), \
+             patch.object(config, "ESCAPE_MAX_TIME", 0.5):
+            self.assertFalse(m._escape_intersection(40),
+                             "2 nhịp sạch giữa chừng không đủ để tuyên bố đã thoát")
+
     def test_reverse_uses_backward(self):
         m = self._motion([self.LINE])
-        with patch.object(config, "ESCAPE_MIN_TIME", 0.0):
+        with patch.object(config, "ESCAPE_MIN_TIME", 0.0), \
+             patch.object(config, "ESCAPE_CLEAR_TIME", 0.0):
             m._escape_intersection(40, reverse=True)
         m.backward.assert_called_once_with(40)
         m.forward.assert_not_called()
