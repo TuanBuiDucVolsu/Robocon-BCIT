@@ -377,6 +377,7 @@ tại điểm giao, line cắt ngang nằm dọc thanh cảm biến nên xoay ki
 | `tools/measure_phases.py` | Đọc `robot_log.txt` → 6 tham số cho `estimate_time` + dự báo điểm. Chạy sau mỗi lượt `practice.sh` |
 | `tools/estimate_time.py` | "Worst case giao được mấy kiện trong 240s" — nạp số đo từ `measure_phases` |
 | `tools/sim_ui.py` | Xuất trang HTML **mô phỏng robot chạy** — phát lại các bước state machine thật sinh ra, đổi tốc độ ngay trên trang |
+| `tests/NGHIEM_THU.md` | **Tiêu chí ĐẠT/CHƯA ĐẠT bằng SỐ** cho vòng A(số nền)→B(cơ cấu)→C(ghép nối)→D(ngân sách). Mọi bước phải lặp **3 lần** mới tính đạt. Có bảng ghi số |
 | `tests/LO_TRINH_TEST.md` | **Lộ trình test đánh số theo thứ tự phải làm** — bắt đầu từ đây |
 | `tests/DIEN_TAP.md` | 9 bài diễn tập sát thi đấu: ngân sách 240s, kiện xấu nhất, reset, pin, ánh sáng |
 | `tests/test_motion.py` | 17 option (1-17) + `d/e/f` — motor, line, route, dò nửa sân, lùi, giới hạn tốc độ |
