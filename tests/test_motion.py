@@ -394,6 +394,85 @@ def test_back_out_of_shelf(m: Motion):
         print("  → Toàn 0 = lệch quá xa, phải chỉnh REVERSE_RECENTER_TIME.")
 
 
+def test_retreat_turn_and_go(m: Motion):
+    """RÚT KHỎI KỆ → XOAY → BÁM LINE TỚI GIAO LỘ KẾ — mở đầu MỌI tuyến giao hàng.
+
+    Option 15 dừng ngay sau khi xoay: nó chỉ đọc cảm biến một lần rồi báo "có bắt
+    được line không". Bài này chạy trọn chuỗi, vì đây đúng là 3 lệnh đầu của mọi
+    route giao hàng:
+
+        SHELF0 → Samsung : LÙI 1 giao lộ → xoay phải → tiến 2 giao lộ → ...
+
+    Chuỗi này xâu 3 thứ mà không thứ nào đã được xác nhận:
+      1. back_to_intersection  — dùng PWM_COMPENSATION_REV, CHƯA calibrate bao giờ
+      2. REVERSE_RECENTER_TIME — tiến bù cho khoảng trục bánh → cảm biến
+      3. turn_*_90             — TURN_TIME mới xác nhận cho chiều TRÁI
+
+    Sai số của cả ba CỘNG DỒN rồi mới tới bước bám line. Chạy rời từng cái thì mỗi
+    cái "có vẻ ổn" mà ghép lại vẫn trượt — đó là lý do phải có bài này.
+    """
+    print("\n[TEST] Rút khỏi kệ → xoay → bám line tới giao lộ kế")
+    print(f"  REVERSE_SPEED={config.REVERSE_SPEED}%  "
+          f"RECENTER={config.REVERSE_RECENTER_TIME}s  TURN_TIME={config.TURN_TIME}s")
+    print("  Đặt robot SÁT KỆ như vừa nâng hàng xong: trên line, QUAY MẶT VÀO KỆ.")
+
+    huong = input("  Xoay về phía nào sau khi lùi? (r=phải / l=trái) [r]: ").strip().lower()
+    huong = "l" if huong == "l" else "r"
+    try:
+        so_gl = int(input("  Bám line qua mấy giao lộ sau khi xoay? [1]: ").strip() or "1")
+    except ValueError:
+        so_gl = 1
+    input("  ⚠ Đứng sẵn cạnh công tắc nguồn. Nhấn Enter để chạy...")
+
+    # --- BƯỚC 1: lùi ---
+    t0 = time.time()
+    ok = m.back_to_intersection(1)
+    print(f"\n  [1/3] LÙI tới giao lộ: {'✅' if ok else '❌ THẤT BẠI'} sau {time.time()-t0:.1f}s")
+    if not ok:
+        print("     ĐẠT nếu: lùi thẳng, lắc ngang ≤ ±2cm và KHÔNG tăng dần.")
+        print("     Lắc tăng dần  → dấu đảo khi lùi SAI (follow_line, nhánh reverse).")
+        print("     Trôi lệch đều → PWM_COMPENSATION_REV / _LEFT_REV chưa calibrate.")
+        return
+    values = m.read_line_sensor()
+    print(f"     Cảm biến sau khi lùi + tiến bù: {values} (tổng {sum(values)})")
+    print("     ĐO TAY: trục bánh phải nằm NGAY TRÊN vạch ngang của giao lộ.")
+    print(f"     Lệch quá 2cm → chỉnh REVERSE_RECENTER_TIME (đang {config.REVERSE_RECENTER_TIME}s).")
+
+    # --- BƯỚC 2: xoay ---
+    if input("\n  Xoay tiếp? (Enter = có, n = dừng): ").strip().lower() == "n":
+        return
+    if huong == "r":
+        m.turn_right_90()
+    else:
+        m.turn_left_90()
+    values = m.read_line_sensor()
+    print(f"  [2/3] XOAY {'PHẢI' if huong == 'r' else 'TRÁI'}: "
+          f"cảm biến {values} (tổng {sum(values)})")
+    if sum(values) == 0:
+        print("     ❌ KHÔNG mắt nào thấy line — chưa bắt được line mới. Nguyên nhân:")
+        print("        a) REVERSE_RECENTER_TIME sai → robot không đứng đúng tâm giao lộ")
+        print("        b) TURN_TIME sai cho CHIỀU NÀY (mới xác nhận chiều trái)")
+        print("     Phân biệt: chạy option 10 riêng cho chiều này. Đúng 90° thì lỗi là (a).")
+        return
+    print("     ✅ bắt được line mới.")
+
+    # --- BƯỚC 3: bám line tới giao lộ kế ---
+    if input(f"\n  Bám line qua {so_gl} giao lộ? (Enter = có, n = dừng): ").strip().lower() == "n":
+        return
+    t0 = time.time()
+    ok = m.navigate_intersections(so_gl)
+    dt = time.time() - t0
+    print(f"  [3/3] BÁM LINE qua {so_gl} giao lộ: {'✅' if ok else '❌ THẤT BẠI'} sau {dt:.1f}s")
+    print(f"     ĐẠT nếu: tới đủ {so_gl} giao lộ, KHÔNG mất line giữa chừng,")
+    print(f"     và robot đi giữa vạch chứ không men theo mép.")
+    if ok:
+        print(f"     Ghi lại {dt/max(1, so_gl):.2f}s/giao lộ — đối chiếu --forward của tools.dry_run.")
+    else:
+        print("     Mất line ngay sau khi xoay → sai số 3 bước đầu cộng dồn quá lớn.")
+        print("     Quay lại option 10 (xoay) và option 15 (lùi) tách riêng từng cái.")
+    print("\n  ⚠ Lặp 3 LẦN mới tính đạt — xem tests/NGHIEM_THU.md.")
+
+
 def test_speed_limit(m: Motion):
     """Giới hạn tốc độ THẬT — đo tần số đọc cảm biến rồi tính biên an toàn giao lộ.
 
@@ -560,6 +639,8 @@ def main():
         "16": ("A/B đếm giao lộ: dừng từng cái vs chạy liền", test_continuous_intersections),
         "17": ("Giới hạn tốc độ (đo trước khi tăng SPEED_DEFAULT)", test_speed_limit),
         "15": ("LÙI ra khỏi kệ tới giao lộ (lệnh back)", test_back_out_of_shelf),
+        "18": ("Rút khỏi kệ → xoay → bám line tới giao lộ kế (mở đầu MỌI tuyến giao)",
+               test_retreat_turn_and_go),
         "d": ("Chẩn đoán motor từng bánh riêng", test_motor_diagnosis),
         "e": ("Đọc xung encoder real-time (Ctrl+C để thoát)", test_encoder_live),
         "f": ("Calibrate PWM_COMPENSATION bằng encoder (lưu config)", test_calibrate_pwm_by_encoder),

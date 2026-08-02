@@ -67,6 +67,35 @@ Cho tiến đúng **1.0 giây** ở tốc độ 50, đo bằng thước. Lặp *
 | **CHƯA ĐẠT** | Lắc tăng dần, hoặc văng khỏi vạch, hoặc không tới giao lộ |
 | **Sửa** | Lắc tăng dần = dấu hiệu kinh điển của **sai dấu hiệu chỉnh khi lùi**. Trôi lệch một bên đều đều = `PWM_COMPENSATION_REV` |
 
+### A5 · Rút khỏi kệ → xoay → bám line — `test_motion` **18** 🔑
+
+**Mở đầu của MỌI tuyến giao hàng.** Đặt robot sát kệ, quay mặt vào kệ.
+
+Bài này xâu **3 thứ chưa thứ nào được xác nhận**, và sai số của chúng **cộng dồn**
+trước khi tới bước bám line — chạy rời từng cái thì mỗi cái "có vẻ ổn" mà ghép lại
+vẫn trượt:
+
+| Bước | Dựa vào | Tình trạng |
+|---|---|---|
+| lùi tới giao lộ | `PWM_COMPENSATION_REV` | ❌ chưa calibrate bao giờ |
+| tiến bù | `REVERSE_RECENTER_TIME` = 1.3s | ★ đã chỉnh tay |
+| xoay | `TURN_TIME` | ⚠️ mới xác nhận chiều TRÁI |
+
+| | |
+|---|---|
+| **ĐẠT [1/3]** | Lùi thẳng, lắc ngang ≤ ±2cm và **không tăng dần**; sau khi tiến bù, **trục bánh nằm trên vạch ngang, lệch ≤ 2cm** |
+| **ĐẠT [2/3]** | Sau khi xoay, **≥ 1 mắt** thấy line |
+| **ĐẠT [3/3]** | Tới đủ số giao lộ, không mất line giữa chừng, robot đi **giữa vạch** chứ không men mép. **3/3 lần** |
+| **CHƯA ĐẠT** — lắc tăng dần khi lùi | Dấu đảo hiệu chỉnh khi lùi SAI |
+| **CHƯA ĐẠT** — lùi trôi lệch đều một bên | `PWM_COMPENSATION_REV` |
+| **CHƯA ĐẠT** — xoay xong không mắt nào thấy line | Chạy option **10** riêng cho chiều đó: đúng 90° thì lỗi ở `REVERSE_RECENTER_TIME`, sai 90° thì lỗi ở `TURN_TIME` |
+| **CHƯA ĐẠT** — mất line ngay sau khi xoay | Sai số 3 bước cộng dồn quá lớn — quay lại A1 và option 15 tách riêng |
+
+Ghi lại **giây/giao lộ** ở bước [3/3] để đối chiếu `--forward` của `tools.dry_run`.
+
+Option **15** chỉ chạy bước 1 và đọc cảm biến một lần sau khi xoay — dùng nó khi cần
+soi riêng phần lùi. Option **18** mới là bài nghiệm thu.
+
 ---
 
 ## VÒNG B — Từng cơ cấu. Khoảng 30 phút
@@ -193,6 +222,8 @@ python3 -m tools.measure_phases
 |---|---|---|
 | A1 xoay trái / phải | ______° / ______° | `TURN_TIME` |
 | A2 trôi tiến / lùi (2m) | ______cm / ______cm | `PWM_COMPENSATION*` |
+| A5 lệch trục sau tiến bù | ______cm | `REVERSE_RECENTER_TIME` |
+| A5 giây / giao lộ | ______s | đối chiếu `dry_run --forward` |
 | A3 tốc độ ở 50% | ______ cm/s | → `EXIT_START_BLIND_TIME` = 45 ÷ ____ = ______ |
 | B1 chênh 2 càng T1 / T2 | ______mm / ______mm | `LIFT_*_EXTRA` |
 | B3 khoảng dừng TB / tản | ______cm / ______cm | `APPROACH_DISTANCE`, `STOP_RAMP_TIME` |

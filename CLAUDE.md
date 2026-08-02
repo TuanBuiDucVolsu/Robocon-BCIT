@@ -380,7 +380,7 @@ tại điểm giao, line cắt ngang nằm dọc thanh cảm biến nên xoay ki
 | `tests/NGHIEM_THU.md` | **Tiêu chí ĐẠT/CHƯA ĐẠT bằng SỐ** cho vòng A(số nền)→B(cơ cấu)→C(ghép nối)→D(ngân sách). Mọi bước phải lặp **3 lần** mới tính đạt. Có bảng ghi số |
 | `tests/LO_TRINH_TEST.md` | **Lộ trình test đánh số theo thứ tự phải làm** — bắt đầu từ đây |
 | `tests/DIEN_TAP.md` | 9 bài diễn tập sát thi đấu: ngân sách 240s, kiện xấu nhất, reset, pin, ánh sáng |
-| `tests/test_motion.py` | 17 option (1-17) + `d/e/f` — motor, line, route, dò nửa sân, lùi, giới hạn tốc độ |
+| `tests/test_motion.py` | 18 option + `d/e/f` — motor, line, route, dò nửa sân, lùi, giới hạn tốc độ. **18 = rút khỏi kệ → xoay → bám line tới giao lộ kế**, tức mở đầu MỌI tuyến giao; nó xâu 3 thứ chưa xác nhận (`PWM_COMPENSATION_REV`, `REVERSE_RECENTER_TIME`, `TURN_TIME` chiều phải) nên sai số cộng dồn |
 | `tests/test_lift.py` | Menu LẶP, **home đầu phiên + sau mỗi option** (không limit switch → `_current_level` chỉ đúng sau khi home). Option **1 = diễn tập trọn 1 lượt giao** như main.py; còn lại: nâng/hạ, IR, home, từng càng riêng, so 2 càng, calibrate |
 | `tests/test_vision.py` | 9 option + `l` — camera, BGR, ORB, HSV, classify_pair, ánh xạ trái/phải |
 | `tests/test_smoke.py` | Smoke tích hợp trên sa bàn. **HỎI nửa sân đầu phiên** (`_ask_board_side`) — đặt sai thứ tự nhà máy là lỗi KHÔNG có tín hiệu báo |
