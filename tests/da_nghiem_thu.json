@@ -71,6 +71,17 @@
         "APPROACH_DISTANCE": 11.9,
         "APPROACH_SLOW_DISTANCE": 20
       }
+    },
+    {
+      "ten": "A2 — robot đi thẳng chiều TIẾN (đo bằng vạch R4 trên sa bàn)",
+      "ngay": "2026-08-02",
+      "ket_qua": "ĐẠT — 1.000 lệch trái rõ, 0.940 đi thẳng. Đo VẬT LÝ, không qua encoder.",
+      "gia_tri": {
+        "PWM_COMPENSATION": 0.94,
+        "PWM_COMPENSATION_LEFT": 1.0,
+        "SPEED_DEFAULT": 50
+      },
+      "ghi_chu": "Chiều LÙI chưa xác nhận bằng phép đo này — LEFT_REV = 0.952 vẫn là số từ encoder."
     }
   ]
 }
