@@ -113,7 +113,10 @@ PWM_COMPENSATION = 0.924           # Bù bánh PHẢI khi tiến
 # PWM_COMPENSATION_LEFT_REV, không phải ở đây (hệ số kẹp ≤ 1.0, không tăng thêm được).
 PWM_COMPENSATION_REV = 1.000      # Bù bánh PHẢI khi lùi
 PWM_COMPENSATION_LEFT = 1.00      # Bù bánh TRÁI khi tiến
-PWM_COMPENSATION_LEFT_REV = 1.00  # Bù bánh TRÁI khi lùi
+# ĐÃ CALIBRATE trên robot 02/08 (option f, chiều lùi, hội tụ sau 1 vòng):
+#     trước: trái=356 phải=339  → lệch 4.8%
+#     sau  : trái=336 phải=338  → lệch 0.6%  ĐÃ CÂN
+PWM_COMPENSATION_LEFT_REV = 0.952  # Bù bánh TRÁI khi lùi
 
 # ============================================================
 # CƠ CẤU NÂNG (giây)

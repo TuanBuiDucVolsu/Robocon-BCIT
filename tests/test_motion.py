@@ -321,8 +321,12 @@ def test_calibrate_pwm_by_encoder(m: Motion):
 
     while True:
         importlib.reload(config)
-        print(f"  Hiện tại:  tiến {config.PWM_COMPENSATION:.3f}   "
-              f"lùi {config.PWM_COMPENSATION_REV:.3f}   (đều là bù bánh PHẢI)")
+        # In CẢ 4 hệ số: từ khi công cụ biết hãm bánh trái, chỉ in 2 hệ số bánh phải
+        # là giấu mất đúng cái vừa bị đổi.
+        print(f"  Hiện tại:  TIẾN  trái {config.PWM_COMPENSATION_LEFT:.3f}  "
+              f"phải {config.PWM_COMPENSATION:.3f}")
+        print(f"             LÙI   trái {config.PWM_COMPENSATION_LEFT_REV:.3f}  "
+              f"phải {config.PWM_COMPENSATION_REV:.3f}")
         cmd = input("  t = đo TIẾN / l = đo LÙI / q = thoát: ").strip().lower()
         if cmd == "q":
             break

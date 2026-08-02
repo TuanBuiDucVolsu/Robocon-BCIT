@@ -71,6 +71,17 @@
         "APPROACH_DISTANCE": 11.9,
         "APPROACH_SLOW_DISTANCE": 20
       }
+    },
+    {
+      "ten": "test_motion f — cân 2 bánh chiều LÙI bằng encoder",
+      "ngay": "2026-08-02",
+      "ket_qua": "ĐẠT — lệch xung 4.8% → 0.6% sau 1 vòng chỉnh (trái=336 phải=338)",
+      "gia_tri": {
+        "PWM_COMPENSATION_REV": 1.0,
+        "PWM_COMPENSATION_LEFT_REV": 0.952,
+        "SPEED_DEFAULT": 50
+      },
+      "ghi_chu": "Chiều TIẾN chưa đo lại bằng công cụ mới — PWM_COMPENSATION 0.924 là số cũ."
     }
   ]
 }
