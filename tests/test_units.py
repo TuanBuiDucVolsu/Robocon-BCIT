@@ -832,6 +832,55 @@ class TestFollowLineReverse(unittest.TestCase):
         self.assertTrue(at_intersection, "lùi vẫn phải nhận ra giao lộ")
 
 
+class TestAdvanceToEnd(unittest.TestCase):
+    """advance_to_end phải phân biệt "hết line" với "chưa từng thấy line".
+
+    Gộp hai cái lại thì robot đứng ngoài vạch cũng được báo là ĐÃ TỚI ĐIỂM CUỐI —
+    gặp thật ở smoke option 1 sau bước dò nửa sân (probe_side_branch chạy hở, robot
+    quay về lệch khỏi vạch), advance báo thành công sau 0.55s.
+    """
+
+    def _motion(self, frames, dist=999.0):
+        """frames: list giá trị cảm biến trả lần lượt; hết thì lặp lại giá trị cuối."""
+        m = object.__new__(Motion)
+        m._aborted = lambda: False
+        m.get_distance = lambda *a, **k: dist
+        m.stop = MagicMock()
+        m._escape_intersection = MagicMock()
+        seq = list(frames)
+
+        def follow(_speed):
+            v = seq.pop(0) if len(seq) > 1 else seq[0]
+            return False, v
+
+        m.follow_line = follow
+        return m
+
+    def test_end_of_line_after_seeing_it_is_success(self):
+        """Thấy line rồi mới mất = đã tới điểm cuối thật."""
+        m = self._motion([[0, 0, 1, 1, 0, 0]] * 5 + [[0] * 6])
+        self.assertTrue(m.advance_to_end(timeout=3.0))
+
+    def test_never_seeing_line_is_failure(self):
+        """Không nằm trên line từ đầu -> THẤT BẠI, không phải 'đã tới điểm cuối'."""
+        m = self._motion([[0] * 6])
+        self.assertFalse(m.advance_to_end(timeout=3.0))
+        m.stop.assert_called()
+
+    def test_never_seeing_line_stops_within_acquire_window(self):
+        """Không được chạy mù hết ADVANCE_TIMEOUT ở ADVANCE_SPEED."""
+        import time as _t
+        m = self._motion([[0] * 6])
+        t0 = _t.time()
+        m.advance_to_end(timeout=6.0)
+        self.assertLess(_t.time() - t0, config.ADVANCE_ACQUIRE_TIME + 0.5)
+
+    def test_ultrasonic_near_target_is_success(self):
+        """Siêu âm thấy kệ gần -> bàn giao cho approach_shelf, kể cả khi chưa thấy line."""
+        m = self._motion([[0] * 6], dist=config.APPROACH_SLOW_DISTANCE - 1)
+        self.assertTrue(m.advance_to_end(timeout=3.0))
+
+
 class TestForwardGuided(unittest.TestCase):
     """Tiến sát kệ phải CÓ LÁI khi còn thấy line, và chỉ chạy thẳng khi mất line.
 

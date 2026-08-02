@@ -471,7 +471,22 @@ class Motion:
           1. Mất line liên tục config.LINE_END_CONFIRM_TIME giây → đã hết line, hoặc
           2. Siêu âm thấy mục tiêu ở gần (≤ APPROACH_SLOW_DISTANCE) → để
              approach_shelf() canh nốt đoạn cuối cho chính xác, hoặc
-          3. Gặp giao lộ (bản đồ sai / robot đi lố) → dừng và báo thất bại.
+          3. Gặp giao lộ (bản đồ sai / robot đi lố) → dừng và báo thất bại, hoặc
+          4. CHƯA TỪNG thấy line sau ADVANCE_ACQUIRE_TIME → robot không nằm trên
+             line, báo THẤT BẠI.
+
+        ⚠️ Điều kiện 4 tách khỏi điều kiện 1 vì hai tình huống khác hẳn nhau mà
+        trước đây bị gộp: `lost_since` khởi tạo None nên robot KHÔNG NẰM TRÊN LINE
+        ngay từ đầu cũng chạy đúng nhánh "hết line" và trả THÀNH CÔNG sau 0.25s.
+        Gặp thật trong smoke option 1: bước dò nửa sân (probe_side_branch) chạy hở
+        hoàn toàn — xoay phải, tiến 0.45s, lùi 0.45s, xoay trái — mà TURN_TIME mới
+        xác nhận cho chiều TRÁI và bù PWM chiều LÙI thì chưa calibrate, nên robot
+        quay về lệch khỏi vạch. advance kế đó báo "đã tới điểm cuối" sau 0.55s
+        trong khi robot vẫn đứng ở giao lộ. Im lặng kiểu đó nguy hiểm hơn hẳn một
+        lần thất bại: state machine tin là đã tới kệ và đi tiếp.
+
+        "Hết line" chỉ có nghĩa khi TRƯỚC ĐÓ đã bám được line — mọi lệnh advance
+        đều bắt đầu từ một giao lộ, nơi chắc chắn có line.
         """
         logger.info("Bám line tới hết line (advance, speed=%d%%)", base_speed)
         # Lệnh advance luôn bắt đầu khi robot đang ĐỨNG TRÊN giao lộ (vừa dừng ở
@@ -485,6 +500,9 @@ class Motion:
         # gần mới tin (approach_shelf() phía sau lo nốt đoạn cuối, nên tốn thêm 1 nhịp
         # 10ms là không đáng kể).
         near_streak = 0
+        # Đã bám được line lần nào chưa. Trước khi True thì "mất line" nghĩa là
+        # KHÔNG TÌM THẤY, không phải "đã hết".
+        acquired = False
 
         while time.time() - start < timeout:
             if self._aborted():
@@ -505,15 +523,25 @@ class Motion:
                 logger.warning("Advance: gặp giao lộ — bản đồ hoặc vị trí không khớp")
                 return False
 
-            if sum(values) == 0:
-                if lost_since is None:
-                    lost_since = time.time()
-                elif time.time() - lost_since >= config.LINE_END_CONFIRM_TIME:
-                    self.stop()
-                    logger.info("Advance: đã hết line — dừng tại điểm cuối")
-                    return True
-            else:
+            if sum(values) > 0:
+                acquired = True
                 lost_since = None
+            elif not acquired:
+                # Chưa bao giờ thấy line. Cho một khoảng ngắn để tìm, hết thì DỪNG —
+                # không được chạy mù hết ADVANCE_TIMEOUT ở tốc độ này.
+                if time.time() - start >= config.ADVANCE_ACQUIRE_TIME:
+                    self.stop()
+                    logger.error(
+                        "Advance: không thấy line trong %.2fs đầu — robot KHÔNG nằm "
+                        "trên line (hay gặp sau bước dò nửa sân). Không coi là đã "
+                        "tới điểm cuối.", config.ADVANCE_ACQUIRE_TIME)
+                    return False
+            elif lost_since is None:
+                lost_since = time.time()
+            elif time.time() - lost_since >= config.LINE_END_CONFIRM_TIME:
+                self.stop()
+                logger.info("Advance: đã hết line — dừng tại điểm cuối")
+                return True
 
             time.sleep(0.01)
 

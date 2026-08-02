@@ -309,6 +309,13 @@ LINE_GAP_COAST_TIME = 1.2
 # đó là điểm cuối của line, không phải giao lộ nên không đếm bằng ("forward", N).
 ADVANCE_SPEED = 40
 LINE_END_CONFIRM_TIME = 0.25 # Giây mất line liên tục để kết luận "hết line"
+# Giây tối đa để advance TÌM THẤY line kể từ lúc bắt đầu. Khác hẳn
+# LINE_END_CONFIRM_TIME: đó là "thấy rồi mới mất" = hết line (THÀNH CÔNG), còn đây
+# là "chưa từng thấy" = robot không nằm trên line (THẤT BẠI). Gộp hai cái làm
+# advance báo đã tới kệ trong khi robot vẫn đứng ở giao lộ — xem docstring
+# Motion.advance_to_end. Đủ dài để bù 0.3s chạy mù của _escape_intersection, đủ
+# ngắn để không lao mù ở ADVANCE_SPEED.
+ADVANCE_ACQUIRE_TIME = 0.8
 ADVANCE_TIMEOUT = 6.0
 
 # ============================================================
