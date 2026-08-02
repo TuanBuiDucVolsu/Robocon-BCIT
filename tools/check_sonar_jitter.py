@@ -77,6 +77,19 @@ def main() -> int:
     print(f"  Min / Max       : {min(mau):6.1f} / {max(mau):.1f} cm")
     print(f"  Độ lệch chuẩn   : {lech:6.2f} cm      ← ĐÂY LÀ SỐ ĐỂ SO 2 CẢM BIẾN")
     print(f"  Lệch > 2cm      : {len(ngoai):4d} mẫu ({len(ngoai)/len(mau)*100:.1f}%)")
+    # Phân vị: phân biệt "nhảy lẻ vài mẫu" với "HAI CỤM rõ rệt". Hai cụm nghĩa là có
+    # vật KHÁC lọt vào chùm sóng, thỉnh thoảng bắt được — không phải nhiễu thời gian.
+    q = statistics.quantiles(mau, n=10)
+    print(f"  Phân vị p10/25/50/75/90 : "
+          f"{q[0]:.1f} / {q[1]:.1f} / {tv:.1f} / {q[6]:.1f} / {q[8]:.1f} cm")
+    lo = [v for v in mau if v < tv - 2.0]
+    if len(lo) > len(mau) * 0.05:
+        print(f"  ⚠ {len(lo)/len(mau)*100:.0f}% số mẫu NGẮN hơn trung vị >2cm "
+              f"(cụm quanh {statistics.median(lo):.1f}cm)")
+        print("     Nhiễu thời gian thì lệch ĐỀU cả 2 phía. Lệch một phía = có VẬT KHÁC")
+        print("     lọt vào chùm sóng ở khoảng cách đó — thường là chính càng hoặc")
+        print("     khung robot ở vị trí lắp mới. Kiểm bằng tools.check_load_blocks_sonar:")
+        print("     nâng/hạ càng mà số đo đổi theo = càng đang chắn.")
     print(f"  Kịch trần 100cm : {len(kich_tran):4d} mẫu ({len(kich_tran)/len(mau)*100:.1f}%)"
           f"   ← mất tiếng vọng")
 
