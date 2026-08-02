@@ -357,6 +357,13 @@ tại điểm giao, line cắt ngang nằm dọc thanh cảm biến nên xoay ki
   loại cảm biến. Cờ `config.LINE_BLACK_IS_HIGH` (hiện đặt True) tự đảo tín hiệu tại
   nguồn nếu QTR đọc đen ra giá trị cao → không phải sửa logic phía dưới. Chốt cờ +
   `LINE_THRESHOLD` bằng `python3 -m tools.calibrate_line` (chạy trên Pi).
+- ⚠️ **Hằng số THỜI GIAN gắn chặt với TỐC ĐỘ nó được đo ra.** Mọi đoạn chạy MÙ theo
+  thời gian có quãng đường tỉ lệ thẳng với tốc độ, nên đổi tốc độ là hằng số thời
+  gian mất hiệu lực **âm thầm**. Đã gặp: nâng `REVERSE_SPEED` 35 → 40 làm đoạn tiến
+  bù (`REVERSE_RECENTER_TIME = 1.3s`, đo ở 35%) chạy quá vạch → xoay xong mất line.
+  Vì vậy đoạn tiến bù dùng `REVERSE_RECENTER_SPEED` riêng, không dùng `base_speed`.
+  Các hằng số cùng loại: `EXIT_START_BLIND_TIME`, `RETREAT_BLIND_TIME`,
+  `PROBE_TRAVEL_TIME`, `LIFT_TIME_SHELF_*`, `LINE_GAP_COAST_TIME`.
 - **Bù PWM**: `follow_line()` dùng ĐÚNG cùng `PWM_COMPENSATION`/`PWM_COMPENSATION_LEFT`
   như `forward()` — nếu lệch nhau thì đi thẳng và bám line sẽ khác nhau sau calibrate.
   `turn_left/right()` cũng lấy hệ số theo ĐÚNG CHIỀU từng bánh (`*_LEFT_REV` cho bánh

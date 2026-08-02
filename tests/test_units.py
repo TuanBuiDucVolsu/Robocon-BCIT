@@ -1232,6 +1232,34 @@ class TestAdvanceToEnd(unittest.TestCase):
         self.assertGreater(config.ADVANCE_MIN_APPROACH_CM, 0)
 
 
+class TestReverseRecenter(unittest.TestCase):
+    """Đoạn tiến bù sau khi lùi phải dùng ĐÚNG tốc độ mà thời gian được đo ra.
+
+    Nó chạy MÙ theo thời gian nên quãng đường tỉ lệ thẳng với tốc độ. Buộc nó vào
+    REVERSE_SPEED là mỗi lần chỉnh tốc độ lùi lại âm thầm phá hằng số đã calibrate —
+    đã gặp thật: nâng REVERSE_SPEED 35 → 40 làm robot tiến bù quá vạch, xoay xong
+    mất line (option 8).
+    """
+
+    def test_recenter_uses_its_own_calibrated_speed(self):
+        m = object.__new__(Motion)
+        m._aborted = lambda: False
+        m._last_error = 0.0
+        m.forward = MagicMock()
+        m.backward = MagicMock()
+        m.stop = MagicMock()
+        m._escape_intersection = MagicMock()
+        m.follow_line = MagicMock(return_value=(True, [0, 0, 1, 1, 0, 0]))
+        with patch.object(config, "REVERSE_RECENTER_TIME", 0.02):
+            m.back_to_intersection(1, base_speed=99)
+        self.assertTrue(m.forward.called, "phải có đoạn tiến bù")
+        self.assertEqual(m.forward.call_args.args[0], config.REVERSE_RECENTER_SPEED,
+                         "tiến bù phải dùng REVERSE_RECENTER_SPEED, không phải base_speed")
+
+    def test_recenter_speed_is_above_the_dead_zone(self):
+        self.assertGreater(config.REVERSE_RECENTER_SPEED, config.MOTOR_MIN_DUTY)
+
+
 class TestLineCenterOffset(unittest.TestCase):
     """Điểm đặt bám line phải là "càng thẳng khe pallet", không phải "giữa thanh".
 

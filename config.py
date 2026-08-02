@@ -471,6 +471,13 @@ EDGE_COST_REVERSE = 1        # Phụ phí so với tiến 1 giao lộ → hoà t
 # Dò trên robot: 1.5s thì tiến QUÁ vạch một chút → 35% duty đi hơn 12cm trong 1.5s,
 # tức ~90mm/s (nội suy lý thuyết cho 65mm/s, thực tế nhanh hơn). 12cm ÷ 90mm/s ≈ 1.3s.
 # Tiến bù là tiến VỀ PHÍA KỆ nên thà thiếu còn hơn thừa.
+# ⚠️ TỐC ĐỘ của đoạn tiến bù — TÁCH RIÊNG khỏi REVERSE_SPEED. Đoạn này chạy MÙ theo
+# thời gian nên quãng đường tỉ lệ thẳng với tốc độ: đổi tốc độ là 1.3s mất hiệu lực.
+# 35 là tốc độ mà 1.3s ĐƯỢC ĐO RA (xem ghi chú ngay trên). Đã gặp thật: nâng
+# REVERSE_SPEED 35 → 40 làm robot tiến bù quá vạch, xoay phải xong thanh cảm biến đã
+# qua khỏi giao lộ → mất line (option 8).
+# Đổi số này thì PHẢI đo lại REVERSE_RECENTER_TIME bằng test_motion option 15/18.
+REVERSE_RECENTER_SPEED = 35
 REVERSE_RECENTER_TIME = 1.3
 
 # ============================================================

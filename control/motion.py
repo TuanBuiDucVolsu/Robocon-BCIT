@@ -1118,7 +1118,12 @@ class Motion:
             # Thân xe đang nằm QUÁ giao lộ một đoạn = khoảng cách trục bánh → cảm biến
             # (tiến thì nằm trước giao lộ đúng bấy nhiêu). Tiến bù nếu đã calibrate.
             if config.REVERSE_RECENTER_TIME > 0:
-                self.forward(base_speed)
+                # ⚠️ Dùng REVERSE_RECENTER_SPEED, KHÔNG dùng base_speed. Đoạn tiến bù
+                # này chạy MÙ theo thời gian, nên quãng đường phụ thuộc thẳng vào tốc
+                # độ — đổi tốc độ là hằng số thời gian đã calibrate mất hiệu lực.
+                # Đã gặp thật: nâng REVERSE_SPEED 35 → 40 làm robot tiến bù quá vạch,
+                # xoay xong thanh cảm biến đã qua khỏi giao lộ → mất line ở option 8.
+                self.forward(config.REVERSE_RECENTER_SPEED)
                 time.sleep(config.REVERSE_RECENTER_TIME)
                 self.stop()
 
