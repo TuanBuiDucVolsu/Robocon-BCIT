@@ -224,6 +224,13 @@ APPROACH_STOP_MARGIN = 2.5
 #   đầu, trả True mà KHÔNG lùi tí nào (đúng lỗi đã gặp: RETREAT=10 < đo được 21.8).
 # ⚠️ Biên hiện tại chỉ 1.0cm so với ① (12.9 vs 11.9) — mỏng so với nhiễu HC-SR04.
 RETREAT_DISTANCE = 12.9      # ĐÃ ĐO — measure_pickup ④
+# Lùi ra bằng siêu âm KHÔNG dùng được khi đang cõng kiện: pallet vừa nhấc nằm ngay
+# trước cảm biến và đi CÙNG robot, nên số đo đứng yên và RETREAT_DISTANCE không bao
+# giờ đạt. Đo 02/08, tương quan hoàn hảo: bốc thành công → lùi timeout 5s; bốc thất
+# bại (không pallet) → lùi OK. Phát hiện bằng "số đo không TĂNG" rồi lùi theo giờ.
+RETREAT_STUCK_TIME = 0.8     # Giây quan sát trước khi kết luận cảm biến bị che
+RETREAT_STUCK_CM = 1.5       # Tăng ít hơn ngần này trong khoảng trên = bị che
+RETREAT_BLIND_TIME = 1.5     # Tổng giây lùi khi đã chuyển sang lùi mù
 
 # --- ③ CHẶN CỨNG KHI LUỒN CÀNG ----------------------------------------------
 # Bước luồn dừng theo CẢM BIẾN IR trên mặt càng (IR đo thẳng "pallet đã trên càng

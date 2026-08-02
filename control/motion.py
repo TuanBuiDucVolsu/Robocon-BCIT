@@ -845,18 +845,45 @@ class Motion:
         logger.info("Lùi ra khỏi kệ — mục tiêu %.1fcm", target_cm)
         start = time.time()
         self.backward(speed)
+        dau = None          # khoảng cách đọc được lần đầu
+        mu = False          # đã chuyển sang lùi mù chưa
 
         while time.time() - start < config.APPROACH_TIMEOUT:
             if self._aborted():
                 return False
+            troi = time.time() - start
             dist = self.get_distance()   # gpiozero đã lấy trung vị sẵn (ULTRASONIC_QUEUE_LEN)
             if dist < 0:
                 # Lỗi đọc mẫu này — KHÔNG hiểu nhầm thành "đã lùi đủ", thử lại
                 time.sleep(0.02)
                 continue
-            if dist >= target_cm:
+            if dau is None:
+                dau = dist
+            if not mu and dist >= target_cm:
                 self.stop()
                 logger.info("Đã lùi đủ xa — khoảng cách %.1fcm", dist)
+                return True
+
+            # ⚠️ SIÊU ÂM BỊ CHÍNH KIỆN HÀNG CHE. Sau khi nhấc, pallet nằm ngay trước
+            # cảm biến và di chuyển CÙNG robot, nên số đo ĐỨNG YÊN dù robot lùi bao
+            # xa — điều kiện `dist >= target` không bao giờ đạt.
+            # Đo trên robot 02/08, tương quan hoàn hảo qua 2 lượt:
+            #     bốc hàng THÀNH CÔNG (có pallet) → lùi TIMEOUT 5s
+            #     bốc hàng THẤT BẠI (không pallet) → lùi OK, báo 13.3cm
+            # Trong trận thì LƯỢT NÀO cũng lùi lúc đang cõng kiện: 6 lần × 5s = 30s
+            # của ngân sách 240s, cộng robot lùi mù không ai kiểm soát.
+            # Phát hiện bằng "số đo không TĂNG", rồi chuyển sang lùi theo THỜI GIAN.
+            if (not mu and troi >= config.RETREAT_STUCK_TIME
+                    and dist - dau < config.RETREAT_STUCK_CM):
+                mu = True
+                logger.warning(
+                    "Lùi ra: sau %.1fs mà khoảng cách chỉ đổi %.1fcm (%.1f→%.1f) — "
+                    "siêu âm nhiều khả năng bị CHÍNH KIỆN HÀNG che. Chuyển sang lùi "
+                    "theo thời gian %.1fs.",
+                    troi, dist - dau, dau, dist, config.RETREAT_BLIND_TIME)
+            if mu and troi >= config.RETREAT_BLIND_TIME:
+                self.stop()
+                logger.info("Đã lùi mù %.1fs — coi như đã rời kệ", troi)
                 return True
             time.sleep(0.02)
 

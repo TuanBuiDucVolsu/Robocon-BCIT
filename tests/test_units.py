@@ -912,6 +912,49 @@ class TestApproachShelf(unittest.TestCase):
         self.assertFalse(m.approach_shelf())
 
 
+class TestRetreatFromShelf(unittest.TestCase):
+    """Lùi ra khỏi kệ phải xong được KỂ CẢ khi siêu âm bị kiện hàng che.
+
+    Sau khi nhấc, pallet nằm ngay trước cảm biến và đi CÙNG robot → số đo đứng yên,
+    điều kiện `dist >= RETREAT_DISTANCE` không bao giờ đạt. Đo trên robot 02/08:
+        bốc THÀNH CÔNG (có pallet)  → lùi TIMEOUT 5s
+        bốc THẤT BẠI (không pallet) → lùi OK, báo 13.3cm
+    Trong trận thì lượt nào cũng lùi lúc đang cõng kiện — 6 lần × 5s = 30s.
+    """
+
+    def _motion(self, distances):
+        m = object.__new__(Motion)
+        m._aborted = lambda: False
+        m._distance_sensor = MagicMock()
+        seq = list(distances)
+        m.get_distance = lambda: seq.pop(0) if len(seq) > 1 else seq[0]
+        m.backward = MagicMock()
+        m.stop = MagicMock()
+        return m
+
+    def test_normal_case_stops_at_target(self):
+        """Không cõng kiện: siêu âm dùng được, dừng đúng mốc."""
+        m = self._motion([3.0, 6.0, 10.0, config.RETREAT_DISTANCE + 0.5])
+        self.assertTrue(m.retreat_from_shelf())
+        m.stop.assert_called_once()
+
+    def test_blocked_sensor_falls_back_to_timed_retreat(self):
+        """Số đo ĐỨNG YÊN (kiện che) → lùi theo giờ rồi dừng, KHÔNG chạy hết timeout."""
+        m = self._motion([4.0])           # luôn 4.0cm, không bao giờ tăng
+        t0 = time.time()
+        self.assertTrue(m.retreat_from_shelf())
+        troi = time.time() - t0
+        self.assertLess(troi, config.APPROACH_TIMEOUT,
+                        "phải dừng theo RETREAT_BLIND_TIME, không chạy hết timeout")
+        self.assertGreaterEqual(troi, config.RETREAT_BLIND_TIME - 0.1)
+        m.stop.assert_called_once()
+
+    def test_blind_time_is_shorter_than_the_timeout_it_replaces(self):
+        """Nếu lùi mù còn lâu hơn timeout thì chẳng sửa được gì."""
+        self.assertLess(config.RETREAT_BLIND_TIME, config.APPROACH_TIMEOUT)
+        self.assertLess(config.RETREAT_STUCK_TIME, config.RETREAT_BLIND_TIME)
+
+
 class TestEscapeIntersection(unittest.TestCase):
     """Rời giao lộ phải bám theo CẢM BIẾN, không theo đồng hồ.
 
