@@ -120,8 +120,14 @@ def smoke_pickup_cycle(m: Motion, lift: Lift, vision: Vision, tier: int = 1, **_
         print("  ❌ BỐC HÀNG THẤT BẠI (luồn càng hoặc IR không xác nhận)")
         print("     Kiểm: càng có thẳng hàng khe pallet không? APPROACH_DISTANCE "
               "(vị trí chờ) có quá gần/xa không?")
-        lift.go_to_level(0)
+        # ⚠️ LÙI RA TRƯỚC rồi mới hạ càng. Lúc này càng đang NẰM TRONG khe pallet
+        # (robot còn cách kệ vài cm) — hạ càng ngay tại đó là kéo càng xuống trong
+        # lòng khe, vướng đáy khe hoặc mép kệ, ghì motor và có thể lôi cả pallet theo.
+        # main.py cũng lùi trước: `_insert_and_lift()` xong là `_retreat_from_shelf()`
+        # chạy NGAY, bất kể thành hay bại. Để test lệch khỏi luồng thật là mất chính
+        # cái giá trị mà test_smoke sinh ra để có.
         m.retreat_from_shelf()
+        lift.go_to_level(0)
         return False, None
     print("  ✅ bốc hàng OK (nâng → luồn → nhấc, IR xác nhận)")
 
