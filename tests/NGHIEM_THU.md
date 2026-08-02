@@ -147,6 +147,31 @@ việc luồn, để biết hỏng nằm ở đâu.
 
 **B2 chưa đạt thì đừng chạy C2** — sẽ không phân biệt được "luồn sai" với "IR sai".
 
+### B0 · Độ ổn định của cảm biến siêu âm — `tools.check_sonar_jitter` 🔑
+
+**Làm TRƯỚC B3, và làm lại mỗi khi thay/lắp lại cảm biến.**
+
+```bash
+python3 -m tools.check_sonar_jitter
+```
+
+Robot ĐỨNG YÊN, mặt phẳng trước mặt ~12-15cm. Mọi dao động đọc được đều là **nhiễu**.
+
+| Độ lệch chuẩn | Kết luận |
+|---|---|
+| **≤ 0.3cm**, không mẫu nào kịch trần | ✅ dừng trước kệ sẽ lặp lại được |
+| ≤ 0.8cm | ⚠ tạm được, vẫn phải bù bằng `APPROACH_STOP_MARGIN` |
+| **> 0.8cm** | ❌ không hằng số nào bù được cho cảm biến nhảy |
+| có mẫu **kịch trần 100cm** | ❌ mất tiếng vọng — kiểm góc đặt, mặt phản xạ, dây ECHO |
+
+Dùng để **so hai cảm biến bằng số**: chạy với cảm biến cũ, ghi độ lệch chuẩn; thay
+cảm biến mới, đặt lại đúng khoảng cách đó, chạy lại, so.
+
+⚠️ **Thay cảm biến thì phải đo lại toàn bộ nhóm khoảng cách** — chúng tính từ MẶT
+CẢM BIẾN: `APPROACH_DISTANCE`, `RETREAT_DISTANCE`, `INSERT_MIN_DISTANCE`,
+`ADVANCE_HARD_STOP_CM`. Lắp lệch vài cm là cả nhóm sai theo.
+⚠️ Chân ECHO phải qua **cầu phân áp 1kΩ+2kΩ** (5V→3.3V). Nối thẳng là hỏng GPIO.
+
 ### B3 · Khoảng dừng trước kệ — `test_motion` **9** 🔑
 
 **Đây là bước bắt lỗi trôi thêm của `stop_gently`.** Chạy **5 lần**.
