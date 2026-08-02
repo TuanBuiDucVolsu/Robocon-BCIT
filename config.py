@@ -196,6 +196,17 @@ PICKUP_VERIFY_DELAY = 0.2    # Giây chờ sau nâng trước khi đọc IR
 # INSERT_SPEED=25 trong INSERT_TIMEOUT=4.0s, tức 11.9 cần 21mm/s còn 15.0 cần
 # 28mm/s — đẩy vấn đề từ bước tiếp cận sang bước luồn.
 APPROACH_DISTANCE = 11.9     # ĐÃ ĐO — measure_pickup ① (APPROACH_STANDOFF_DISTANCE)
+# Cm dừng SỚM hơn APPROACH_DISTANCE. Bù độ trễ siêu âm, KHÔNG phải sửa mốc hình học
+# — giữ APPROACH_DISTANCE đúng nghĩa "khoảng cách đo được tới khe pallet".
+# gpiozero trả trung vị ULTRASONIC_QUEUE_LEN=3 mẫu × ~60ms → số báo về QUÁ KHỨ ~90ms,
+# mà robot vẫn chạy trong 90ms đó. Cộng nhiễu trung vị trên mặt kệ gồ ghề → khoảng
+# dừng tản rộng: đo trên robot 02/08 thấy "lúc dừng đúng, lúc chui vào gầm kệ 2cm".
+# ⚠️ Lệch hẳn về phía DỪNG SỚM là CÓ CHỦ Ý, vì hai vế không cân nhau:
+#     dừng sớm  → creep_until bò tiếp tới khi IR báo (còn 4s timeout, thừa) → không mất gì
+#     dừng muộn → càng còn ở SÀN lúc này, chui vào gầm kệ → hỏng lượt bốc
+# 2.0 nhắm phủ hết mức trôi quan sát được. Đo cm/s (NGHIEM_THU A3) rồi tính đúng:
+#     bù = cm/s × 0.09s.  Đo khoảng dừng 5 lần (B3) thì cộng thêm nửa độ tản.
+APPROACH_STOP_MARGIN = 2.0
 
 # --- ② LÙI RA ----------------------------------------------------------------
 # Sau khi nhấc/thả xong, robot lùi tới khi đọc được ≥ số này thì dừng.

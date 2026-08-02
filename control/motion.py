@@ -669,11 +669,20 @@ class Motion:
                 # Lỗi đọc mẫu này — KHÔNG hiểu nhầm thành "đã tới", thử lại
                 time.sleep(0.02)
                 continue
-            if dist <= target_cm:
+            # Dừng SỚM hơn mốc hình học một khoảng bù. Siêu âm của gpiozero trả về
+            # trung vị ULTRASONIC_QUEUE_LEN mẫu × ~60ms → con số báo về QUÁ KHỨ
+            # ~90ms, mà robot vẫn chạy trong 90ms đó; cộng nhiễu trung vị trên mặt
+            # kệ gồ ghề là ra "lúc dừng đúng, lúc chui vào gầm kệ".
+            # Lệch hẳn về phía DỪNG SỚM vì hai vế không cân nhau: dừng sớm thì
+            # creep_until bò tiếp tới khi IR báo, không mất gì; dừng muộn thì càng
+            # (còn ở SÀN lúc này) chui vào gầm kệ.
+            if dist <= target_cm + config.APPROACH_STOP_MARGIN:
                 # Giảm tốc rồi mới cắt: phanh gấp ở đây làm robot lệch vài độ, mà
                 # bước luồn càng kế tiếp không còn line để tự sửa.
                 self.stop_gently(speed)
-                logger.info("Đã đến vị trí kệ — khoảng cách %.1fcm", dist)
+                logger.info("Đã đến vị trí kệ — khoảng cách %.1fcm "
+                            "(mốc %.1f + bù trễ %.1f)",
+                            dist, target_cm, config.APPROACH_STOP_MARGIN)
                 return True
 
             # KHÔNG TIẾN THÊM ĐƯỢC → dừng, đừng húc tiếp.

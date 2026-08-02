@@ -131,9 +131,9 @@ thước từ mặt cảm biến siêu âm tới mặt trước kệ.
 
 | | |
 |---|---|
-| **ĐẠT** | Trung bình **11.9 ± 1.0 cm**, VÀ độ tản (max − min) **≤ 1.0 cm** |
+| **ĐẠT** | Trung bình **13.9 ± 1.0 cm** (= `APPROACH_DISTANCE` 11.9 + `APPROACH_STOP_MARGIN` 2.0), VÀ độ tản (max − min) **≤ 1.0 cm** |
 | **CHƯA ĐẠT — dừng sát hơn 10.9cm** | `stop_gently` trôi thêm. **Hạ `STOP_RAMP_TIME`** 0.12 → 0.08 → 0.04, chạy lại. **KHÔNG đổi `APPROACH_DISTANCE`** — số đó ràng buộc với vị trí khe pallet |
-| **CHƯA ĐẠT — tản > 1.0cm** | Siêu âm nhiễu, hoặc robot đứng không vuông góc với kệ |
+| **CHƯA ĐẠT — tản > 1.0cm** | Siêu âm nhiễu, hoặc robot đứng không vuông góc với kệ. **Nới `APPROACH_STOP_MARGIN` thêm nửa độ tản** — dừng sớm không mất gì vì `creep_until` bò tiếp tới khi IR báo; dừng muộn là càng chui gầm kệ |
 | **CHƯA ĐẠT — robot lệch góc sau khi dừng** | Đặt `STOP_RAMP_TIME = 0` thử lại: vẫn lệch thì do phanh động, hết lệch thì do chính cái ramp |
 
 **Ghi lại khoảng cách trung bình.** Nếu nó lệch quá **1cm** so với lúc chụp ảnh mẫu

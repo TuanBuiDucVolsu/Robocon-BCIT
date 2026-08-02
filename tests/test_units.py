@@ -838,6 +838,55 @@ class TestFollowLineReverse(unittest.TestCase):
         self.assertTrue(at_intersection, "lùi vẫn phải nhận ra giao lộ")
 
 
+class TestApproachShelf(unittest.TestCase):
+    """Dừng trước kệ phải lệch về phía SỚM, và phải THỰC SỰ chạy được.
+
+    Không có test nào gọi approach_shelf() nên đã lọt một lần: motion.py tham chiếu
+    config.APPROACH_STOP_MARGIN trong khi hằng số đó chưa được thêm vào config —
+    cả 4 bộ test vẫn xanh, chỉ nổ khi chạm robot thật.
+    """
+
+    def _motion(self, distances):
+        m = object.__new__(Motion)
+        m._aborted = lambda: False
+        m._distance_sensor = MagicMock()
+        seq = list(distances)
+        m.get_distance = lambda: seq.pop(0) if len(seq) > 1 else seq[0]
+        m.stop = MagicMock()
+        m.stop_gently = MagicMock()
+        m.forward = MagicMock()
+        m._forward_guided = MagicMock()
+        return m
+
+    def test_stops_early_by_the_lag_margin(self):
+        """Dừng ở mốc + bù, không phải ở đúng mốc — bù độ trễ siêu âm."""
+        moc = config.APPROACH_DISTANCE
+        bu = config.APPROACH_STOP_MARGIN
+        # đọc được đúng "mốc + bù" → phải dừng NGAY, chưa được tiến thêm
+        m = self._motion([moc + bu])
+        self.assertTrue(m.approach_shelf(moc))
+        m.stop_gently.assert_called_once()
+
+    def test_keeps_going_while_still_beyond_margin(self):
+        """Còn xa hơn mốc + bù thì phải tiến tiếp, không dừng non."""
+        moc = config.APPROACH_DISTANCE
+        bu = config.APPROACH_STOP_MARGIN
+        m = self._motion([moc + bu + 3.0] * 5 + [moc + bu])
+        self.assertTrue(m.approach_shelf(moc))
+        self.assertGreater(m._forward_guided.call_count, 0,
+                           "phải tiến ít nhất một nhịp trước khi dừng")
+
+    def test_margin_is_biased_early_never_late(self):
+        """Bù phải DƯƠNG. Bù âm là dừng MUỘN — càng chui vào gầm kệ."""
+        self.assertGreater(config.APPROACH_STOP_MARGIN, 0,
+                           "bù âm = dừng muộn = càng chui vào gầm kệ")
+
+    def test_fails_without_distance_sensor(self):
+        m = object.__new__(Motion)
+        m._distance_sensor = None
+        self.assertFalse(m.approach_shelf())
+
+
 class TestEscapeIntersection(unittest.TestCase):
     """Rời giao lộ phải bám theo CẢM BIẾN, không theo đồng hồ.
 
