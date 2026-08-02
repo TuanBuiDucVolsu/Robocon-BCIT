@@ -108,7 +108,10 @@ SPEED_DEFAULT = 50           # Duty cycle % — mức bring-up an toàn (cũ: 82
 SPEED_SLOW = 40              # Căn chỉnh, đặt hàng
 SPEED_TURN = 62              # ⚠️ CHỐT trước khi calibrate TURN_TIME (đổi sau làm sai lại)
 PWM_COMPENSATION = 0.924           # Bù bánh PHẢI khi tiến
-PWM_COMPENSATION_REV = 0.95       # Bù bánh PHẢI khi lùi
+# ĐO trên robot 02/08 (option f, chiều lùi): 0.95 → 1.000. Bánh phải KHÔNG cần hãm
+# khi lùi. Đo tiếp thấy bánh TRÁI nhanh hơn 2.3% → phần cân còn lại nằm ở
+# PWM_COMPENSATION_LEFT_REV, không phải ở đây (hệ số kẹp ≤ 1.0, không tăng thêm được).
+PWM_COMPENSATION_REV = 1.000      # Bù bánh PHẢI khi lùi
 PWM_COMPENSATION_LEFT = 1.00      # Bù bánh TRÁI khi tiến
 PWM_COMPENSATION_LEFT_REV = 1.00  # Bù bánh TRÁI khi lùi
 
