@@ -138,6 +138,22 @@ def smoke_pickup_cycle(m: Motion, lift: Lift, vision: Vision, tier: int = 1, **_
         print("  ⚠ retreat timeout (vẫn coi pickup OK)")
     else:
         print("  ✅ retreat OK")
+
+    # ⚠️ main.py KHÔNG hạ càng ở đây — nó chở kiện đi giao, càng phải giữ nguyên độ
+    # cao tầng. Nhưng smoke 2 dừng tại chỗ, để càng treo ở tầng 1/2 thì lượt chạy sau
+    # bắt đầu từ trạng thái SAI: không có limit switch nên Lift chỉ tin `_current_level`,
+    # mà người test lại hay tắt script rồi chạy lại. Hỏi để người quyết, mặc định HẠ.
+    print(f"\n  Càng đang ở TẦNG {tier} (kiện vẫn trên càng).")
+    print("  main.py giữ nguyên độ cao này để chở đi giao — smoke thì nên hạ về sàn")
+    print("  trước khi chạy lượt tiếp, không thì trạng thái càng lệch.")
+    if _ask("  Hạ càng về sàn? (Y/n): ", "y") != "n":
+        released = drop_both(lift)
+        print(f"  dropoff(): {'✅ IR xác nhận kiện đã rời càng' if released else '❌ IR VẪN thấy pallet'}")
+        if not released:
+            print("     Kiện có thể còn mắc trên càng — gỡ tay trước khi chạy lượt sau.")
+        print("  → Càng đã về sàn, _current_level = 0. Sẵn sàng chạy lại.")
+    else:
+        print("  → Giữ càng ở tầng. Nhớ hạ trước khi chạy lượt khác.")
     return True, (label_l, label_r)
 
 
