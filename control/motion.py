@@ -927,7 +927,7 @@ class Motion:
         weighted_sum = sum(
             w * v for w, v in zip(config.LINE_WEIGHTS, sensor_values)
         )
-        return weighted_sum / active - config.LINE_CENTER_OFFSET
+        return weighted_sum / active
 
     def compute_line_error_analog(self, raw: list[float]) -> float:
         """Weighted average từ analog — mượt hơn trên QTR-8A."""
@@ -937,9 +937,10 @@ class Motion:
         if total == 0:
             return self._last_error
         weighted = sum(w * s for w, s in zip(config.LINE_WEIGHTS, strengths))
-        # Trừ ĐIỂM ĐẶT: xem config.LINE_CENTER_OFFSET. Thanh cảm biến lắp lệch tâm
-        # so với càng, nên "line nằm giữa thanh" KHÔNG phải là "càng thẳng khe pallet".
-        return weighted / total - config.LINE_CENTER_OFFSET
+        # Phép ĐO thuần: line đang nằm ở đâu trên thanh cảm biến. ĐIỂM ĐẶT
+        # (config.LINE_CENTER_OFFSET) thuộc về luật lái, trừ ở _steer() — để hàm này
+        # còn dùng được cho chẩn đoán và hiển thị mà không bị pha tạp.
+        return weighted / total
 
     def follow_line(self, base_speed: float = config.SPEED_DEFAULT,
                     reverse: bool = False) -> tuple[bool, list[int]]:
@@ -971,7 +972,11 @@ class Motion:
     def _steer(self, raw: list[float], base_speed: float, reverse: bool = False):
         """Một nhịp lái PD theo sai số line. Tách riêng để chế độ chạy liền
         (_navigate_continuous) dùng chung đúng luật lái với follow_line()."""
-        error = self.compute_line_error_analog(raw)
+        # Trừ ĐIỂM ĐẶT tại đây, không phải trong phép đo. Thanh cảm biến lắp lệch
+        # tâm so với càng: đo trên robot 02/08, tư thế càng thẳng khe pallet cho sai
+        # số THÔ +0.50 chứ không phải 0. Lái để đưa sai số thô về 0 là chủ động kéo
+        # robot về chỗ SAI. Xem config.LINE_CENTER_OFFSET.
+        error = self.compute_line_error_analog(raw) - config.LINE_CENTER_OFFSET
         derivative = error - self._last_error
         correction = config.LINE_KP * error + config.LINE_KD * derivative
         self._last_error = error

@@ -80,6 +80,10 @@ def test_line_sensor(m: Motion):
 def test_line_sensor_raw(m: Motion):
     print(f"\n[TEST] Calibrate QTR-8A — raw ADC (ngưỡng LINE_THRESHOLD={config.LINE_THRESHOLD})")
     print("  Đặt từng mắt lên line đen / nền trắng để xem giá trị.")
+    print(f"  thô = line nằm đâu trên thanh · lái = thô − LINE_CENTER_OFFSET "
+          f"({config.LINE_CENTER_OFFSET:+.2f})")
+    print("  ĐẶT ROBOT Ở TƯ THẾ ĐÚNG (càng thẳng khe pallet) thì cột 'lái' phải ≈ 0.")
+    print("  Không phải 0 → chỉnh LINE_CENTER_OFFSET đúng bằng cột 'thô' lúc đó.")
     print("  Nhấn Ctrl+C để dừng.\n")
     try:
         while True:
@@ -88,8 +92,9 @@ def test_line_sensor_raw(m: Motion):
             digital = m.read_line_sensor()
             adc_str = " ".join(f"{v:4d}" for v in adc)
             dig_str = "".join("█" if d else "░" for d in digital)
-            err = m.compute_line_error_analog(raw)
-            print(f"  ADC: [{adc_str}]  {dig_str}  err={err:+.2f}")
+            err = m.compute_line_error_analog(raw)          # THÔ, chưa trừ điểm đặt
+            lai = err - config.LINE_CENTER_OFFSET      # sai số bộ bám line THẬT SỰ dùng
+            print(f"  ADC: [{adc_str}]  {dig_str}  thô={err:+.2f}  lái={lai:+.2f}")
             time.sleep(0.3)
     except KeyboardInterrupt:
         print("\n  Dừng calibrate.")

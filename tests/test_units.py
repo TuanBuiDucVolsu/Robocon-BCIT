@@ -1249,23 +1249,35 @@ class TestLineCenterOffset(unittest.TestCase):
         m._last_error = 0.0
         return m.compute_line_error_analog([v / 1023 for v in adc])
 
-    def test_aligned_pose_reads_zero_error(self):
-        """Tư thế ĐÚNG phải cho sai số ~0, nếu không bộ bám line sẽ kéo robot đi khỏi nó."""
-        self.assertAlmostEqual(self._err(self.CHUAN), 0.0, delta=0.1)
+    def test_offset_equals_the_raw_error_at_the_aligned_pose(self):
+        """Phép ĐO ở tư thế đúng cho +0.50 — và đó chính là giá trị của điểm đặt."""
+        self.assertAlmostEqual(self._err(self.CHUAN),
+                               config.LINE_CENTER_OFFSET, delta=0.1)
 
-    def test_skewed_pose_reads_a_correction_toward_the_aligned_one(self):
-        err = self._err(self.LECH)
-        self.assertLess(err, -0.5, "tư thế lệch phải cho sai số đủ lớn để kéo về")
+    def test_steering_sees_zero_error_at_the_aligned_pose(self):
+        """Ở tư thế ĐÚNG, luật lái phải KHÔNG sinh hiệu chỉnh — 2 bánh bằng nhau.
 
-    def test_offset_matches_the_measurement(self):
-        """Bỏ offset thì tư thế ĐÚNG lại báo +0.5 — chính là lỗi đã gặp.
-
-        Không có hằng số này, follow_line lái để đưa sai số về 0, tức chủ động kéo
-        robot về chỗ SAI. Mọi lần tiếp cận kệ đều chệch ~5mm, càng vướng mép pallet,
-        IR không xác nhận.
+        Đây mới là điều thật sự quan trọng: không có điểm đặt thì follow_line lái để
+        đưa sai số THÔ về 0, tức chủ động kéo robot RA KHỎI tư thế đúng. Mọi lần
+        tiếp cận kệ chệch ~5mm, càng vướng mép pallet, IR không xác nhận.
         """
+        m = object.__new__(Motion)
+        m._last_error = 0.0
+        m._drive = MagicMock()
+        m._steer([v / 1023 for v in self.CHUAN], 40)
+        trai, phai = m._drive.call_args.args[0], m._drive.call_args.args[1]
+        self.assertAlmostEqual(trai, phai, delta=2.0,
+                               msg="tư thế đúng mà vẫn lái = kéo robot đi khỏi nó")
+
+    def test_without_offset_the_aligned_pose_would_be_steered_away(self):
+        """Chứng minh ngược lại: bỏ điểm đặt thì đúng tư thế vẫn bị lái."""
+        m = object.__new__(Motion)
+        m._last_error = 0.0
+        m._drive = MagicMock()
         with patch.object(config, "LINE_CENTER_OFFSET", 0.0):
-            self.assertAlmostEqual(self._err(self.CHUAN), 0.5, delta=0.1)
+            m._steer([v / 1023 for v in self.CHUAN], 40)
+        trai, phai = m._drive.call_args.args[0], m._drive.call_args.args[1]
+        self.assertGreater(abs(trai - phai), 2.0)
 
 
 class TestClampCorrection(unittest.TestCase):
