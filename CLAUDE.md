@@ -270,7 +270,10 @@ tại điểm giao, line cắt ngang nằm dọc thanh cảm biến nên xoay ki
   xích ĐẦU của chuỗi đó; hạ `INSERT_MIN_DISTANCE` hay tăng `LIFT_PICKUP_RAISE_TIME`
   chỉ là chữa mắt xích CUỐI.
   Còn thấy line thì `follow_line()`, mất line thì rơi về `forward()` — đúng hành vi
-  cũ, nên an toàn kể cả khi vạch line không kéo tới tận chân kệ. Cờ giao lộ của
+  cũ, nên an toàn kể cả khi vạch line không kéo tới tận chân kệ. **Đo trên bản in
+  thì nó có kéo tới:** vạch dài **35.4cm** từ giao lộ C0 tới sát chân kệ (hở 1mm),
+  giống hệt ở cả 3 kệ — robot chờ ở 11.9cm và bò tới 2.2cm nên nằm gọn giữa vạch
+  suốt cả quãng. Số đo + cách đo lại: `docs/SA_BAN.md` mục 3b. Cờ giao lộ của
   `follow_line()` bị **bỏ qua** ở đây: sát kệ thì nền kệ có thể làm mọi mắt thấy đen,
   mà ta chỉ cần phần LÁI chứ không đếm giao lộ.
   ⚠️ **CHƯA XÁC NHẬN TRÊN ROBOT** — mới có unit test. Chạy `test_smoke` option 2.

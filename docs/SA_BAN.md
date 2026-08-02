@@ -146,6 +146,55 @@ print('hàng có line:', [y for y in range(g.shape[0]) if d[y].sum() > 400])"
 Bản đồ này được khai báo **một chỗ duy nhất**: `navigation.NODES` / `EDGES` /
 `TERMINALS`. Route không còn viết tay — xem mục 5.
 
+### 3b. Đoạn line vào kệ dài bao nhiêu — LINE CHẠM SÁT CHÂN KỆ
+
+Câu hỏi thực dụng: robot bò vào kệ thì **còn vạch để bám không**, hay phải chạy mù?
+
+Đo trên `sa_ban.png`, hiệu chuẩn thang ngang bằng chính ô kệ (đã biết **sâu 120mm**)
+→ **1.463 mm/px**, khớp với 1.49 ước ở mục 1. **Cả 3 kệ giống hệt nhau:**
+
+```
+[ ô kệ ]│←──────────── 35.4 cm line liền mạch ────────────→│ giao lộ C0
+  x17..98│x99                                          x340│
+         └ hở 1mm ≈ chạm sát                    line rộng 19mm
+```
+
+| Mốc | Cách mép trước kệ | Còn line phía sau |
+|---|---|---|
+| Đầu line | 0.1 cm | — |
+| `INSERT_MIN_DISTANCE` (chặn cứng khi luồn càng) | 2.2 cm | **33.2 cm** |
+| `APPROACH_DISTANCE` (vị trí chờ trước khi luồn) | 11.9 cm | **23.5 cm** |
+| Giao lộ C0 | 35.4 cm | 0 |
+
+**Hệ quả:** toàn bộ quãng `approach_shelf()` + `creep_until()` — trước đây chạy
+`forward()` MÙ — nằm gọn giữa vạch. Đó là căn cứ để `Motion._forward_guided()`
+(6fc3e39) bám line suốt cả quãng đó thay vì đi thẳng; xem CLAUDE.md mục Motion.
+Vạch rộng 19mm, thanh QTR-8A 6 mắt phủ rộng hơn nhiều nên vẫn ra được sai số cạnh.
+
+⚠️ **Đây là số đo trên FILE IN, không phải sa bàn thật.** Hai chỗ có thể lệch:
+kệ là vật rời đặt lên ô vuông (đặt lùi vào vài cm thì mép kệ thật không trùng x=98
+— `APPROACH_DISTANCE` đo trên robot mới là số đúng), và đoạn cuối thanh cảm biến có
+thể chui vào gầm kệ hoặc trượt qua viền đen in quanh ô kệ (lúc đó mọi mắt thấy đen,
+`follow_line` ra sai số ≈0 và đi thẳng — vô hại, đúng hành vi cũ).
+
+Đo lại (chạy trên PC, cần `pillow` + `numpy`, KHÔNG cần `cv2`):
+
+```bash
+python3 -c "
+import numpy as np
+from PIL import Image
+g = np.array(Image.open('docs/sa_ban.png').convert('L')).astype(int)
+C0 = int(np.mean([x for x in range(325,360) if g[300,x] < 100]))
+for ten, y in (('Ke 1 (R4)',128), ('Ke 2 (R2)',375), ('Ke 3 (R0)',620)):
+    band = g[y-42:y+42]
+    vien = [x for x in range(15,115) if (band[:,x] < 100).mean() > 0.5]  # vien den o ke
+    x0, x1 = min(vien), max(vien)
+    mmx = 120.0/(x1-x0+1)                      # o ke sau 120mm -> hieu chuan
+    dau = min(x for x in range(x1+1,340) if g[y,x] < 100)
+    print(f'{ten}: thang {mmx:.3f} mm/px | ho {(dau-x1)*mmx:.0f} mm | '
+          f'line dai {(C0-x1)*mmx/10:.1f} cm')"
+```
+
 ## 5. Xem và kiểm tra route
 
 ```bash
