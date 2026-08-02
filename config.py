@@ -117,26 +117,10 @@ PWM_COMPENSATION_LEFT_REV = 1.00  # Bù bánh TRÁI khi lùi
 # ============================================================
 LIFT_TIME_FLOOR = 0.0
 LIFT_TIME_SHELF_1 = 0.800
-# ⚠️ ĐANG DÒ giữa 2.6 và 3.9. Thử 2.6 trên robot thì càng lên KHÔNG TỚI tầng 2.
-# Cách suy "hai tầng cách đều nhau nên tầng 2 ≈ 2× tầng 1" là SAI — cơ cấu nâng
-# không tuyến tính theo chiều cao (dây curoa, tải trọng, ma sát tăng dần).
-# Cũng không scale theo tỉ lệ tầng 1 vừa giảm (0.8/1.2) được, vì lý do trên.
-# → chỉ còn cách dò trên robot. Quá NGẮN nguy hiểm hơn quá dài: càng chưa lên tới
-# tầng 2 mà tiến vào là đâm thẳng vào mặt tầng 1.
 LIFT_TIME_SHELF_2 = 3.5
 
 # Không có limit switch — home_to_floor() hạ liên tục bấy nhiêu giây để ép chạm đáy.
-# ⚠️ PHẢI > LIFT_TIME_SHELF_2, không thì đang ở tầng 2 sẽ không hạ hết và
-# _current_level bị khai sai = 0. Stall vài giây không sao, đừng để quá lâu.
 LIFT_HOME_DURATION = 3.7   # min_home_duration() = LIFT_TIME_SHELF_2 + LOWER_EXTRA lớn
-# ⚠️ BIÊN CHỈ CÒN 0.05s. min_home_duration() = LIFT_TIME_SHELF_2 + LOWER_EXTRA lớn
-# hơn = 3.5 + 0.150 = 3.65s. Nâng LIFT_*_LOWER_EXTRA thêm chút nữa là home_to_floor()
-# phải tự kẹp lên và ghi WARNING. Tăng LIFT_HOME_DURATION theo nếu còn calibrate tiếp.
-                           # nhất = 3.5 + 0.1 = 3.6 → chỉ còn dư 0.1s.
-                           # ⚠️ NÂNG LIFT_TIME_SHELF_2 là PHẢI nâng số này theo, không
-                           # thì home_to_floor() tự kẹp lên và ghi WARNING mỗi lần.
-                           # Giữ sát ngưỡng vì motor là DigitalOutputDevice (100% duty),
-                           # kịch sàn rồi vẫn ghì → mỗi giây thừa là mòn dây curoa.
 
 # Bù lệch 2 càng theo VỊ TRÍ TUYỆT ĐỐI: thời gian từ SÀN lên tầng n = LIFT_TIME_SHELF_n
 # + bù. Thời gian mỗi lần chạy = hiệu 2 mốc (Lift._level_time) → không cộng dồn khi đi
@@ -326,6 +310,16 @@ LINE_THRESHOLD = 200         # ADC 0-1023: < ngưỡng = trên line (đen)
 # Chạy `python3 -m tools.calibrate_line` để chốt cờ này — code tự đảo tại nguồn.
 LINE_BLACK_IS_HIGH = True
 LINE_WEIGHTS = [-2.5, -1.5, -0.5, 0.5, 1.5, 2.5]   # Lệch trái âm, phải dương
+# Duty tối thiểu để bánh CÒN QUAY. Dưới mức này JGA25-370 qua L298N đứng hẳn.
+# Dùng để chặn hiệu chỉnh bám line (Motion._clamp_correction): LINE_KP chỉnh cho
+# SPEED_DEFAULT = 50, nhưng bám line còn chạy ở 32% (APPROACH_SLOW_SPEED,
+# INSERT_SPEED) — ở đó chỉ cần sai số 0.44 là bánh trong tụt xuống dưới vùng chết,
+# ĐỨNG HẲN, và robot xoay quanh nó thay vì lượn. Đã gặp thật ở smoke option 2: robot
+# đi chệch hướng, một càng thọc sâu hơn càng kia.
+# Hệ quả: ở base 32 lực lái chỉ còn ±7. Đó là giới hạn VẬT LÝ — muốn lái mạnh hơn
+# thì NÂNG base_speed cho có khoảng hở, đừng bỏ kẹp.
+# Đặt 0 để tắt kẹp (về đúng hành vi cũ).
+MOTOR_MIN_DUTY = 25
 LINE_KP = 16.0               # CHƯA calibrate thật
 LINE_KD = 6.5                # CHƯA calibrate thật
 INTERSECTION_THRESHOLD = 4   # Số mắt (/6) thấy line cùng lúc để nhận là giao lộ

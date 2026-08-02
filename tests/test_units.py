@@ -1081,6 +1081,48 @@ class TestAdvanceToEnd(unittest.TestCase):
         self.assertTrue(m.advance_to_end(timeout=3.0))
 
 
+class TestClampCorrection(unittest.TestCase):
+    """Hiệu chỉnh bám line không được đẩy bánh chậm xuống dưới vùng chết.
+
+    LINE_KP = 16 chỉnh cho SPEED_DEFAULT = 50, nhưng bám line còn chạy ở 32%
+    (APPROACH_SLOW_SPEED, INSERT_SPEED) mà vùng chết là ~25%. Không kẹp thì chỉ cần
+    sai số 0.44 là bánh trong ĐỨNG HẲN và robot xoay quanh nó thay vì lượn — đo thật
+    trên robot ở smoke option 2: đi chệch hướng, một càng thọc sâu hơn càng kia.
+    """
+
+    def _banh(self, err, base):
+        c = Motion._clamp_correction(config.LINE_KP * err, base)
+        return base + c, base - c
+
+    def test_slow_wheel_never_enters_dead_zone(self):
+        for base in (32, 40, 50, 60):
+            for err in (0.2, 0.5, 1.0, 1.5, 2.5, -2.5):
+                l, r = self._banh(err, base)
+                self.assertGreaterEqual(
+                    min(l, r), config.MOTOR_MIN_DUTY,
+                    f"base={base} sai số={err}: bánh chậm {min(l, r):.1f} "
+                    f"dưới vùng chết {config.MOTOR_MIN_DUTY}")
+
+    def test_small_errors_pass_through_untouched(self):
+        """Sai số nhỏ KHÔNG bị đụng tới — kẹp chỉ chặn phần vượt."""
+        self.assertAlmostEqual(Motion._clamp_correction(3.2, 32), 3.2)
+        self.assertAlmostEqual(Motion._clamp_correction(-3.2, 32), -3.2)
+
+    def test_higher_base_speed_buys_more_steering(self):
+        """Muốn lái mạnh hơn thì NÂNG tốc độ nền, không phải bỏ kẹp."""
+        thap = Motion._clamp_correction(40, 32)
+        cao = Motion._clamp_correction(40, 50)
+        self.assertGreater(cao, thap)
+
+    def test_disabled_when_min_duty_is_zero(self):
+        with patch.object(config, "MOTOR_MIN_DUTY", 0):
+            self.assertAlmostEqual(Motion._clamp_correction(40, 32), 40)
+
+    def test_no_clamp_when_base_already_below_dead_zone(self):
+        """base dưới vùng chết thì kẹp vô nghĩa — đừng đảo dấu hiệu chỉnh."""
+        self.assertAlmostEqual(Motion._clamp_correction(40, 20), 40)
+
+
 class TestForwardGuided(unittest.TestCase):
     """Tiến sát kệ phải CÓ LÁI khi còn thấy line, và chỉ chạy thẳng khi mất line.
 

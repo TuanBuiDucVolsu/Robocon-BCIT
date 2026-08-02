@@ -896,7 +896,33 @@ class Motion:
         self._last_error = error
         if reverse:
             correction = -correction
+        correction = self._clamp_correction(correction, base_speed)
         self._drive(base_speed + correction, base_speed - correction, reverse)
+
+    @staticmethod
+    def _clamp_correction(correction: float, base_speed: float) -> float:
+        """Chặn hiệu chỉnh để bánh CHẬM không tụt xuống dưới vùng chết của motor.
+
+        LINE_KP = 16 chỉnh cho SPEED_DEFAULT = 50. Nhưng bám line còn chạy ở 32%
+        (APPROACH_SLOW_SPEED và INSERT_SPEED), mà vùng chết của JGA25-370 qua L298N
+        là ~25%. Ở base 32, chỉ cần sai số line 0.44 (trên thang ±2.5, tức lệch vạch
+        chưa tới 1cm) là hiệu chỉnh vượt 7 và bánh trong tụt xuống dưới 25 — nó ĐỨNG
+        HẲN, robot xoay quanh nó thay vì lượn.
+
+        Đo trên robot (smoke option 2): robot đi chệch hướng và một càng thọc sâu hơn
+        càng kia. Tức cơ chế bám line thêm vào để CHỐNG lệch lại đang TẠO ra lệch.
+
+        Kẹp đối xứng nên mất bớt lực lái ở tốc độ thấp: base 32 chỉ còn ±7. Đó là
+        giới hạn VẬT LÝ, không phải lựa chọn — muốn lái mạnh hơn thì phải NÂNG
+        base_speed để có thêm khoảng hở, chứ không phải bỏ kẹp.
+
+        config.MOTOR_MIN_DUTY = 0 → tắt kẹp, về đúng hành vi cũ.
+        """
+        san = getattr(config, "MOTOR_MIN_DUTY", 0)
+        bien = base_speed - san
+        if san <= 0 or bien <= 0:
+            return correction          # base đã dưới vùng chết — kẹp cũng vô nghĩa
+        return max(-bien, min(bien, correction))
 
     def _drive_straight(self, base_speed: float, reverse: bool = False):
         """Đi thẳng, KHÔNG lái — dùng khi đang cắt ngang vạch giao lộ (mọi mắt đều

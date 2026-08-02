@@ -355,6 +355,16 @@ tại điểm giao, line cắt ngang nằm dọc thanh cảm biến nên xoay ki
   `turn_left/right()` cũng lấy hệ số theo ĐÚNG CHIỀU từng bánh (`*_LEFT_REV` cho bánh
   trái lùi…) — `TURN_TIME` chỉ có MỘT hằng số cho cả 2 chiều nên hệ số lệch là một
   chiều xoay quá, chiều kia thiếu, không cách nào chỉnh cho khớp cả hai.
+- **Kẹp hiệu chỉnh trên VÙNG CHẾT** (`Motion._clamp_correction`, `MOTOR_MIN_DUTY=25`):
+  `LINE_KP = 16` chỉnh cho `SPEED_DEFAULT = 50`, nhưng bám line CÒN chạy ở **32%**
+  (`APPROACH_SLOW_SPEED`, `INSERT_SPEED`). Ở base 32, sai số line chỉ cần **0.44**
+  (trên thang ±2.5 — lệch vạch chưa tới 1cm) là hiệu chỉnh vượt 7 và bánh trong tụt
+  dưới 25 → **ĐỨNG HẲN, robot xoay quanh nó** thay vì lượn.
+  Đo trên robot (smoke option 2): robot đi chệch hướng và **một càng thọc sâu hơn
+  càng kia** — tức cơ chế bám line thêm vào để CHỐNG lệch lại đang TẠO ra lệch.
+  ⚠️ Hệ quả: ở base 32 lực lái chỉ còn **±7**. Đó là giới hạn VẬT LÝ, không phải lựa
+  chọn — muốn lái mạnh hơn thì **nâng base_speed** cho có khoảng hở (base 40 → ±15),
+  **đừng bỏ kẹp**. `MOTOR_MIN_DUTY = 0` để về hành vi cũ.
 - **Kẹp tốc độ giữ ĐỘ CHÊNH 2 bánh** (`Motion._fit_to_range`): độ chênh mới tạo ra
   góc lái, nên khi `base + correction > 100` phải trượt CẢ HAI bánh xuống, không kẹp
   riêng. Kẹp riêng ở `SPEED_DEFAULT=80` làm mất 25% lực lái đúng lúc sai số lớn nhất
