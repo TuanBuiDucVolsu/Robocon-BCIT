@@ -216,10 +216,30 @@ cấp nguồn**. Dán nhãn 2 bên, bốc thăm xong gạt một cái, cả đ�
 `main._apply_board_side()` in một khối cảnh báo 6 dòng mỗi lần đọc — không thể bỏ sót
 trong log. `navigation.set_factory_order(label)` đổi được giữa lúc chạy.
 
-### Chiều trái/phải — robot tự dò (state `DETECT_SIDE`)
+### Chiều trái/phải — state `DETECT_SIDE` ⚠️ ĐANG TẮT (`BOARD_AUTO_DETECT = False`)
 
-Theo bản in thì cả 2 nửa cùng chiều (`BOARD_MIRRORED=False`) vì phép quay 180° bảo
-toàn tay thuận. Robot vẫn tự kiểm chứng để phòng bản in sai. Đầu trận, sau
+**Bước tự dò đã tắt (178c4e8). Đừng bật lại nếu chưa đọc hết mục này.**
+
+1. **THỪA.** Công tắc gạt đã cho robot biết nó ở NỬA NÀO — đó cũng là thông tin duy
+   nhất bước dò moi ra được. Mà chiều trái/phải KHÔNG đổi theo nửa (cả hai đều
+   `False`), nên bước dò đang đo một HẰNG SỐ, không phải biến.
+2. **NÓ LÀM HỎNG LỆNH NGAY SAU.** `probe_side_branch()` chạy hở hoàn toàn rồi tin
+   mình về đúng chỗ cũ, mà `TURN_TIME` mới xác nhận chiều TRÁI và bù PWM chiều LÙI
+   thì chưa calibrate. Đo trên robot: smoke option 1 dừng ngay tại giao lộ vì
+   `advance_to_end()` kế đó không tìm thấy line.
+3. **ĐOÁN SAI THÌ MẤT CẢ TRẬN.** Dò xong nó gọi `set_mirrored()` — báo nhầm GƯƠNG là
+   lật toàn bộ bản đồ, mọi lệnh xoay đảo chiều tới hết trận. Đã thấy nó lúc báo
+   CHUẨN lúc báo GƯƠNG.
+4. Tốn 2-4s đầu trận.
+
+Thứ nó bảo vệ chỉ là giả thuyết "bản in sai chiều" — kiểm bằng mắt 5 giây trên sân.
+Route giờ đi thẳng: `START → SHELF0` = `tiến 1 giao lộ → bám line tới hết line`.
+
+Cơ chế vẫn còn trong code và bật lại được; `tests/test_match_sim.py::TestAutoDetectSide`
+tự ép cờ `True` trong phạm vi test để vẫn kiểm được nó.
+
+Mô tả cơ chế (khi bật): theo bản in thì cả 2 nửa cùng chiều (`BOARD_MIRRORED=False`)
+vì phép quay 180° bảo toàn tay thuận. Robot tự kiểm chứng để phòng bản in sai. Sau
 `exit_start_zone()`, state
 `DETECT_SIDE` đi tới giao lộ Kệ 3 (`navigation.PROBE_NODE`) rồi
 `Motion.probe_side_branch("right")`: xoay phải 90°, tiến `PROBE_TRAVEL_TIME` giây ra
@@ -240,7 +260,7 @@ tại điểm giao, line cắt ngang nằm dọc thanh cảm biến nên xoay ki
 - Dò **1 lần/trận** (`Robot._side_detected`): sau reset, state machine quay lại
   START → DETECT_SIDE nhưng sa bàn không đổi, dò lại chỉ tốn thêm 2-4s mỗi lần để ra
   đúng kết quả cũ. Dò lỗi cảm biến (`None`) thì KHÔNG chốt — lần reset sau vẫn thử lại.
-- `config.BOARD_AUTO_DETECT` — tắt thì dùng thẳng `config.BOARD_MIRRORED`
+- `config.BOARD_AUTO_DETECT` — **hiện `False`**; tắt thì dùng thẳng `config.BOARD_MIRRORED`
 - `navigation.set_board(mirrored=…, factory_at_start_row=…)` dựng lại CHÍNH BẢN ĐỒ,
   không đảo từng lệnh → tìm đường, `apply()`, log hướng tự đúng theo
 - `main.py` in `navigation.board_summary()` lúc khởi động và sau khi dò
@@ -336,7 +356,7 @@ tại điểm giao, line cắt ngang nằm dọc thanh cảm biến nên xoay ki
 | `tests/test_motion.py` | 17 option (1-17) + `d/e/f` — motor, line, route, dò nửa sân, lùi, giới hạn tốc độ |
 | `tests/test_lift.py` | Menu LẶP, **home đầu phiên + sau mỗi option** (không limit switch → `_current_level` chỉ đúng sau khi home). Option **1 = diễn tập trọn 1 lượt giao** như main.py; còn lại: nâng/hạ, IR, home, từng càng riêng, so 2 càng, calibrate |
 | `tests/test_vision.py` | 9 option + `l` — camera, BGR, ORB, HSV, classify_pair, ánh xạ trái/phải |
-| `tests/test_smoke.py` | Smoke tích hợp trên sa bàn |
+| `tests/test_smoke.py` | Smoke tích hợp trên sa bàn. **HỎI nửa sân đầu phiên** (`_ask_board_side`) — đặt sai thứ tự nhà máy là lỗi KHÔNG có tín hiệu báo |
 
 ### ⚠️ Script nào chạm phần cứng THẬT
 

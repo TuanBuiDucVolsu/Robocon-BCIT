@@ -107,16 +107,25 @@ Xem route đang dùng: `python3 -m tools.show_routes` (dòng đầu in rõ nửa
 > lưới**, nhưng robot chỉ đếm được **giao lộ mà cảm biến thật sự thấy** — tức là chỗ
 > có 2 đường line CẮT nhau. Hai thứ này khác nhau ở đúng những chỗ quan trọng nhất.
 
-Cách đo lại (chạy được trên PC, không cần Pi):
+⚠️ **Bảng dưới đo bằng `g < 100` trên thang XÁM — tiêu chí đó SAI ở vài chỗ.**
+Màu bão hoà quy về thang xám cũng ra tối: nền xanh dương thuần của mascot cho
+luminance ≈29 nên bị đếm là line. Hậu quả cụ thể: hàng R0 bị báo liền tới x=615
+trong khi vạch đen thật dứt ở **x=544** (chỗ mascot bắt đầu). Đo lại phải đòi
+MỌI KÊNH đều thấp:
 
 ```bash
 python3 -c "
-import cv2, numpy as np
-g = cv2.cvtColor(cv2.imread('docs/sa_ban.png'), cv2.COLOR_BGR2GRAY)
-d = g < 100
-print('cột có line:', [x for x in range(g.shape[1]) if d[:,x].sum() > 400])
-print('hàng có line:', [y for y in range(g.shape[0]) if d[y].sum() > 400])"
+import numpy as np
+from PIL import Image                      # pillow, KHÔNG cần cv2
+im = np.array(Image.open('docs/sa_ban.png').convert('RGB')).astype(int)
+den = (im.max(axis=2) < 110) & (np.ptp(im, axis=2) < 45)   # den THAT, khong phai mau dam
+print('cot co line:', [x for x in range(im.shape[1]) if den[:,x].sum() > 200])
+print('hang co line:', [y for y in range(im.shape[0]) if den[y,60:1200].sum() > 200])"
 ```
+
+Lưới line thật đo bằng tiêu chí trên (bỏ ảnh nhà máy ở x>1200):
+**cột** C0 x≈340 (y131..618), C1 x≈1022 (y131..694) — cộng 2 cột x≈21/x≈93 là
+VIỀN Ô KỆ chứ không phải line; **hàng** R4 y≈128, R2 y≈374, R1 y≈495, R0 y≈620.
 
 **Kết quả đo (ảnh 1500x750):**
 
