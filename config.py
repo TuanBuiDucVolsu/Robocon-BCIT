@@ -542,6 +542,15 @@ EDGE_COST_REVERSE = 1        # Phụ phí so với tiến 1 giao lộ → hoà t
 # xong thanh cảm biến văng ra vùng trắng. Đo trên robot (smoke option 8):
 #     xoay sau khi LÙI  → [0,0,0,1,1,0]  còn thấy line
 #     xoay sau khi TIẾN → [0,0,0,0,0,0]  TRẮNG HẾT → mất line, route gãy
+# Giây tối thiểu phải LÙI trước khi chấp nhận một tín hiệu giao lộ.
+# Từ điểm cuối (kệ/nhà máy) tới giao lộ là 35.4cm (SA_BAN.md 3b), mà robot đứng cách
+# kệ ~12.9cm sau khi rút ra — nên cảm biến phải lùi HƠN 20cm mới tới giao lộ thật.
+# Nhận nhầm sớm thì bước TIẾN BÙ ngay sau đó (REVERSE_RECENTER_TIME, 1.3s về phía kệ)
+# đẩy robot trở lại CHẠM KỆ. Đã gặp thật ở option 8: "lùi xong tiến lên lại chạm kệ".
+# 0.6s ở REVERSE_SPEED=40 tương ứng ~10cm — đủ để bỏ qua tín hiệu giả sát kệ, còn xa
+# mốc 20cm nên không bỏ sót giao lộ thật.
+BACK_MIN_TRAVEL_TIME = 0.6
+
 REVERSE_RECENTER_SPEED = 35
 REVERSE_RECENTER_TIME = 1.3
 # Giây tiến bù TRƯỚC KHI XOAY, khi vừa TIẾN tới giao lộ (chặng "forward" ngay trước

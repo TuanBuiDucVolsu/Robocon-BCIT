@@ -1337,6 +1337,39 @@ class TestTurnRecenterAfterForward(unittest.TestCase):
         self.assertEqual(m.forward.call_count, 1)
 
 
+class TestBackMinTravel(unittest.TestCase):
+    """Lùi ra khỏi kệ không được nhận giao lộ trong những giây đầu.
+
+    Từ điểm cuối tới giao lộ là 35.4cm, robot đứng cách kệ ~12.9cm → cảm biến phải
+    lùi HƠN 20cm mới tới giao lộ thật. Nhận nhầm sớm thì bước TIẾN BÙ ngay sau đó
+    (1.3s về phía kệ) đẩy robot trở lại CHẠM KỆ — đã gặp thật ở option 8.
+    """
+
+    def _motion(self, luon_bao_giao_lo=True):
+        m = object.__new__(Motion)
+        m._aborted = lambda: False
+        m._last_error = 0.0
+        m.forward = MagicMock()
+        m.backward = MagicMock()
+        m.stop = MagicMock()
+        m._escape_intersection = MagicMock()
+        m.follow_line = MagicMock(return_value=(luon_bao_giao_lo, [1, 1, 1, 1, 0, 0]))
+        return m
+
+    def test_ignores_intersection_signal_in_the_first_moments(self):
+        m = self._motion()
+        t0 = time.time()
+        with patch.object(config, "REVERSE_RECENTER_TIME", 0.0), \
+             patch.object(config, "BACK_MIN_TRAVEL_TIME", 0.4):
+            self.assertTrue(m.back_to_intersection(1))
+        self.assertGreaterEqual(time.time() - t0, 0.4,
+                                "không được chấp nhận giao lộ trước mốc tối thiểu")
+
+    def test_min_travel_is_shorter_than_the_reverse_timeout(self):
+        """Mốc tối thiểu dài hơn timeout thì không bao giờ tới được giao lộ."""
+        self.assertLess(config.BACK_MIN_TRAVEL_TIME, config.REVERSE_TIMEOUT)
+
+
 class TestReverseRecenter(unittest.TestCase):
     """Đoạn tiến bù sau khi lùi phải dùng ĐÚNG tốc độ mà thời gian được đo ra.
 

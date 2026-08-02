@@ -1175,6 +1175,16 @@ class Motion:
                 if self._aborted():
                     return False
                 at_intersection, values = self.follow_line(base_speed, reverse=True)
+                # ⚠️ KHÔNG nhận giao lộ trong những giây đầu. Từ điểm cuối (kệ/nhà
+                # máy) tới giao lộ là 35.4cm, mà robot đứng cách kệ ~12.9cm, nên cảm
+                # biến phải lùi HƠN 20cm mới tới giao lộ thật — không thể có giao lộ
+                # ngay lập tức. Nhận nhầm sớm thì bước TIẾN BÙ ngay sau đó (1.3s về
+                # phía kệ) đẩy robot trở lại CHẠM KỆ. Đã gặp thật ở option 8.
+                if at_intersection and time.time() - start < config.BACK_MIN_TRAVEL_TIME:
+                    logger.info("Lùi: bỏ qua tín hiệu giao lộ ở %.2fs (dưới %.2fs) — "
+                                "chưa thể tới giao lộ thật, cảm biến %s",
+                                time.time() - start, config.BACK_MIN_TRAVEL_TIME, values)
+                    at_intersection = False
                 if at_intersection:
                     reached = True
                     break
