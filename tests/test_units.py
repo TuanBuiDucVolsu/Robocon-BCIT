@@ -1191,15 +1191,36 @@ class TestClampCorrection(unittest.TestCase):
                     f"dưới vùng chết {config.MOTOR_MIN_DUTY}")
 
     def test_small_errors_pass_through_untouched(self):
-        """Sai số nhỏ KHÔNG bị đụng tới — kẹp chỉ chặn phần vượt."""
-        self.assertAlmostEqual(Motion._clamp_correction(3.2, 32), 3.2)
-        self.assertAlmostEqual(Motion._clamp_correction(-3.2, 32), -3.2)
+        """Sai số nhỏ KHÔNG bị đụng tới — kẹp chỉ chặn phần vượt.
+
+        Suy từ hằng số, KHÔNG viết cứng: bản trước ghi thẳng (3.2, base 32) và tự
+        gãy khi MOTOR_MIN_DUTY lên 30 (lúc đó base 32 chỉ còn ±2). Cùng loại mong
+        manh với test ngưỡng ORB/HSV đã sửa sáng nay.
+        """
+        base = config.SPEED_DEFAULT
+        nho = (base - config.MOTOR_MIN_DUTY) / 2      # chắc chắn dưới hạn mức
+        self.assertGreater(nho, 0, "SPEED_DEFAULT phải cao hơn vùng chết")
+        self.assertAlmostEqual(Motion._clamp_correction(nho, base), nho)
+        self.assertAlmostEqual(Motion._clamp_correction(-nho, base), -nho)
 
     def test_higher_base_speed_buys_more_steering(self):
         """Muốn lái mạnh hơn thì NÂNG tốc độ nền, không phải bỏ kẹp."""
-        thap = Motion._clamp_correction(40, 32)
-        cao = Motion._clamp_correction(40, 50)
+        lon = config.LINE_KP * 2.5      # sai số cực đại
+        thap = Motion._clamp_correction(lon, config.MOTOR_MIN_DUTY + 5)
+        cao = Motion._clamp_correction(lon, config.MOTOR_MIN_DUTY + 20)
         self.assertGreater(cao, thap)
+
+    def test_insert_speed_leaves_usable_steering(self):
+        """Bước LUỒN CÀNG phải còn lái được, không thì _forward_guided vô nghĩa.
+
+        Ở INSERT_SPEED = 32 với MOTOR_MIN_DUTY = 30 thì lực lái chỉ còn ±2 — bám
+        line lúc đó chỉ là hình thức. Đo trên robot: bò ~5.7cm/s rồi timeout.
+        """
+        luc_lai = config.INSERT_SPEED - config.MOTOR_MIN_DUTY
+        self.assertGreaterEqual(
+            luc_lai, 8,
+            f"INSERT_SPEED={config.INSERT_SPEED} chỉ hơn vùng chết "
+            f"{config.MOTOR_MIN_DUTY} là {luc_lai} — không đủ để lái")
 
     def test_disabled_when_min_duty_is_zero(self):
         with patch.object(config, "MOTOR_MIN_DUTY", 0):

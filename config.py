@@ -209,7 +209,13 @@ APPROACH_DISTANCE = 11.9     # ĐÃ ĐO — measure_pickup ① (APPROACH_STANDOF
 # ĐÃ ĐO trên robot 02/08 (approach_shelf tự in): lúc quyết định báo 13.3cm, đo lại
 # khi đứng yên 9.8cm → trôi 3.5cm. Khớp phân tích: trễ siêu âm ~1.4 + ramp 0.06s
 # ~0.9 + quãng phanh ~1.0. Bù 2.0 thiếu 2.1 → 4.1.
-APPROACH_STOP_MARGIN = 4.1
+# ĐO 2 LẦN trên robot 02/08, ra HAI kết quả trái ngược:
+#     trôi 3.5cm → dừng ở  9.8cm (quá GẦN, càng chạm gầm kệ)
+#     trôi 1.4cm → dừng ở 14.6cm (quá XA, luồn càng timeout)
+# Độ trôi TẢN — không giá trị bù nào đúng cho cả hai. Đặt 2.5 = trung bình, rồi để
+# bước LUỒN nuốt phần tản còn lại: nó dừng theo TÍN HIỆU IR chứ không theo khoảng
+# cách, nên đó mới là chỗ xử lý được tản.
+APPROACH_STOP_MARGIN = 2.5
 
 # --- ② LÙI RA ----------------------------------------------------------------
 # Sau khi nhấc/thả xong, robot lùi tới khi đọc được ≥ số này thì dừng.
@@ -262,8 +268,17 @@ LIFT_PICKUP_RAISE_TIME = 0.3    # ĐANG DÒ (measure_pickup ⑤ đo được 0.2
 # khi bên kia đã quay → robot đi chéo.
 # PWM_COMPENSATION không cứu được ca này: nó là MỘT hệ số dùng chung cho mọi tốc độ,
 # đo ở tốc độ cao; sát vùng chết thì sai lệch 2 bánh không còn tỉ lệ.
-INSERT_SPEED = 32            # % — bò chậm khi luồn càng, trên vùng chết của motor
-INSERT_TIMEOUT = 4.0         # Giây, IR không báo thì dừng (đừng đẩy đổ kệ)
+# Nâng 32 → 40. Hai lý do, cùng một gốc là vùng chết:
+#   1. Ở 32 bò chỉ ~5.7cm/s (đo: 7cm/1.23s) — hết INSERT_TIMEOUT trước khi tới nơi
+#      nếu điểm dừng hơi xa. Đã gặp thật.
+#   2. Lực lái = base − MOTOR_MIN_DUTY. Ở 32 chỉ còn ±2, tức KHÔNG lái được gì;
+#      ở 40 được ±10. Muốn _forward_guided có tác dụng thì phải có khoảng hở này.
+# Vẫn an toàn: điểm dừng do IR quyết định, cộng chặn cứng INSERT_MIN_DISTANCE.
+INSERT_SPEED = 40            # % — bò khi luồn càng, đủ trên vùng chết để CÒN lái được
+# Nâng 4.0 → 6.0. Điểm dừng của approach TẢN từ 9.8 đến 14.6cm (đo 02/08) nên quãng
+# phải bò cũng tản theo. Thà thừa thời gian còn hơn timeout oan ở lần dừng xa —
+# chặn cứng INSERT_MIN_DISTANCE mới là cơ chế chống húc kệ, không phải timeout.
+INSERT_TIMEOUT = 6.0         # Giây, IR không báo thì dừng
 
 # ============================================================
 # TIẾP CẬN — 2 pha nhanh/chậm tới VỊ TRÍ CHỜ ①
@@ -293,7 +308,7 @@ STOP_RAMP_STEPS = 4          # Số bậc giảm
 STOP_SETTLE_TIME = 0.15      # Giây đứng yên cho khung xe hết chòng chành
 
 APPROACH_TIMEOUT = 5.0       # Timeout tiếp cận / lùi ra (giây)
-# ⚠️ 30 QUÁ SÁT VÙNG CHẾT (MOTOR_MIN_DUTY = 25). Đo trên robot 02/08: lùi ra khỏi
+# ⚠️ 30 QUÁ SÁT VÙNG CHẾT (MOTOR_MIN_DUTY = 30). Đo trên robot 02/08: lùi ra khỏi
 # kệ TIMEOUT sau 5s — robot cõng 2 kiện nên càng ì, 30% không đủ thắng ma sát.
 # Cùng đúng lý do đã buộc nâng INSERT_SPEED 25 → 32. Nâng 30 → 40.
 # Lùi ra là thao tác ÍT RỦI RO nhất để chạy nhanh: phía sau trống, và điểm dừng do
@@ -344,7 +359,11 @@ LINE_WEIGHTS = [-2.5, -1.5, -0.5, 0.5, 1.5, 2.5]   # Lệch trái âm, phải d�
 # Hệ quả: ở base 32 lực lái chỉ còn ±7. Đó là giới hạn VẬT LÝ — muốn lái mạnh hơn
 # thì NÂNG base_speed cho có khoảng hở, đừng bỏ kẹp.
 # Đặt 0 để tắt kẹp (về đúng hành vi cũ).
-MOTOR_MIN_DUTY = 25
+# ⚠️ 25 là SAI: chính config này ghi 25% "robot chỉ nhích từng tí", tức 25 đã nằm
+# TRONG vùng không dùng được chứ không phải mép an toàn. Kẹp tới 25 là để bánh trong
+# ngồi đúng ngưỡng chết — đo trên robot: luồn càng bò ~5.7cm/s rồi timeout.
+# 30 là mép dùng được thật (32 đã xác nhận chạy sạch, test_motion #9).
+MOTOR_MIN_DUTY = 30
 LINE_KP = 16.0               # CHƯA calibrate thật
 LINE_KD = 6.5                # CHƯA calibrate thật
 INTERSECTION_THRESHOLD = 4   # Số mắt (/6) thấy line cùng lúc để nhận là giao lộ

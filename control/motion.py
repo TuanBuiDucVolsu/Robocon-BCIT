@@ -829,7 +829,11 @@ class Motion:
                 return False
 
         self.stop()
-        logger.warning("Luồn càng: hết %.1fs mà IR vẫn chưa báo có pallet", timeout)
+        con = self.get_distance()
+        logger.warning("Luồn càng: hết %.1fs mà IR vẫn chưa báo có pallet — đang ở "
+                       "%.1fcm (chặn %.1fcm). Còn cách chặn %.1fcm nghĩa là hết GIỜ "
+                       "chứ không phải chạm chặn: bò quá chậm hoặc xuất phát quá xa.",
+                       timeout, con, min_distance, max(0.0, con - min_distance))
         return False
 
     def retreat_from_shelf(self, target_cm: float = config.RETREAT_DISTANCE,
