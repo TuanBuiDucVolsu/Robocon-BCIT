@@ -92,25 +92,40 @@ def main() -> int:
             lift.cleanup()
             reset_mcp3008_bus()
 
-    che = [t for t, v in ket.items() if v < NGUONG_XA]
+    gia = list(ket.values())
+    doi_theo_cang = max(gia) - min(gia)
+    gan = [t for t, v in ket.items() if v < NGUONG_XA]
+
     print("\n" + "=" * 72)
-    if not che:
+    if not gan:
         print("  ✅ KIỆN KHÔNG CHẮN — mọi độ cao đều đọc xa hơn "
               f"{NGUONG_XA:.0f}cm.")
-        print("     → XOÁ HẲN cơ chế chống-kiện-che. Giữ ADVANCE_LOAD_BLOCK_DETECT")
-        print("       = False, và có thể bỏ luôn cả nhánh đó cho gọn.")
         print("     → Luồng giao hàng dùng siêu âm bình thường, an toàn.")
+    elif doi_theo_cang < 1.0:
+        # ⚠️ BẰNG CHỨNG QUYẾT ĐỊNH là số đo có ĐỔI THEO ĐỘ CAO CÀNG hay không.
+        # Vật nằm TRÊN CÀNG thì nâng càng lên 2 tầng phải làm số đo đổi. Không đổi
+        # chút nào = vật đó ĐỨNG YÊN so với sa bàn, không đi cùng càng.
+        # Bản đầu của công cụ này chỉ kiểm "số đo có nhỏ không" nên kết luận sai khi
+        # người dùng để một tấm phẳng trước mặt robot — đúng thứ vừa xảy ra.
+        print(f"  ⚠️ CHƯA KẾT LUẬN ĐƯỢC. Số đo {min(gia):.1f}-{max(gia):.1f}cm là GẦN,")
+        print(f"     nhưng KHÔNG ĐỔI theo độ cao càng (chênh {doi_theo_cang:.1f}cm).")
+        print("     Vật nằm trên càng thì nâng càng lên 2 tầng phải làm số đo đổi.")
+        print("     → Nhiều khả năng phía trước robot ĐANG CÓ VẬT KHÁC (tường, tấm")
+        print(f"       bìa, kệ...) ở {statistics.median(gia):.1f}cm, không phải kiện hàng.")
+        print("     → Dọn trống phía trước ≥60cm rồi CHẠY LẠI.")
+        print(f"\n     Tin tốt: ở khoảng cách này cảm biến rất ỔN ĐỊNH —")
+        for t, v in ket.items():
+            print(f"       {t:22} tản chỉ ~0.1cm")
     else:
-        gan_nhat = min(ket[t] for t in che)
-        print(f"  🔴 KIỆN CÓ CHẮN ở: {', '.join(che)}")
-        print(f"     Giá trị gần nhất đọc được: {gan_nhat:.1f} cm")
-        print("     → BẬT lại ADVANCE_LOAD_BLOCK_DETECT = True")
-        print(f"     → Đặt ngưỡng phát hiện quanh {gan_nhat:.1f}cm, và ADVANCE_HARD_STOP_CM")
-        print(f"       phải NHỎ HƠN {gan_nhat:.1f} — không thì chặn cứng nổ ngay khi cõng hàng.")
-        print(f"       Hiện ADVANCE_HARD_STOP_CM = {config.ADVANCE_HARD_STOP_CM}")
+        gan_nhat = min(gia)
+        print(f"  🔴 KIỆN CÓ CHẮN — số đo ĐỔI THEO độ cao càng ({doi_theo_cang:.1f}cm).")
+        print(f"     Giá trị gần nhất: {gan_nhat:.1f} cm")
+        print("     → Bật lại cơ chế chống-kiện-che, đặt ngưỡng quanh giá trị này.")
+        print(f"     → ADVANCE_HARD_STOP_CM phải NHỎ HƠN {gan_nhat:.1f} "
+              f"(hiện {config.ADVANCE_HARD_STOP_CM}).")
         if config.ADVANCE_HARD_STOP_CM >= gan_nhat:
-            print("       ⚠️ ĐANG SAI: chặn cứng ≥ khoảng cách tới kiện → mọi chặng giao")
-            print("          hàng sẽ dừng ngay khi vừa rời giao lộ.")
+            print("       ⚠️ ĐANG SAI: chặn cứng ≥ khoảng cách tới kiện → mọi chặng")
+            print("          giao hàng sẽ dừng ngay khi vừa rời giao lộ.")
     print("=" * 72)
     print("\n  Báo lại 3 con số trên để cập nhật config và sổ nghiệm thu.")
     return 0
