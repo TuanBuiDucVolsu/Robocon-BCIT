@@ -113,11 +113,13 @@ SPEED_TURN = 62              # ⚠️ CHỐT trước khi calibrate TURN_TIME (�
 # tiến 02/08: lệch 3.8% → 7.9% → 9.0%, biên độ tăng dần thay vì hội tụ.
 PWM_CALIB_DAMPING = 0.5
 
-# ĐẶT LẠI VỀ 1.000 ngày 02/08. Vòng calibrate chiều tiến DAO ĐỘNG chứ không hội tụ
-# (lệch 3.8% → 7.9% → 9.0%) vì công cụ lúc đó đo 1 lượt và áp đủ 100% hiệu chỉnh —
-# tức chỉnh theo nhiễu. Mọi giá trị sinh ra từ vòng đó (0.851 / 0.962 / 0.875) đều
-# vô nghĩa, kể cả 0.924 cũ cũng đo bằng cách đó.
-# Đo lại từ 1.000 bằng option f bản mới (trung vị 3 lượt + giảm chấn 0.5).
+# ĐANG DÒ. Đo vật lý 02/08 (đặt giữa vạch R4, chạy MÙ 2s): ở 1.000 robot LỆCH TRÁI,
+# tức bánh PHẢI nhanh hơn → phải hạ hệ số này xuống.
+# Giá trị cũ 0.924 ĐÚNG CHIỀU (cũng hãm bánh phải), chỉ là độ lớn chưa chắc đúng vì
+# nó sinh ra từ vòng calibrate bằng encoder — mà encoder rớt xung, tỉ lệ tản ±5%,
+# lớn hơn cả thứ cần đo, và vòng đó dao động chứ không hội tụ (3.8% → 7.9% → 9.0%).
+# ⚠️ ĐỪNG calibrate lại bằng encoder. Dò bằng vạch thẳng trên sa bàn (NGHIEM_THU A2):
+# hạ dần 1.000 → 0.96 → 0.94 ... tới khi trôi ngang ≤2cm trên 2m.
 PWM_COMPENSATION = 1.000           # Bù bánh PHẢI khi tiến
 # ĐO trên robot 02/08 (option f, chiều lùi): 0.95 → 1.000. Bánh phải KHÔNG cần hãm
 # khi lùi. Đo tiếp thấy bánh TRÁI nhanh hơn 2.3% → phần cân còn lại nằm ở

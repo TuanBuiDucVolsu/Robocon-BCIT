@@ -48,8 +48,17 @@ Encoder (`f` → **t**/**l**) chỉ dùng để **thấy nhanh bên nào nhanh h
 | | Tiến | Lùi |
 |---|---|---|
 | **ĐẠT** | ≤ **2cm / 2m** | ≤ **2cm / 2m** |
-| **Sửa** | trôi sang trái → hạ `PWM_COMPENSATION_LEFT` 0.02 | trôi sang trái → hạ `PWM_COMPENSATION_LEFT_REV` 0.02 |
-| | trôi sang phải → hạ `PWM_COMPENSATION` 0.02 | trôi sang phải → hạ `PWM_COMPENSATION_REV` 0.02 |
+| **Sửa** | xem bảng chiều ngay dưới | |
+
+**⚠️ CHIỀU CHỈNH — dễ nhầm, nhầm là càng chỉnh càng lệch.** Bánh nhanh hơn nằm ở
+PHÍA NGOÀI vòng cua, nên robot cong về phía bánh CHẬM:
+
+| Robot cong về | Bánh nhanh hơn | Hạ hệ số của bánh đó |
+|---|---|---|
+| **TRÁI** | **PHẢI** | tiến: `PWM_COMPENSATION` · lùi: `PWM_COMPENSATION_REV` |
+| **PHẢI** | **TRÁI** | tiến: `PWM_COMPENSATION_LEFT` · lùi: `PWM_COMPENSATION_LEFT_REV` |
+
+Mỗi lần 0.02, đo lại, lặp tới khi ≤2cm/2m.
 
 2cm/2m ≈ 0.6°. **Chiều lùi bắt buộc phải đạt** — mọi tuyến giao hàng đều mở đầu
 bằng `LÙI 1 giao lộ`, khoảng 28 lần mỗi trận.
