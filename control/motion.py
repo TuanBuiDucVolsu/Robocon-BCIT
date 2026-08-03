@@ -905,6 +905,7 @@ class Motion:
         best_dist = float("inf")
         best_at = start
         nhieu_ap = 0             # số gai nhiễu đã bỏ qua
+        da_vao_gan = False       # đã vào vùng gần chưa (chốt MỘT CHIỀU)
         # Tốc độ của nhịp GẦN NHẤT — stop_gently() cần biết đang chạy nhanh cỡ nào
         # để giảm dần từ đó. Khởi tạo cho vòng lặp đầu (chưa qua nhánh chọn tốc độ).
         speed = config.APPROACH_FAST_SPEED
@@ -1042,9 +1043,20 @@ class Motion:
                              config.APPROACH_DETECT_DISTANCE, dist)
                 return False
 
-            # Pha xa: nhanh; pha gần: chậm để dừng chính xác, không đâm kệ
-            speed = (config.APPROACH_SLOW_SPEED
-                     if dist <= config.APPROACH_SLOW_DISTANCE
+            # Pha xa: nhanh; pha gần: chậm để dừng chính xác, không đâm kệ.
+            # ⚠️ CHỐT MỘT CHIỀU. Robot chỉ TIẾN về phía kệ, không thể xa ra — nên
+            # một số đo "xa hơn" SAU KHI đã vào vùng gần chỉ có thể là nhiễu.
+            # Đo trên robot 03/08, option 5 tầng 2:
+            #     0.28s:16.9  → chậm
+            #     0.41s:22.0  → MỘT mẫu nhiễu vọt qua 20 → quay lại NHANH (60%)
+            #     0.47s:16.6  → chậm lại
+            #     0.60s: 9.5  → đã lố; đo lại lúc đứng yên: 5.5cm
+            # Robot đi 16.5→5.5cm trong 0.6s (~18cm/s) trong khi lượt chạy tốt chỉ
+            # ~7cm/s. Không chốt thì chỉ cần MỘT mẫu nhiễu ở đúng 2cm cuối là hỏng
+            # cả lần tiếp cận — và đó là chỗ không còn đường sửa.
+            if 0 <= dist <= config.APPROACH_SLOW_DISTANCE:
+                da_vao_gan = True
+            speed = (config.APPROACH_SLOW_SPEED if da_vao_gan
                      else config.APPROACH_FAST_SPEED)
             self._forward_guided(speed)
             time.sleep(0.02)

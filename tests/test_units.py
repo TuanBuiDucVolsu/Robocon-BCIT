@@ -879,6 +879,24 @@ class TestApproachShelf(unittest.TestCase):
         m = self._motion([gan])
         self.assertTrue(m.approach_shelf(config.APPROACH_DISTANCE))
 
+    def test_a_single_noise_spike_must_not_send_it_back_to_FAST(self):
+        """⚠️ HỒI QUY: chuyển pha phải CHỐT MỘT CHIỀU.
+
+        Đo trên robot 03/08 (option 5, tầng 2) — vệt siêu âm thật:
+            0.28s:16.9 → chậm | 0.41s:22.0 → NHANH lại | 0.47s:16.6 | 0.60s:9.5 lố
+        Robot chỉ TIẾN nên số đo "xa hơn" sau khi đã vào vùng gần chỉ có thể là
+        nhiễu. Một mẫu như thế ở đúng 2cm cuối là hỏng cả lần tiếp cận.
+        """
+        gan = config.APPROACH_SLOW_DISTANCE
+        moc = config.APPROACH_DISTANCE
+        m = self._motion([gan - 3, config.APPROACH_SLOW_DISTANCE + 2,
+                          gan - 4, moc + config.APPROACH_STOP_MARGIN])
+        toc = []
+        m._forward_guided = lambda sp: toc.append(sp)
+        self.assertTrue(m.approach_shelf(moc))
+        self.assertTrue(all(v == config.APPROACH_SLOW_SPEED for v in toc),
+                        f"đã quay lại pha NHANH sau một mẫu nhiễu: {toc}")
+
     def test_stops_early_by_the_lag_margin(self):
         """Dừng ở mốc + bù, không phải ở đúng mốc — bù độ trễ siêu âm."""
         moc = config.APPROACH_DISTANCE
