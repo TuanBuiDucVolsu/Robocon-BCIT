@@ -2268,6 +2268,21 @@ class TestDemGiaoLoDoiDenDam(unittest.TestCase):
         self.assertTrue(m.follow_line_until_intersection(timeout=1.0),
                         "cổng đã bác nhầm giao lộ thật ngay sau ô xuất phát")
 
+    def test_gate_is_OFF_by_default_even_on_a_dim_board(self):
+        """⚠️ HỒI QUY: cổng phải TẮT khi caller không bật, DÙ cả thanh đọc tối.
+
+        Đo trên robot 03/08 ngay tại ô xuất phát: mắt sáng nhất chỉ 683. Bản trước
+        tự đoán "đang trên tấm in" bằng độ sáng nên bật cổng ở đây, bác luôn giao
+        lộ C0R0 thật, và robot LAO VÀO KỆ. Ánh sáng trên sa bàn biến động quá lớn
+        để đặt ngưỡng sáng cố định — cạnh C0R0 các mắt "trắng" cũng chỉ 260-463.
+        Cổng CHỈ được bật khi execute_route bảo là vừa rời điểm cuối.
+        """
+        m = self._motion((396, 420, 74, 0, 0, 0))   # đúng chữ ký lúc lao vào kệ
+        m._encoder_left = _EncoderGia(0)            # chưa đi được cm nào
+        m._encoder_right = _EncoderGia(0)
+        self.assertTrue(m.follow_line_until_intersection(timeout=1.0),
+                        "cổng bật khi caller KHÔNG yêu cầu → bác nhầm giao lộ thật")
+
     def test_junction_after_enough_travel_is_counted(self):
         m = self._motion((917, 914, 0, 0, 0, 0))
         can = int(config.FORWARD_MIN_TRAVEL_CM * config.ENCODER_PULSES_PER_CM) + 10

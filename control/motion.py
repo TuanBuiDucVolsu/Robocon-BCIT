@@ -1828,21 +1828,24 @@ class Motion:
         do_duoc = (config.ENCODER_PULSES_PER_CM > 0
                    and getattr(getattr(self, "_encoder_left", None), "available", False)
                    and getattr(getattr(self, "_encoder_right", None), "available", False))
-        # ⛔ CỔNG QUÃNG ĐƯỜNG CHỈ ÁP KHI KHỞI HÀNH TRÊN TẤM IN.
-        # Nó sinh ra để robot rời khu nhà máy không đếm tấm in dưới chân thành giao
-        # lộ. Nhưng áp cho MỌI chặng thì phá chặng ĐẦU TIÊN: exit_start_zone() bỏ
-        # robot lại rất gần C0R0 (đó là lý do có cờ tren_giao_lo_dau), nên cổng 10cm
-        # bác luôn giao lộ thật đó — robot đi tiếp, mảng đen chân kệ thành "giao lộ",
-        # rồi advance khởi hành khi đã sát kệ và LAO VÀO KỆ. Đã gặp thật 03/08.
-        # Nhận ra "đang trên tấm in" bằng chính lần đọc đầu: cả thanh xam xám, KHÔNG
-        # mắt nào thấy nền trắng sạch. Trên sa bàn trắng thì luôn có mắt đọc ~900.
-        raw_dau = self.read_line_sensor_raw()
-        tren_tam_in = bool(raw_dau) and max(raw_dau) <= config.ADVANCE_FACTORY_MAX_BRIGHT
-        if tren_tam_in:
-            logger.info("Khởi hành TRÊN MẢNG IN (sáng nhất %.0f) — bật cổng %.1fcm "
-                        "để không đếm nó thành giao lộ",
-                        max(raw_dau) * 1023, config.FORWARD_MIN_TRAVEL_CM)
-        do_duoc = do_duoc and tren_tam_in
+        # ⛔ CỔNG QUÃNG ĐƯỜNG CHỈ ÁP KHI CALLER BẢO "vừa rời điểm cuối".
+        # Nó sinh ra để robot rời khu nhà máy không đếm TẤM IN dưới chân thành giao
+        # lộ. Áp cho MỌI chặng thì phá chặng đầu tiên của trận: exit_start_zone() bỏ
+        # robot lại rất gần C0R0, cổng 10cm bác luôn giao lộ THẬT đó — robot đi
+        # tiếp, mảng đen chân kệ thành "giao lộ", advance khởi hành khi đã sát kệ và
+        # LAO VÀO KỆ.
+        #
+        # ĐÃ THỬ VÀ LOẠI: tự nhận ra "đang trên tấm in" bằng ĐỘ SÁNG (không mắt nào
+        # thấy nền trắng sạch). KHÔNG DÙNG ĐƯỢC — đo trên robot 03/08 ngay tại ô
+        # xuất phát, mắt sáng nhất chỉ đọc 683 nên nó tưởng đang trên tấm in và bật
+        # cổng, rồi robot lao vào kệ. Cạnh C0R0 các mắt "trắng" cũng chỉ 260-463.
+        # Ánh sáng trên sa bàn biến động quá lớn để đặt một ngưỡng sáng cố định.
+        #
+        # Tín hiệu CẤU TRÚC thì chắc: chỉ route khởi hành TỪ ĐIỂM CUỐI mới bắt đầu
+        # trên tấm in, và route đó LUÔN mở đầu bằng lệnh LÙI (bộ tìm đường không có
+        # cách nào khác để rút khỏi điểm cuối). execute_route() biết nên nó truyền
+        # xuống, và chỉ cho chặng `forward` ĐẦU TIÊN.
+        do_duoc = do_duoc and roi_diem_cuoi
         self._doc_xung()
         di_xung = 0
 
