@@ -714,6 +714,7 @@ class Motion:
         thay_muc_tieu = False    # đã từng thấy vật trong APPROACH_DETECT_DISTANCE
         mat_vong = 0             # số nhịp kịch trần LIÊN TIẾP
         nhieu = 0                # số gai nhiễu đã bỏ qua
+        bo_qua_dau = False       # đã dùng cửa sổ ân hạn đầu chưa
         doi_luc = start          # lần cuối siêu âm ĐỔI giá trị
 
         while time.time() - start < timeout:
@@ -823,6 +824,20 @@ class Motion:
                 # tới nơi. Đo trên robot 03/08: cờ bật nhầm vì hình in mascot cho 4
                 # mắt đen (nhưng ĐỨT QUÃNG), robot dừng hẳn ở C0R0 thật.
                 # Chỉ tự sửa MỘT lần — cờ bị tiêu thụ, lần sau vẫn báo lỗi như cũ.
+                if (not bo_qua_dau) and time.time() - start <= config.ADVANCE_START_GRACE:
+                    # Giao lộ gặp NGAY sau escape chỉ có thể là cái vừa thoát —
+                    # escape thường chạm trần ESCAPE_MAX_TIME rồi bỏ cuộc. Lý do
+                    # đầy đủ + số đo: config.ADVANCE_START_GRACE. Chỉ MỘT lần.
+                    bo_qua_dau = True
+                    logger.warning(
+                        "Advance: gặp giao lộ sau %.2fs — trong cửa sổ ân hạn %.1fs "
+                        "nên đây là CHÍNH giao lộ vừa thoát (escape chạm trần chứ "
+                        "chưa ra hẳn). Thoát lại rồi đi tiếp. Cảm biến %s",
+                        time.time() - start, config.ADVANCE_START_GRACE, values)
+                    acquired = True
+                    lost_since = None
+                    self._escape_intersection(base_speed)
+                    continue
                 if getattr(self, "tren_giao_lo_dau", False):
                     self.tren_giao_lo_dau = False
                     logger.warning(

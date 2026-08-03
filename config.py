@@ -542,6 +542,26 @@ ADVANCE_LOST_ECHO_COUNT = 3   # Số nhịp kịch trần LIÊN TIẾP, SAU KHI 
                               # tiêu, thì dừng. Đây mới là ca giết robot: thấy
                               # 30→25→22 rồi 100,100,100 mà vẫn chạy tiếp.
 
+# --- Cửa sổ ÂN HẠN đầu advance -------------------------------------------
+# advance_to_end() luôn khởi hành khi robot ĐANG ĐỨNG TRÊN một giao lộ, và mở đầu
+# bằng _escape_intersection() để rời khỏi nó. Nhưng escape có CHẶN TRÊN
+# (ESCAPE_MAX_TIME) và đo trên robot 03/08 thì nó thường xuyên CHẠM TRẦN rồi bỏ
+# cuộc chứ không thoát được:
+#
+#     Rời giao lộ: hết 1.21s mà cảm biến vẫn báo giao lộ
+#     Advance: ... Vệt: 0.00s:30.1        ← mới đi được ~5cm khỏi C0R0 (kệ 35.4cm)
+#
+# Khi đó nhịp đọc đầu của advance có thể thấy lại CHÍNH giao lộ đó và báo "bản đồ
+# không khớp" → dừng hẳn giữa đường. Chạy 5 lượt option 5: 3 đúng, 2 sai — đúng
+# kiểu của một ranh giới, không phải một lỗi logic.
+#
+# Nới ESCAPE_MAX_TIME là hướng SAI: escape chạy forward() THẲNG, KHÔNG LÁI, mà kệ
+# chỉ cách 35.4cm — cho chạy mù lâu hơn là đổi lỗi này lấy lỗi khác. Thay vào đó
+# cho advance bỏ qua ĐÚNG MỘT giao lộ trong cửa sổ đầu: nó chỉ có thể là cái vừa
+# thoát. Phần đi thêm khi đó nằm dưới BÁM LINE (có lái), không phải chạy mù.
+ADVANCE_START_GRACE = 0.6   # giây kể từ sau escape
+
+
 # --- XÁC NHẬN LẠI KHI ĐỨNG YÊN -------------------------------------------
 # Đo trên robot 03/08 (tools.check_sonar_jitter, 30 giây): robot ĐỨNG YÊN cho
 # 997 mẫu, trung vị 74.6cm, độ lệch chuẩn 0.20cm, KHÔNG một mẫu nào lệch quá

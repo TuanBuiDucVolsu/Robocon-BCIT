@@ -1388,6 +1388,39 @@ class TestAdvanceToEnd(unittest.TestCase):
         self.assertEqual(ghi.count("BỎ QUA GAI NHIỄU"), config.ULTRASONIC_MAX_GLITCH)
         self.assertIn("CHẶN CỨNG", ghi)
 
+    def test_intersection_right_after_escape_is_forgiven_once(self):
+        """⚠️ HỒI QUY: escape chạm trần rồi bỏ cuộc → advance đọc lại chính nó.
+
+        Đo trên robot 03/08, chạy option 5 năm lượt: 3 đúng 2 sai. Lượt THÀNH CÔNG
+        vẫn ghi "Rời giao lộ: hết 1.21s mà cảm biến vẫn báo giao lộ" và vệt siêu âm
+        bắt đầu ở 30.1cm — tức mới đi ~5cm khỏi C0R0 (kệ cách 35.4cm). Nó chỉ may
+        là nhịp đọc kế không ra giao lộ. Đây là ranh giới, không phải lỗi logic.
+        """
+        m = self._motion([[0, 0, 1, 1, 0, 0]] * 400)
+        m.tren_giao_lo_dau = False           # KHÔNG dựa vào cờ
+        m._escape_intersection = MagicMock(return_value=True)
+        lan = {"n": 0}
+
+        def fl(speed):
+            lan["n"] += 1
+            return (lan["n"] == 1, [0, 0, 1, 1, 1, 1])
+
+        m.follow_line = fl
+        m.get_distance = lambda *a, **k: 19.0
+        with self.assertLogs("control.motion", level="WARNING") as nk:
+            self.assertTrue(m.advance_to_end(timeout=3.0))
+        self.assertIn("cửa sổ ân hạn", "\n".join(nk.output))
+
+    def test_only_the_FIRST_intersection_is_forgiven(self):
+        """Ân hạn dùng ĐÚNG MỘT lần — cái thứ hai vẫn là lỗi bản đồ."""
+        m = self._motion([[0, 0, 1, 1, 0, 0]] * 900)
+        m.tren_giao_lo_dau = False
+        m._escape_intersection = MagicMock(return_value=True)
+        m.follow_line = lambda speed: (True, [0, 0, 1, 1, 1, 1])
+        m.read_line_sensor_adc = lambda: [917, 914, 0, 0, 0, 0]
+        m.get_distance = lambda *a, **k: 30.0
+        self.assertFalse(m.advance_to_end(timeout=3.0))
+
     def test_self_corrects_when_the_C0R0_flag_was_wrong_by_one_intersection(self):
         """Cờ bật nhầm → gặp giao lộ → TỰ SỬA và đi tiếp, không dừng hẳn.
 
@@ -1398,17 +1431,24 @@ class TestAdvanceToEnd(unittest.TestCase):
         nhưng gặp giao lộ TRONG LÚC cờ đang bật thì suy ra được ngay là niềm tin
         sai đúng một giao lộ.
         """
-        m = self._motion([[0, 0, 1, 1, 0, 0]] * 400)
+        m = self._motion([[0, 0, 1, 1, 0, 0]] * 900)
         m.tren_giao_lo_dau = True
         m._escape_intersection = MagicMock(return_value=True)
-        lan = {"n": 0}
+        # SAU cửa sổ ân hạn — để bài này kiểm ĐÚNG cơ chế của cờ, không phải ân hạn.
+        t0, xong = time.time(), {"v": False}
 
         def fl(speed):
-            lan["n"] += 1
-            return (lan["n"] == 1, [0, 0, 1, 1, 1, 1])
+            if not xong["v"] and time.time() - t0 > config.ADVANCE_START_GRACE + 0.1:
+                xong["v"] = True
+                return (True, [0, 0, 1, 1, 1, 1])
+            return (False, [0, 0, 1, 1, 1, 1])
 
         m.follow_line = fl
-        m.get_distance = lambda *a, **k: 19.0
+        # Chỉ cho "tới gần mục tiêu" SAU khi đã gặp giao lộ, không thì advance về
+        # đích trước cả lúc cơ chế cần kiểm được kích hoạt.
+        # 42cm: đã thấy mục tiêu (≤45) nhưng NGOÀI tầm của chặn-số-đo-cũ (≤40), nên
+        # số không đổi vẫn chạy tiếp. Xem test_stale_guard_does_not_stall_on_a_far_reading.
+        m.get_distance = lambda *a, **k: 19.0 if xong["v"] else 42.0
         with self.assertLogs("control.motion", level="WARNING") as nk:
             self.assertTrue(m.advance_to_end(timeout=3.0),
                             "cờ sai một giao lộ thì phải tự sửa, không dừng hẳn")
