@@ -683,6 +683,56 @@ class TestDetectSide(unittest.TestCase):
         self.assertFalse(self.robot._side_detected)
 
 
+class TestCoCongHangDuocHaSauKhiGiao(unittest.TestCase):
+    """⚠️ Cờ "đang cõng hàng" phải HẠ sau khi giao xong, không kẹt cả trận.
+
+    Đo trên robot 03/08: thả tầng 1 kệ đầu OK, nhưng quay lại kệ lấy tầng 2 thì
+    "chạy rất lung tung". Nguyên nhân: carried_labels CHỈ được xoá khi bốc hàng
+    THẤT BẠI hoặc reset — không bao giờ xoá sau khi GIAO XONG. Cờ vì thế bật suốt
+    phần còn lại của trận, và advance_to_end khi cõng hàng thì BỎ QUA SIÊU ÂM rồi
+    coi mảng tối đầu tiên là "đã vào khu nhà máy" → dừng bừa giữa đường về.
+    """
+
+    def _robot(self):
+        from unittest.mock import MagicMock
+        import main
+        r = object.__new__(main.Robot)
+        r.motion = MagicMock()
+        r.motion.dang_cong_hang = False
+        r.lift = MagicMock()
+        r.lift.dropoff_left.return_value = True
+        r.lift.dropoff_right.return_value = True
+        r.carried_labels = ["samsung", "hana_micron"]
+        r._retreat_from_shelf = MagicMock()
+        r._dat_co_cong_hang()
+        return r
+
+    def test_flag_is_on_while_carrying(self):
+        r = self._robot()
+        self.assertTrue(r.motion.dang_cong_hang)
+
+    def test_dropping_one_side_clears_only_that_label(self):
+        r = self._robot()
+        r._drop_single_side("left")
+        self.assertEqual(r.carried_labels, [None, "hana_micron"])
+        self.assertTrue(r.motion.dang_cong_hang, "còn 1 kiện thì cờ phải GIỮ")
+
+    def test_flag_goes_down_once_both_are_delivered(self):
+        r = self._robot()
+        r._drop_single_side("left")
+        r._da_tha_xong("right")
+        self.assertEqual(r.carried_labels, [None, None])
+        self.assertFalse(r.motion.dang_cong_hang,
+                         "cờ kẹt bật → chặng VỀ KỆ bỏ qua siêu âm và dừng bừa")
+
+    def test_label_is_cleared_even_when_IR_says_the_drop_failed(self):
+        """Giữ nhãn khi IR báo hỏng là để cờ kẹt bật và phá NỐT chặng về."""
+        r = self._robot()
+        r.lift.dropoff_left.return_value = False
+        r._drop_single_side("left")
+        self.assertEqual(r.carried_labels[0], None)
+
+
 class TestKhongQuayDauTaiDiemCuoi(unittest.TestCase):
     """⚠️ KHÔNG route nào được QUAY ĐẦU 180° ngay tại điểm cuối.
 

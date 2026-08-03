@@ -694,11 +694,32 @@ class Robot:
         logger.error("Label %s không khớp càng %s", label, self.carried_labels)
         return None
 
+    def _da_tha_xong(self, side: str | None = None) -> None:
+        """Xoá nhãn kiện ĐÃ RỜI CÀNG, rồi đồng bộ lại cờ cõng hàng.
+
+        ⚠️ Trước đây carried_labels CHỈ được xoá khi bốc hàng THẤT BẠI hoặc reset —
+        không bao giờ xoá sau khi giao xong. Nên cờ "đang cõng hàng" bật suốt phần
+        còn lại của trận, và trên đường VỀ KỆ robot bỏ qua siêu âm rồi coi mảng tối
+        đầu tiên là "đã vào khu nhà máy" → dừng bừa giữa đường.
+        Đo trên robot 03/08: thả tầng 1 kệ đầu OK, nhưng quay lại kệ lấy tầng 2 thì
+        "chạy rất lung tung".
+
+        side=None → xoá cả hai (thả cùng lúc bằng drop_both).
+        """
+        for i, ben in enumerate(("left", "right")):
+            if side is None or side == ben:
+                self.carried_labels[i] = None
+        self._dat_co_cong_hang()
+
     def _drop_single_side(self, side: str) -> bool:
         """Thả 1 kiện rồi nâng lại càng — chuỗi ở control/handling.py."""
         # LÙI nằm GIỮA thả và nâng càng — xem control/handling.drop_side.
-        return drop_side(self.lift, side, last=False,
-                         lui=lambda: self._retreat_from_shelf("sau khi thả"))
+        ok = drop_side(self.lift, side, last=False,
+                       lui=lambda: self._retreat_from_shelf("sau khi thả"))
+        # Xoá nhãn DÙ IR BÁO HỎNG: nếu kiện thật sự còn trên càng thì bước sau đã
+        # hỏng rồi, còn giữ nhãn thì cờ cõng hàng kẹt bật và phá NỐT chặng về.
+        self._da_tha_xong(side)
+        return ok
 
     def _delivery_is_trustworthy(self, approach_ok: bool, context: str) -> bool:
         """Có đủ căn cứ để TIN rằng đang đứng trong khu nhà máy không?
@@ -747,6 +768,7 @@ class Robot:
                     self.packages_delivered += 2
             else:
                 logger.error("DROP_FIRST thất bại — IR vẫn thấy pallet hoặc lỗi cảm biến")
+            self._da_tha_xong()          # cả 2 càng
         else:
             side = self._get_drop_side(label)
             if side is None:
@@ -826,6 +848,7 @@ class Robot:
             dropped = drop_side(
                 self.lift, side, last=True,
                 lui=lambda: self._retreat_from_shelf(f"sau khi thả {label}"))
+            self._da_tha_xong(side)
             if dropped and trusted:
                 self.packages_delivered += 1
             else:
