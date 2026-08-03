@@ -492,3 +492,35 @@ DistanceSensor(..., pin_factory=PiGPIOFactory())
 Chưa cài được thì đọc vệt đo trong log (`Vệt siêu âm (N mẫu đổi): 0.12s:34.5 ...`)
 để biết đang gặp nhiễu lẻ, đọc cao đều đều, hay mất tiếng vọng — ba nguyên nhân đó
 cách sửa khác hẳn nhau.
+
+## ⚠️ Cụm càng lắp LỆCH TÂM XE 4cm (đo 03/08/2026)
+
+Đo trên robot sau khi giao hàng hai nhà máy, kiện đã thả nằm lại trên sa bàn:
+
+| Kiện | Càng thả | Lệch khỏi tâm ô |
+|---|---|---|
+| Samsung | PHẢI | **1 cm** |
+| Hana Micron | TRÁI | **9 cm** |
+
+Robot đứng ĐÚNG giữa ô — đo từ tâm thân xe sang hai mép ô được **13cm / 12cm**
+(ô 25cm). Nên không phải vạch line lệch, cũng không phải robot bám lệch.
+
+Hai kiện cách nhau 1 + 9 = 10cm ≈ khoảng cách hai càng (12cm), và tâm giữa chúng
+lệch (9 − 1)/2 = **4cm** khỏi tâm ô. Ghép lại:
+
+    cụm càng lệch TRÁI 4cm  →  càng trái  −6 − 4 = −10cm   (đo 9)
+                               càng phải  −4 + 6 = + 2cm   (đo 1)
+
+**Chữa: dời cụm càng sang PHẢI 4cm.** Sau đó hai càng ở ±6cm, mép ngoài kiện
+6 + 4.5 = 10.5cm < 12.5cm — còn dư 2cm mỗi bên.
+
+**Không có hằng số phần mềm nào thay được.** `LINE_CENTER_OFFSET` chỉ với tới
+~5mm (cả dải 6 mắt là ±23mm), và robot vi sai không đi ngang được.
+
+**Vì sao bốc hàng ở kệ vẫn chuẩn:** ở kệ thì NGƯỜI đặt kiện bằng tay nên chúng tự
+nằm đúng chỗ càng với tới. Ô nhà máy cố định trên bản in nên độ lệch chỉ lộ ra ở
+bước THẢ — lý do nó sống sót qua rất nhiều lượt test.
+
+⚠️ **Sau khi dời càng, bước bốc ở kệ sẽ lệch 4cm.** Đặt lại kiện trên kệ theo vị
+trí càng mới rồi chạy `test_smoke` option 2 xác nhận IR báo CẢ HAI càng, TRƯỚC
+khi chạy option 5.
