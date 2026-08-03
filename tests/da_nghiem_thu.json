@@ -92,6 +92,23 @@
         "ADVANCE_HARD_STOP_CM": 11.9
       },
       "ghi_chu": "Bác bỏ giả định đã gây 4 lần sửa hỏng trong ngày. Cơ chế chống-kiện-che đã được XOÁ khỏi advance_to_end. Chặn cứng 11.9cm giữ lại vì nó là lưới an toàn cho mọi nguyên nhân — kiện đọc 72-77cm nên không đụng tới mốc đó."
+    },
+    {
+      "ten": "smoke 5 — advance tới khu nhà máy dừng ĐÚNG điểm thả",
+      "ngay": "2026-08-03",
+      "ket_qua": "ĐẠT — người dùng xác nhận bằng ảnh: robot dừng đúng vị trí, thả ở đây là gọn. MỚI 1/3 LẦN, cần lặp thêm 2 lần nữa.",
+      "gia_tri": {
+        "LINE_STRICT_BLACK": 0.15,
+        "LINE_ADAPTIVE_FRACTION": 0.3,
+        "LINE_ADAPTIVE_MIN_RANGE": 250,
+        "LINE_THRESHOLD": 200,
+        "ADVANCE_INTERSECTION_DAM": 5,
+        "ADVANCE_FACTORY_DARK_MIN_CM": 10.0,
+        "ADVANCE_START_GRACE": 0.6,
+        "ADVANCE_SPEED": 40,
+        "ENCODER_PULSES_PER_CM": 35.94
+      },
+      "ghi_chu": "Điểm dừng do nhánh 'hết line' quyết định, và nó CHỈ đúng nhờ nguong_cho() đòi có đen THẬT — không có ràng buộc đó thì tấm in khu nhà máy đọc ra 'vẫn còn line' và robot chạy ra khỏi sa bàn. ADVANCE_MAX_TRAVEL_CM = 80 là lưới an toàn, CHƯA ĐO, chưa được kích hoạt trong lượt này."
     }
   ]
 }
