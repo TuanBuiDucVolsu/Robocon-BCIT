@@ -156,6 +156,14 @@ class Lift:
     # Quy đổi tầng → thời gian chạy (đã bù lệch 2 càng)
     # ----------------------------------------------------------
 
+    # Phần càng đang cao HƠN mốc tầng, tính bằng giây chạy motor. Sinh ra từ
+    # raise_to_insert() (+LIFT_INSERT_EXTRA) và lift_off() (+LIFT_PICKUP_RAISE_TIME)
+    # — cả hai đều cố ý nằm NGOÀI thang tầng nên `_current_level` không đổi.
+    # Nhưng lúc HẠ VỀ SÀN thì phải trả lại đúng bấy nhiêu, không thì càng dừng lơ
+    # lửng và KIỆN KHÔNG RỜI CÀNG (IR báo "vẫn thấy pallet", drop_side trả ❌).
+    # Đo trên robot 03/08: 0.20 + 0.30 = 0.50s dôi ra, thừa sức giữ kiện trên càng.
+    _du_cao: float = 0.0
+
     def _level_time(self, level: int, side: str, raising: bool) -> float:
         """Thời gian để càng `side` đi từ SÀN lên `level` (mốc TUYỆT ĐỐI, đã bù).
 
@@ -201,11 +209,14 @@ class Lift:
     # Điều khiển motor — cả 2 bên đồng bộ
     # ----------------------------------------------------------
 
-    def _move_both(self, from_level: int, to_level: int):
-        """Đưa CẢ 2 càng từ `from_level` sang `to_level`, dừng từng bên đúng lúc."""
+    def _move_both(self, from_level: int, to_level: int, them: float = 0.0):
+        """Đưa CẢ 2 càng từ `from_level` sang `to_level`, dừng từng bên đúng lúc.
+
+        `them` — phần DÔI RA ngoài thang tầng, cộng vào cả 2 bên. Xem Lift._du_cao.
+        """
         raising = self._time_for_level(to_level) > self._time_for_level(from_level)
-        left_dur = self._move_duration("left", from_level, to_level, raising)
-        right_dur = self._move_duration("right", from_level, to_level, raising)
+        left_dur = self._move_duration("left", from_level, to_level, raising) + them
+        right_dur = self._move_duration("right", from_level, to_level, raising) + them
         logger.info("%s cả 2 càng (tầng %d→%d) - trái=%.2fs phải=%.2fs",
                     "Nâng" if raising else "Hạ", from_level, to_level, left_dur, right_dur)
         if raising:
@@ -281,6 +292,11 @@ class Lift:
             self._right_up.on(); self._right_down.off()
             time.sleep(them)
             self._stop_all()
+            # Ghi nhận phần DÔI RA ngoài thang tầng. `_current_level` vẫn là tầng
+            # đó, nhưng càng đang cao hơn mốc tầng `them` giây — và lúc HẠ XUỐNG
+            # SÀN phải trả lại đúng bấy nhiêu, không thì càng dừng lơ lửng và kiện
+            # KHÔNG RỜI CÀNG. Xem Lift._du_cao.
+            self._du_cao += them
 
     def lift_off(self) -> None:
         """Nhấc thêm một đoạn ngắn để pallet RỜI mặt kệ, sau khi càng đã luồn vào.
@@ -292,6 +308,7 @@ class Lift:
         secs = config.LIFT_PICKUP_RAISE_TIME
         if secs <= 0:
             return
+        self._du_cao += secs
         logger.info("Nhấc bổng pallet khỏi mặt kệ (%.2fs)", secs)
         self._left_en.on(); self._left_up.on(); self._left_down.off()
         self._right_up.on(); self._right_down.off()
@@ -355,8 +372,9 @@ class Lift:
     def dropoff(self) -> bool:
         """Hạ CẢ 2 pallet xuống (đồng bộ)."""
         logger.info("Đặt hàng — cả 2 càng")
-        self._move_both(self._current_level, 0)
+        self._move_both(self._current_level, 0, them=self._du_cao)
         self._current_level = 0
+        self._du_cao = 0.0          # đã chạm sàn, không còn phần dôi
         time.sleep(0.3)
         return self._verify_released()
 
@@ -367,16 +385,26 @@ class Lift:
     def dropoff_left(self) -> bool:
         """Hạ càng TRÁI (thả pallet trái), giữ càng phải."""
         logger.info("Đặt hàng — chỉ càng TRÁI")
-        duration = self._move_duration("left", self._current_level, 0, raising=False)
+        # + phần DÔI RA ngoài thang tầng (nâng chuẩn bị luồn, nhấc bổng). Thiếu nó
+        # thì càng dừng lơ lửng trên sàn đúng bấy nhiêu và KIỆN KHÔNG RỜI CÀNG —
+        # IR báo "vẫn thấy pallet", drop_side trả ❌. Xem Lift._du_cao.
+        duration = (self._move_duration("left", self._current_level, 0, raising=False)
+                    + self._du_cao)
         self._lower_left(duration)
+        self._du_cao = 0.0          # đã chạm sàn, không còn phần dôi
         time.sleep(0.2)
         return self._verify_released("left")
 
     def dropoff_right(self) -> bool:
         """Hạ càng PHẢI (thả pallet phải), giữ càng trái."""
         logger.info("Đặt hàng — chỉ càng PHẢI")
-        duration = self._move_duration("right", self._current_level, 0, raising=False)
+        # + phần DÔI RA ngoài thang tầng (nâng chuẩn bị luồn, nhấc bổng). Thiếu nó
+        # thì càng dừng lơ lửng trên sàn đúng bấy nhiêu và KIỆN KHÔNG RỜI CÀNG —
+        # IR báo "vẫn thấy pallet", drop_side trả ❌. Xem Lift._du_cao.
+        duration = (self._move_duration("right", self._current_level, 0, raising=False)
+                    + self._du_cao)
         self._lower_right(duration)
+        self._du_cao = 0.0          # đã chạm sàn, không còn phần dôi
         time.sleep(0.2)
         return self._verify_released("right")
 
@@ -461,6 +489,7 @@ class Lift:
         time.sleep(duration)
         self._stop_all()
         self._current_level = 0
+        self._du_cao = 0.0          # ép chạm đáy → không còn phần dôi nào
         logger.info("Home xong — đã khai báo lại vị trí = SÀN")
 
     def reset(self):

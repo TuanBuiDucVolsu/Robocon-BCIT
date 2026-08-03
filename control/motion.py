@@ -2035,7 +2035,20 @@ class Motion:
                 return False
             logger.info("Đi đến giao lộ %d/%d", i + 1, count)
             self._escape_intersection(base_speed)
-            if not self.follow_line_until_intersection(base_speed):
+            # ⛔ CỔNG QUÃNG ĐƯỜNG áp cho MỌI chặng, TRỪ chặng ĐẦU của route không
+            # khởi hành từ điểm cuối.
+            #   i > 0  → luôn bật. Hai giao lộ thật cách nhau ~40cm, mà
+            #            _escape_intersection() có lúc CHẠM TRẦN mà chưa ra hẳn khỏi
+            #            mảng đen — không có cổng thì chặng sau ĐẾM LẠI CHÍNH giao lộ
+            #            vừa thoát. Đo trên robot 03/08: chặng 2/2 nhận giao lộ chỉ
+            #            ~0.5s sau khi bắt đầu, robot rẽ phải ở C0R2 thay vì C0R4 rồi
+            #            thả hàng giữa logo ROBOCON.
+            #   i = 0  → chỉ bật khi vừa rời điểm cuối (còn trên tấm in). Route
+            #            START → SHELF0 mở đầu bằng forward và exit_start_zone bỏ
+            #            robot lại RẤT GẦN C0R0; bật cổng ở đó là bác giao lộ thật
+            #            và LAO VÀO KỆ.
+            if not self.follow_line_until_intersection(
+                    base_speed, roi_diem_cuoi=(roi_diem_cuoi or i > 0)):
                 logger.error("Không tìm thấy giao lộ %d/%d!", i + 1, count)
                 self.stop()
                 return False

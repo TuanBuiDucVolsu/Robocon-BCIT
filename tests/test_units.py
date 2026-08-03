@@ -2076,6 +2076,52 @@ class TestThuTuThaVaNangCang(unittest.TestCase):
         self.assertIn("xúc nó lên lại", "\n".join(nk.output))
 
 
+class TestDuCaoNgoaiThangTang(unittest.TestCase):
+    """⚠️ Phần càng nâng DÔI RA ngoài thang tầng phải được trả lại khi hạ về sàn.
+
+    raise_to_insert() cộng LIFT_INSERT_EXTRA và lift_off() cộng
+    LIFT_PICKUP_RAISE_TIME — cả hai cố ý nằm NGOÀI thang tầng nên `_current_level`
+    không đổi. Nhưng dropoff_* chỉ hạ theo mốc TẦNG, nên càng dừng lơ lửng đúng
+    bằng phần dôi (0.20 + 0.30 = 0.50s) và KIỆN KHÔNG RỜI CÀNG — IR báo "vẫn thấy
+    pallet", drop_side trả ❌. Đo trên robot 03/08, cả hai bên đều dính.
+    """
+
+    def _lift(self):
+        lift = object.__new__(Lift)
+        for ten in ("_left_en", "_left_up", "_left_down", "_right_up", "_right_down"):
+            setattr(lift, ten, MagicMock())
+        lift._stop_all = MagicMock()
+        lift.go_to_level = MagicMock()
+        lift._lower_left = MagicMock()
+        lift._lower_right = MagicMock()
+        lift._verify_released = MagicMock(return_value=True)
+        lift._current_level = 1
+        lift._du_cao = 0.0
+        lift.pallet = MagicMock()
+        return lift
+
+    def test_dropoff_lowers_by_tier_PLUS_the_surplus(self):
+        lift = self._lift()
+        with patch.object(config, "LIFT_INSERT_EXTRA", 0.20):
+            lift.raise_to_insert(1)
+            lift.lift_off()
+            du = lift._du_cao
+            lift.dropoff_left()
+        moc = lift._move_duration("left", 1, 0, raising=False)
+        self.assertAlmostEqual(du, 0.20 + config.LIFT_PICKUP_RAISE_TIME, places=3)
+        self.assertAlmostEqual(lift._lower_left.call_args[0][0], moc + du, places=3,
+                               msg="hạ thiếu đúng bằng phần dôi → kiện không rời càng")
+
+    def test_surplus_is_cleared_once_on_the_floor(self):
+        """Không xoá thì lần thả sau cộng dồn và càng đâm xuống sàn."""
+        lift = self._lift()
+        with patch.object(config, "LIFT_INSERT_EXTRA", 0.20):
+            lift.raise_to_insert(1)
+            lift.lift_off()
+            lift.dropoff_right()
+        self.assertEqual(lift._du_cao, 0.0)
+
+
 class TestNangThemKhiLuonCang(unittest.TestCase):
     """raise_to_insert() nâng THÊM LIFT_INSERT_EXTRA để mũi càng nhỉnh hơn đáy khe.
 
@@ -2202,6 +2248,52 @@ class TestExecuteRouteGoiThatChuoiHam(unittest.TestCase):
         vach = [v / 1023 for v in (900, 900, 0, 0, 900, 900)]
         m = self._motion([vach])
         self.assertTrue(m.execute_route([("left",), ("right",)]))
+
+
+class TestCongQuangDuongDuocTruyenXuong(unittest.TestCase):
+    """⚠️ HỒI QUY: cờ roi_diem_cuoi phải THẬT SỰ tới được nơi dùng nó.
+
+    Cờ này đi qua ba tầng: execute_route → navigate_intersections →
+    follow_line_until_intersection. Đã có lần navigate_intersections KHÔNG truyền
+    tiếp, nên cổng quãng đường TẮT HOÀN TOÀN mà mọi test vẫn xanh — robot đếm mảng
+    in thành giao lộ và thả hàng giữa logo ROBOCON.
+    Bài này gọi xuyên chuỗi thật, chỉ giả lập ở tầng cảm biến và motor.
+    """
+
+    def _motion(self, dam_xung: int):
+        m = object.__new__(Motion)
+        m._aborted = lambda: False
+        m._last_error = 0.0
+        for ten in ("forward", "backward", "stop", "stop_gently", "turn_left",
+                    "turn_right", "_forward_guided"):
+            setattr(m, ten, MagicMock())
+        m._escape_intersection = MagicMock(return_value=True)
+        m._recover_line = MagicMock(return_value=False)
+        m.last_route_progress = []
+        m.tren_giao_lo_dau = False
+        giao_lo = [v / 1023 for v in (917, 914, 0, 0, 0, 0)]
+        m.read_line_sensor_raw = lambda: giao_lo
+        m.read_line_sensor_adc = lambda: [917, 914, 0, 0, 0, 0]
+        m.follow_line = lambda speed, reverse=False: (True, [0, 0, 1, 1, 1, 1])
+        m._encoder_left = _EncoderGia(dam_xung)
+        m._encoder_right = _EncoderGia(0)
+        return m
+
+    def test_second_hop_is_gated_so_it_cannot_recount_the_same_junction(self):
+        """Chặng thứ HAI luôn có cổng — escape chạm trần thì nó đếm lại chính nó."""
+        m = self._motion(dam_xung=0)          # không nhúc nhích
+        self.assertFalse(m.navigate_intersections(2, 50),
+                         "chặng 2 nhận giao lộ dù robot chưa đi được cm nào")
+
+    def test_first_hop_from_the_start_zone_is_NOT_gated(self):
+        """Chặng đầu của route không-từ-điểm-cuối phải đếm được ngay."""
+        m = self._motion(dam_xung=0)
+        self.assertTrue(m.navigate_intersections(1, 50, roi_diem_cuoi=False),
+                        "cổng bật nhầm ở chặng đầu → bác C0R0 → lao vào kệ")
+
+    def test_first_hop_after_leaving_a_terminal_IS_gated(self):
+        m = self._motion(dam_xung=0)
+        self.assertFalse(m.navigate_intersections(1, 50, roi_diem_cuoi=True))
 
 
 class TestMangInKhongPhaiGiaoLo(unittest.TestCase):
