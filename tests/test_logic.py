@@ -525,6 +525,7 @@ class TestStartTimeGuard(unittest.TestCase):
         robot = _robot_stub()
         robot.motion = MagicMock()
         robot.motion.exit_start_zone.return_value = True
+        robot.motion.tren_giao_lo_dau = False
         return robot
 
     def test_refuses_to_start_when_time_is_up(self):

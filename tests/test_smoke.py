@@ -80,7 +80,9 @@ def smoke_exit_and_navigate(m: Motion, **_):
         print("  ❌ exit_start_zone THẤT BẠI")
         return False, nav.START_POSE
     print("  ✅ exit_start_zone OK")
-    pose = nav.START_POSE
+    pose = nav.pose_sau_xuat_phat(getattr(m, "tren_giao_lo_dau", False) is True)
+    if pose != nav.START_POSE:
+        print("     (căn giữa đã chạy tới C0R0 — route bỏ bớt 1 giao lộ)")
 
     # --- Bước DETECT_SIDE của main.py ---
     if getattr(config, "BOARD_AUTO_DETECT", False):
@@ -442,7 +444,9 @@ def smoke_route_to_samsung(m: Motion, **_):
         print("  ❌ [1/5] exit_start_zone THẤT BẠI")
         return False, nav.START_POSE
     print("  ✅ [1/5] rời ô xuất phát")
-    pose = nav.START_POSE
+    pose = nav.pose_sau_xuat_phat(getattr(m, "tren_giao_lo_dau", False) is True)
+    if pose != nav.START_POSE:
+        print("     (căn giữa đã chạy tới C0R0 — route bỏ bớt 1 giao lộ)")
 
     # --- 2. Tới Kệ 3 ---
     ok, pose = _run(m, "SHELF0", pose)

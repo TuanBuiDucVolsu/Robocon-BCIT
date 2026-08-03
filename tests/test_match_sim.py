@@ -131,6 +131,7 @@ def run_match(seed: int, hw_fail_rate: float = 0.0, line_loss_rate: float = 0.0,
 
     robot.motion.execute_route.side_effect = execute_route
     robot.motion.exit_start_zone.return_value = True
+    robot.motion.tren_giao_lo_dau = False
     # Dò nhánh line tại giao lộ Kệ 3: THẤY line ⟺ đang ở nửa chuẩn
     if probe_result == "auto":
         robot.motion.probe_side_branch.side_effect = lambda *a, **k: not nav.MIRRORED

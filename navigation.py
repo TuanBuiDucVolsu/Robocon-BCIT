@@ -209,6 +209,33 @@ LOOSE_TERMINAL = "LOOSE"
 # (lên R2/R4), phía kia là mép sa bàn — xoay thử rồi đọc line là biết nửa nào.
 PROBE_NODE = "C0R0"
 
+# Giao lộ ĐẦU TIÊN trên đường từ ô xuất phát về phía kệ. Cùng là C0R0.
+NODE_DAU_TU_START = "C0R0"
+
+
+def pose_sau_xuat_phat(tren_giao_lo: bool) -> tuple[str, int]:
+    """Tư thế robot NGAY SAU exit_start_zone().
+
+    exit_start_zone() căn giữa line R0 sau khi chạm nó, và bước căn đó CÓ THỂ chạy
+    tới tận giao lộ đầu tiên (C0R0) — tuỳ robot được đặt lệch bao nhiêu trong ô
+    400x400mm. Hai kết cục đó khác nhau về VỊ TRÍ nên phải là hai pose khác nhau.
+
+    ⚠️ Trước đây luôn trả START_POSE, và chú thích trong motion.py ghi "ROUTE_START
+    sẽ đếm" cái giao lộ vừa chạm. SAI: navigate_intersections() mở đầu MỖI chặng
+    bằng _escape_intersection() — nó CỐ TÌNH rời giao lộ đang đứng rồi mới tìm cái
+    kế tiếp, nên không thể đếm cái đang đứng lên.
+    Hậu quả đo được trên robot 03/08: robot rời C0R0, chạy 35cm, bắt mảng đen chân
+    kệ làm "giao lộ 1/1" (cảm biến [1,1,1,1,1,1] — C0R0 là ngã BA nên chỉ cho 4/6),
+    rồi advance khởi hành khi ĐÃ cách kệ 3.3cm. Log ghi "✅ tới Kệ 3" và bước luồn
+    càng tiến lên mù → HÚC THẲNG VÀO KỆ.
+    Và vì bước căn giữa lúc chạm lúc không, lỗi này lúc có lúc không — đúng cái
+    "lúc dừng đúng, lúc lao vào kệ" đuổi mãi không ra.
+    """
+    if tren_giao_lo:
+        return (NODE_DAU_TU_START, TOWARD_SHELVES)
+    return START_POSE
+
+
 # Điểm cuối KHÔNG được rút ra bằng lệnh ("back", N).
 # Ô xuất phát nằm giữa khoảng ĐỨT 245mm của hàng R0 (docs/SA_BAN.md: R0 có line ở
 # x 89→615 và 782→1208, ô start nằm trong chỗ hở) — không có line nào để bám khi

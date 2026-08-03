@@ -34,6 +34,7 @@ sys.path.insert(0, ROOT)
 os.environ.setdefault("GPIOZERO_PIN_FACTORY", "mock")
 os.environ.setdefault("GPIOZERO_MOCK_PIN_CLASS", "mockpwmpin")
 
+import navigation
 import config
 from control.lift import MAX_LEVEL, Lift, PalletSensors
 from control.motion import LineSensor, Motion
@@ -1182,6 +1183,32 @@ class TestExitStartZone(unittest.TestCase):
                 self.assertTrue(m.exit_start_zone(timeout=3.0))
         self.assertLess(time.time() - t0, 0.3)
 
+    def test_flag_is_set_when_alignment_runs_onto_the_intersection(self):
+        """Căn giữa chạm giao lộ → phải BÁO RA, vì lúc đó robot đứng trên C0R0.
+
+        ⚠️ HỒI QUY (đâm kệ 03/08): trước đây chỉ ghi log "ROUTE_START sẽ đếm" rồi
+        thôi. Route KHÔNG đếm được giao lộ đang đứng lên — navigate_intersections()
+        mở đầu bằng _escape_intersection(). Xem navigation.pose_sau_xuat_phat.
+        """
+        m = self._motion([1, 1, 1, 0, 0, 0])
+        m.follow_line = MagicMock(return_value=(True, [1, 1, 1, 1, 0, 0]))
+        with patch.object(config, "EXIT_START_BLIND_TIME", 0.0):
+            with patch.object(config, "EXIT_START_ALIGN_TIME", 1.0):
+                self.assertTrue(m.exit_start_zone(timeout=3.0))
+        self.assertTrue(m.tren_giao_lo_dau)
+        self.assertEqual(navigation.pose_sau_xuat_phat(m.tren_giao_lo_dau),
+                         (navigation.NODE_DAU_TU_START, navigation.TOWARD_SHELVES))
+
+    def test_flag_stays_down_when_alignment_does_not_reach_it(self):
+        """Không chạm giao lộ → pose vẫn là START, route giữ nguyên lệnh forward."""
+        m = self._motion([1, 1, 1, 0, 0, 0])
+        with patch.object(config, "EXIT_START_BLIND_TIME", 0.0):
+            with patch.object(config, "EXIT_START_ALIGN_TIME", 0.05):
+                self.assertTrue(m.exit_start_zone(timeout=3.0))
+        self.assertFalse(m.tren_giao_lo_dau)
+        self.assertEqual(navigation.pose_sau_xuat_phat(m.tren_giao_lo_dau),
+                         navigation.START_POSE)
+
     def test_fails_when_line_never_found(self):
         """Hết timeout mà không thấy line → False, không báo thành công."""
         m = self._motion([0, 0, 0, 0, 0, 0])
@@ -1368,6 +1395,36 @@ class TestAdvanceToEnd(unittest.TestCase):
         m.get_distance = lambda: seq.pop(0) if len(seq) > 1 else seq[0]
         self.assertTrue(m.advance_to_end(timeout=3.0),
                         "phải dừng bằng siêu âm chứ không chạy tới hết line")
+
+
+class TestPoseSauXuatPhat(unittest.TestCase):
+    """Căn giữa chạy tới C0R0 thì pose PHẢI là C0R0, không phải START.
+
+    ⚠️ HỒI QUY — đây là lỗi đâm kệ ngày 03/08, và nó KHÔNG nằm ở siêu âm.
+    exit_start_zone() căn giữa line R0, và bước căn đó có lúc chạy tới tận giao lộ
+    đầu tiên, có lúc không (tuỳ robot đặt lệch bao nhiêu trong ô 400x400mm). Khi
+    nó tới nơi mà pose vẫn báo START, route "tiến 1 giao lộ" sẽ rời C0R0 rồi đi
+    tiếp 35cm và bắt MẢNG ĐEN CHÂN KỆ làm giao lộ. advance khởi hành khi robot đã
+    cách kệ 3.3cm; log ghi "✅ tới Kệ 3"; bước luồn càng húc thẳng vào kệ.
+    Tính bất định của bước căn giữa chính là "lúc dừng đúng, lúc lao vào kệ".
+    """
+
+    def test_standing_on_the_first_intersection_gives_the_C0R0_pose(self):
+        self.assertEqual(navigation.pose_sau_xuat_phat(True),
+                         (navigation.NODE_DAU_TU_START, navigation.TOWARD_SHELVES))
+
+    def test_not_standing_on_it_gives_START_POSE(self):
+        self.assertEqual(navigation.pose_sau_xuat_phat(False), navigation.START_POSE)
+
+    def test_route_from_C0R0_to_shelf3_no_longer_counts_an_intersection(self):
+        """Đứng trên C0R0 rồi thì chỉ còn ADVANCE — không được tiến giao lộ nào nữa."""
+        route, _ = navigation.plan(navigation.pose_sau_xuat_phat(True), "SHELF0")
+        self.assertEqual(route, [("advance",)],
+                         "còn lệnh forward = robot sẽ đi lố qua kệ")
+
+    def test_route_from_START_still_has_the_one_forward(self):
+        route, _ = navigation.plan(navigation.pose_sau_xuat_phat(False), "SHELF0")
+        self.assertEqual(route, [("forward", 1), ("advance",)])
 
 
 class TestTurnRecenterAfterForward(unittest.TestCase):

@@ -493,7 +493,11 @@ class Robot:
         max_attempts = config.MAX_TIER_RETRIES + 1
         for attempt in range(1, max_attempts + 1):
             if self.motion.exit_start_zone():
-                self.pose = navigation.START_POSE
+                # Bước căn giữa CÓ THỂ đã chạy tới tận C0R0 — khi đó pose là C0R0
+                # chứ không phải START, nếu không route đi lố một giao lộ và
+                # advance khởi hành khi đã sát kệ. Xem navigation.pose_sau_xuat_phat.
+                self.pose = navigation.pose_sau_xuat_phat(
+                    getattr(self.motion, "tren_giao_lo_dau", False) is True)
                 return State.DETECT_SIDE
             logger.warning("Thoát ô start thất bại — thử lại (lần %d/%d)",
                            attempt, max_attempts)

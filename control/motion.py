@@ -376,6 +376,8 @@ class Motion:
         được đặt ở chỗ không có hình in nào dưới cảm biến.
         """
         blind = getattr(config, "EXIT_START_BLIND_TIME", 0.0)
+        # Bước căn giữa có thể chạy tới tận C0R0 — caller cần biết để lấy đúng pose.
+        self.tren_giao_lo_dau = False
         logger.info("Thoát ô start — mù %.2fs (qua vùng in mascot) rồi tìm line R0 "
                     "(speed=%d%%)", blind, speed)
         start = time.time()
@@ -427,7 +429,13 @@ class Motion:
         while time.time() - align_start < config.EXIT_START_ALIGN_TIME:
             at_intersection, values = self.follow_line(speed)
             if at_intersection:
-                logger.info("Chạm giao lộ khi căn line — dừng căn, ROUTE_START sẽ đếm")
+                # ⚠️ KHÔNG phải "ROUTE_START sẽ đếm" — route KHÔNG đếm được cái
+                # giao lộ robot đang đứng lên (navigate_intersections mở đầu bằng
+                # _escape_intersection). Lý do đầy đủ: navigation.pose_sau_xuat_phat.
+                self.tren_giao_lo_dau = True
+                logger.info("Chạm giao lộ khi căn line — robot ĐANG ĐỨNG TRÊN C0R0. "
+                            "Caller lấy pose bằng navigation.pose_sau_xuat_phat"
+                            "(motion.tren_giao_lo_dau), KHÔNG dùng START_POSE.")
                 self.stop()
                 break
             if sum(values) == 0:
