@@ -1459,7 +1459,14 @@ class Motion:
         return False
 
     def retreat_from_shelf(self, target_cm: float = config.RETREAT_DISTANCE,
-                           speed: float = config.APPROACH_SPEED) -> bool:
+                           speed: float = config.APPROACH_SPEED,
+                           quang_cm: float | None = None) -> bool:
+        """Lùi ra khỏi kệ / khu nhà máy.
+
+        `quang_cm` — lùi ĐÚNG bấy nhiêu centimet thay vì theo quãng đã luồn vào.
+        Dùng khi rút khỏi NHÀ MÁY: ở đó robot không hề luồn càng nên quãng luồn của
+        lần bốc trước không liên quan gì. Xem config.RETREAT_AFTER_DROP_CM.
+        """
         if self._distance_sensor is None:
             logger.error("Không có cảm biến siêu âm — không thể lùi an toàn")
             return False
@@ -1473,8 +1480,11 @@ class Motion:
         # Nhánh kẹt chỉ bật sau RETREAT_STUCK_TIME = 0.8s nên không kịp cứu.
         cong_hang = getattr(self, "dang_cong_hang", False)
         if cong_hang:
-            logger.info("Lùi ra: ĐANG CÕNG HÀNG — bỏ qua siêu âm, lùi theo quãng đã "
-                        "luồn vào (%d xung)", getattr(self, "xung_da_luon", 0))
+            logger.info(
+                "Lùi ra: ĐANG CÕNG HÀNG — bỏ qua siêu âm, lùi theo %s",
+                f"{quang_cm:.1f}cm chỉ định (rút khỏi NHÀ MÁY, không luồn càng)"
+                if quang_cm is not None
+                else f"quãng đã luồn vào ({getattr(self, 'xung_da_luon', 0)} xung)")
         self._doc_xung()          # xả bộ đếm trước khi đo quãng lùi
         lui_xung = 0
         start = time.time()
@@ -1521,15 +1531,19 @@ class Motion:
                 # 1.5s đi được ít hơn hẳn lúc đi không, robot lùi ngắn quá rồi xoay
                 # lệch khỏi line. Không cần hằng số mới — quãng luồn vào chính là
                 # quãng phải lùi ra, và creep_until vừa đếm nó xong.
-                can = (getattr(self, "xung_da_luon", 0)
-                       * getattr(config, "RETREAT_BACKOUT_MARGIN", 1.15))
+                if quang_cm is not None:
+                    can = quang_cm * config.ENCODER_PULSES_PER_CM
+                else:
+                    can = (getattr(self, "xung_da_luon", 0)
+                           * getattr(config, "RETREAT_BACKOUT_MARGIN", 1.15))
                 if can > 0:
                     lui_xung += self._doc_xung()
                     if lui_xung >= can:
                         self.stop()
-                        logger.info("Đã lùi %d/%.0f xung (= quãng đã luồn vào × %.2f) "
-                                    "— rời kệ", lui_xung, can,
-                                    config.RETREAT_BACKOUT_MARGIN)
+                        logger.info(
+                            "Đã lùi %d/%.0f xung (%s) — rời kệ", lui_xung, can,
+                            f"{quang_cm:.1f}cm chỉ định" if quang_cm is not None
+                            else f"quãng đã luồn vào × {config.RETREAT_BACKOUT_MARGIN:.2f}")
                         return True
                     if troi < config.APPROACH_TIMEOUT:
                         time.sleep(0.01)

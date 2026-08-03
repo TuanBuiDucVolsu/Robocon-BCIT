@@ -153,8 +153,13 @@ def build_robot(scenario, rec):
                 a.approach)
         return True
 
-    def retreat():
-        rec.add("căn", f"lùi ra {config.RETREAT_DISTANCE}cm", a.retreat)
+    def retreat(*_a, quang_cm=None, **_k):
+        # `quang_cm` — main truyền khi rút khỏi NHÀ MÁY sau khi thả (ở đó robot
+        # không luồn càng nên không có quãng luồn để lấy). Chữ ký phải khớp
+        # Motion.retreat_from_shelf, bỏ sót là TypeError giữa chừng.
+        rec.add("căn",
+                f"lùi ra {quang_cm:.0f}cm" if quang_cm is not None
+                else f"lùi ra {config.RETREAT_DISTANCE}cm", a.retreat)
         return True
 
     # Chữ ký phải khớp Vision.classify_pair(level) — main gọi classify_pair(

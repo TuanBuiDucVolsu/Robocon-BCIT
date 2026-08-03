@@ -983,6 +983,31 @@ class TestRetreatTheoQuangLuonVao(unittest.TestCase):
         self.assertIn("quãng đã luồn vào", ghi)
         self.assertNotIn("lùi mù", ghi)
 
+    def test_drop_retreat_uses_the_GIVEN_distance_not_the_creep_distance(self):
+        """⚠️ HỒI QUY: lùi sau khi THẢ không được dùng quãng luồn của lần BỐC.
+
+        Ở nhà máy robot KHÔNG hề luồn càng — nó chỉ tiến vào mảng in rồi hạ càng.
+        Dùng lại quãng luồn của lần bốc ở kệ (~17-20cm) là lùi QUÁ XA: robot vượt
+        qua giao lộ, rồi lệnh "LÙI 1 giao lộ" kế đó đi tìm giao lộ PHÍA SAU NỮA →
+        sai hàng và mất bám line. Đo trên robot 03/08: thả xong ở nhà máy 1, sang
+        nhà máy 2 thì "đi quá và thả lệch", lùi về là sai đường.
+        """
+        m = self._motion(xung_moi_lan=200, xung_da_luon=2000)   # quãng luồn RẤT dài
+        m.dang_cong_hang = True
+        with self.assertLogs("control.motion", level="INFO") as nk:
+            self.assertTrue(m.retreat_from_shelf(quang_cm=10.0))
+        ghi = "\n".join(nk.output)
+        self.assertIn("10.0cm chỉ định", ghi)
+        self.assertNotIn("quãng đã luồn vào", ghi)
+
+    def test_pickup_retreat_still_uses_the_creep_distance(self):
+        """Lùi sau khi BỐC vẫn phải rút càng ra khỏi khe pallet — giữ nguyên."""
+        m = self._motion(xung_moi_lan=200, xung_da_luon=400)
+        m.dang_cong_hang = True
+        with self.assertLogs("control.motion", level="INFO") as nk:
+            self.assertTrue(m.retreat_from_shelf())
+        self.assertIn("quãng đã luồn vào", "\n".join(nk.output))
+
     def test_carrying_ignores_a_lucky_sonar_sample_that_says_far_enough(self):
         """⚠️ HỒI QUY: cõng hàng thì số đo ≥ mục tiêu KHÔNG có nghĩa là đã lùi đủ.
 

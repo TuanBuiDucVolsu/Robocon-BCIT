@@ -377,8 +377,15 @@ class Robot:
         self.lift.go_to_level(0)
         return False
 
-    def _retreat_from_shelf(self, context: str):
-        if not self.motion.retreat_from_shelf():
+    def _retreat_from_shelf(self, context: str, quang_cm: float | None = None):
+        """Lùi khỏi kệ / khu nhà máy.
+
+        `quang_cm` — lùi ĐÚNG bấy nhiêu cm. Truyền khi rút khỏi NHÀ MÁY sau khi
+        thả: ở đó robot không hề luồn càng nên quãng luồn của lần bốc trước không
+        liên quan, mà dùng nó là lùi quá xa và vượt qua giao lộ.
+        Xem config.RETREAT_AFTER_DROP_CM.
+        """
+        if not self.motion.retreat_from_shelf(quang_cm=quang_cm):
             logger.warning("Lùi khỏi kệ thất bại (timeout) — %s", context)
 
     # ----------------------------------------------------------
@@ -733,7 +740,8 @@ class Robot:
         """Thả 1 kiện rồi nâng lại càng — chuỗi ở control/handling.py."""
         # LÙI nằm GIỮA thả và nâng càng — xem control/handling.drop_side.
         ok = drop_side(self.lift, side, last=False,
-                       lui=lambda: self._retreat_from_shelf("sau khi thả"))
+                       lui=lambda: self._retreat_from_shelf("sau khi thả",
+                                        quang_cm=config.RETREAT_AFTER_DROP_CM))
         # Xoá nhãn DÙ IR BÁO HỎNG: nếu kiện thật sự còn trên càng thì bước sau đã
         # hỏng rồi, còn giữ nhãn thì cờ cõng hàng kẹt bật và phá NỐT chặng về.
         self._da_tha_xong(side)
@@ -865,7 +873,8 @@ class Robot:
             # không xác nhận (càng nằm thấp mà robot chạy tiếp là cạ sàn/vướng kệ).
             dropped = drop_side(
                 self.lift, side, last=True,
-                lui=lambda: self._retreat_from_shelf(f"sau khi thả {label}"))
+                lui=lambda: self._retreat_from_shelf(f"sau khi thả {label}",
+                                        quang_cm=config.RETREAT_AFTER_DROP_CM))
             self._da_tha_xong(side)
             if dropped and trusted:
                 self.packages_delivered += 1

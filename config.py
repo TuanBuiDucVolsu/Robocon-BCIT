@@ -823,6 +823,18 @@ RECENTER_MAX_TIME = 5.0       # Giây chặn trên: encoder hỏng thì không c
 # > 1 để càng ra HẲN khỏi khe pallet chứ không dừng ngay ở mép.
 RETREAT_BACKOUT_MARGIN = 1.15
 
+# Quãng LÙI sau khi THẢ HÀNG ở nhà máy (cm, đo bằng encoder).
+# ⚠️ KHÁC hẳn lùi sau khi BỐC. Lùi sau khi bốc phải rút càng ra khỏi khe pallet nên
+# dùng đúng quãng đã luồn vào (~17-20cm). Nhưng ở NHÀ MÁY robot KHÔNG hề luồn càng
+# — nó chỉ tiến vào mảng in rồi hạ càng. Dùng lại quãng luồn của lần bốc là lùi QUÁ
+# XA: robot vượt qua giao lộ, rồi lệnh "LÙI 1 giao lộ" kế đó đi tìm giao lộ PHÍA
+# SAU NỮA → sai hàng, và mọi chặng sau lệch theo.
+# Đo trên robot 03/08: thả xong ở nhà máy 1, sang nhà máy 2 thì "đi quá và thả
+# lệch", rồi lùi về là sai đường và mất bám line.
+# Ở đây chỉ cần lùi đủ để càng KHÔNG QUỆT vào kiện vừa đặt khi nâng lên — kiện sâu
+# 9cm, nên 10cm là vừa, và vẫn còn cách giao lộ một đoạn để lệnh LÙI làm việc.
+RETREAT_AFTER_DROP_CM = 10.0
+
 # Quãng LÙI tối thiểu trước khi tin một tín hiệu giao lộ (đo bằng encoder).
 # Vì sao không lọc bằng HÌNH DẠNG tín hiệu: đo trên robot 03/08 cho thấy chữ ký
 # GIẢ ở chân kệ và chữ ký THẬT ở giao lộ có cùng một dạng —
