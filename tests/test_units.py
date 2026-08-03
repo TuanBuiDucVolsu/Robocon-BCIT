@@ -1567,6 +1567,10 @@ class TestAdvanceToEnd(unittest.TestCase):
             return False, v
 
         m.follow_line = follow
+        # Chữ ký giao lộ THẬT: 4 mắt đen ĐẬM (ADC bão hoà), đo trên robot 03/08.
+        # advance_to_end() đếm mắt đen đậm để bác vạch thường bị ngưỡng thích nghi
+        # thổi lên, nên mọi bài kiểm nhánh "gặp giao lộ" phải cấp chữ ký thật.
+        m.read_line_sensor_raw = lambda: [v / 1023 for v in (917, 914, 0, 0, 0, 0)]
         return m
 
     def test_end_of_line_after_seeing_it_is_success(self):
@@ -1658,6 +1662,29 @@ class TestAdvanceToEnd(unittest.TestCase):
         ghi = "\n".join(nk.output)
         self.assertEqual(ghi.count("BỎ QUA GAI NHIỄU"), config.ULTRASONIC_MAX_GLITCH)
         self.assertIn("CHẶN CỨNG", ghi)
+
+    def test_plain_line_inflated_by_adaptive_threshold_is_not_an_intersection(self):
+        """⚠️ HỒI QUY: advance cũng phải đếm mắt đen ĐẬM, không tin ngưỡng thích nghi.
+
+        Đo trên robot 03/08, chặng tới khu Samsung:
+            ADC [834, 270, 0, 0, 0, 930]  ngưỡng 279  → chỉ 3 mắt đen ĐẬM
+        Vạch line thường (mắt 3,4,5) bị thổi thành giao lộ vì mắt 2 đọc 270, lọt
+        dưới ngưỡng 279. Advance thoát giao lộ OAN hai lần rồi lạc và báo "bản đồ
+        không khớp" — robot đứng chết ở giao lộ trước khu Samsung.
+        """
+        m = self._motion([[0, 0, 1, 1, 0, 0]] * 30 + [[0] * 6])
+        m.read_line_sensor_raw = lambda: [v / 1023 for v in (834, 270, 0, 0, 0, 930)]
+        m.follow_line = lambda speed: (True, [0, 1, 1, 1, 1, 0])
+        m.get_distance = lambda *a, **k: 100.0
+        m.dang_cong_hang = True          # bỏ siêu âm, chỉ còn line quyết định
+        with self.assertLogs("control.motion", level="INFO") as nk:
+            m.advance_to_end(timeout=1.0)
+        ghi = "\n".join(nk.output)
+        self.assertIn("mắt đen ĐẬM", ghi)
+        self.assertNotIn("Bản đồ hoặc vị trí không khớp", ghi)
+        self.assertGreater(m.forward.call_count, 1,
+                           "bác tín hiệu mà không chạy lại = khoá chết, vì "
+                           "follow_line() tự stop() khi thấy giao lộ")
 
     def test_intersection_right_after_escape_is_forgiven_once(self):
         """⚠️ HỒI QUY: escape chạm trần rồi bỏ cuộc → advance đọc lại chính nó.

@@ -639,61 +639,75 @@ class Motion:
             logger.info("Route rỗng — robot đã ở đích, không cần di chuyển")
             return True
 
-        for i, step in enumerate(route):
-            action = step[0]
-            # ⚠️ TRƯỚC KHI XOAY, đưa TÂM XOAY về đúng giao lộ.
-            # Thanh cảm biến ở ĐẦU xe, trục bánh dẫn động cách nó 12cm về phía sau
-            # (đo trên robot). Tiến tới giao lộ thì cảm biến nằm TRÊN vạch còn trục
-            # còn cách vạch 12cm — xoay tại chỗ lúc đó là quay quanh một điểm nằm
-            # TRƯỚC giao lộ, xoay xong thanh cảm biến văng ra vùng trắng.
-            # Chiều LÙI đã có bước bù này sẵn (REVERSE_RECENTER_TIME) nên xoay sau
-            # khi lùi vẫn ổn; chiều TIẾN thì chưa có gì. Đo trên robot (option 8):
-            #     xoay sau khi LÙI  → rời giao lộ [0,0,0,1,1,0]  còn thấy line
-            #     xoay sau khi TIẾN → rời giao lộ [0,0,0,0,0,0]  TRẮNG HẾT → gãy
-            # Cả hai chiều đều cần tiến thêm ĐÚNG 12cm, nên dùng chung hằng số.
-            if (action in ("left", "right") and i > 0
-                    and route[i - 1][0] == "forward"):
-                if self.tien_bu_cm(config.RECENTER_CM,
-                                   config.REVERSE_RECENTER_SPEED, "trước khi xoay"):
-                    pass
-                elif config.TURN_RECENTER_TIME > 0:
-                    logger.info("Tiến bù %.2fs ở %d%% để tâm xoay về đúng giao lộ "
-                                "(CHƯA calibrate encoder — chạy mù theo đồng hồ)",
-                                config.TURN_RECENTER_TIME,
-                                config.REVERSE_RECENTER_SPEED)
-                    self.forward(config.REVERSE_RECENTER_SPEED)
-                    time.sleep(config.TURN_RECENTER_TIME)
-                    self.stop()
-            if action == "forward":
-                # Gọi MỘT lần cho cả N giao lộ (chia nhỏ sẽ ép dừng ở từng cái, mất
-                # hết cái lợi của chế độ chạy liền); tiến độ ghi qua callback.
-                count = max(0, step[1])
-                if count and not self.navigate_intersections(
-                        count,
-                        on_reached=lambda: self.last_route_progress.append(("forward", 1))):
-                    return False
-            elif action == "back":
-                # Rút khỏi kệ/nhà máy mà không xoay 180° — cũng đi từng giao lộ một
-                # để biết chính xác dừng ở đâu khi hỏng giữa chừng.
-                for _ in range(max(0, step[1])):
-                    if not self.back_to_intersection(1):
+        # Cờ "đang đứng trên C0R0" chỉ đúng NGAY SAU exit_start_zone. Nó được đọc
+        # một lần để chọn pose, rồi phải hết hiệu lực — nhưng trước đây không ai xoá
+        # nên nó bật suốt trận. Đo trên robot 03/08: ở giây 3.76 của chặng tới khu
+        # Samsung, cơ chế "tự sửa C0R0" của advance kích hoạt CÁCH C0R0 CẢ SÂN.
+        # Xoá ở CUỐI route đầu tiên, để chặng START (nơi cờ có nghĩa) vẫn dùng được.
+        xoa_co_sau_route = getattr(self, "tren_giao_lo_dau", False)
+
+        try:
+            for i, step in enumerate(route):
+                action = step[0]
+                # ⚠️ TRƯỚC KHI XOAY, đưa TÂM XOAY về đúng giao lộ.
+                # Thanh cảm biến ở ĐẦU xe, trục bánh dẫn động cách nó 12cm về phía sau
+                # (đo trên robot). Tiến tới giao lộ thì cảm biến nằm TRÊN vạch còn trục
+                # còn cách vạch 12cm — xoay tại chỗ lúc đó là quay quanh một điểm nằm
+                # TRƯỚC giao lộ, xoay xong thanh cảm biến văng ra vùng trắng.
+                # Chiều LÙI đã có bước bù này sẵn (REVERSE_RECENTER_TIME) nên xoay sau
+                # khi lùi vẫn ổn; chiều TIẾN thì chưa có gì. Đo trên robot (option 8):
+                #     xoay sau khi LÙI  → rời giao lộ [0,0,0,1,1,0]  còn thấy line
+                #     xoay sau khi TIẾN → rời giao lộ [0,0,0,0,0,0]  TRẮNG HẾT → gãy
+                # Cả hai chiều đều cần tiến thêm ĐÚNG 12cm, nên dùng chung hằng số.
+                if (action in ("left", "right") and i > 0
+                        and route[i - 1][0] == "forward"):
+                    if self.tien_bu_cm(config.RECENTER_CM,
+                                       config.REVERSE_RECENTER_SPEED, "trước khi xoay"):
+                        pass
+                    elif config.TURN_RECENTER_TIME > 0:
+                        logger.info("Tiến bù %.2fs ở %d%% để tâm xoay về đúng giao lộ "
+                                    "(CHƯA calibrate encoder — chạy mù theo đồng hồ)",
+                                    config.TURN_RECENTER_TIME,
+                                    config.REVERSE_RECENTER_SPEED)
+                        self.forward(config.REVERSE_RECENTER_SPEED)
+                        time.sleep(config.TURN_RECENTER_TIME)
+                        self.stop()
+                if action == "forward":
+                    # Gọi MỘT lần cho cả N giao lộ (chia nhỏ sẽ ép dừng ở từng cái, mất
+                    # hết cái lợi của chế độ chạy liền); tiến độ ghi qua callback.
+                    count = max(0, step[1])
+                    if count and not self.navigate_intersections(
+                            count,
+                            on_reached=lambda: self.last_route_progress.append(("forward", 1))):
                         return False
-                    self.last_route_progress.append(("back", 1))
-            elif action == "left":
-                self.turn_left_90()
-                self.last_route_progress.append(step)
-            elif action == "right":
-                self.turn_right_90()
-                self.last_route_progress.append(step)
-            elif action == "advance":
-                if not self.advance_to_end():
+                elif action == "back":
+                    # Rút khỏi kệ/nhà máy mà không xoay 180° — cũng đi từng giao lộ một
+                    # để biết chính xác dừng ở đâu khi hỏng giữa chừng.
+                    for _ in range(max(0, step[1])):
+                        if not self.back_to_intersection(1):
+                            return False
+                        self.last_route_progress.append(("back", 1))
+                elif action == "left":
+                    self.turn_left_90()
+                    self.last_route_progress.append(step)
+                elif action == "right":
+                    self.turn_right_90()
+                    self.last_route_progress.append(step)
+                elif action == "advance":
+                    if not self.advance_to_end():
+                        return False
+                    self.last_route_progress.append(step)
+                else:
+                    logger.error("Lệnh route không hợp lệ: %s — dừng route", step)
+                    self.stop()
                     return False
-                self.last_route_progress.append(step)
-            else:
-                logger.error("Lệnh route không hợp lệ: %s — dừng route", step)
-                self.stop()
-                return False
-        return True
+            return True
+        finally:
+            # Cờ chỉ đúng NGAY SAU exit_start_zone; hết route đầu là hết hiệu
+            # lực. Đặt ở finally để mọi lối thoát (kể cả return False giữa
+            # chừng) đều xoá — bỏ sót một lối là cờ sống tiếp cả trận.
+            if xoa_co_sau_route:
+                self.tren_giao_lo_dau = False
 
     def _do_lai_khi_dung(self, dist_quyet: float,
                          base_speed: float) -> tuple[float, bool]:
@@ -877,6 +891,29 @@ class Motion:
 
             at_intersection, values = self.follow_line(base_speed)
             if at_intersection:
+                # ĐẾM MẮT ĐEN ĐẬM trước đã — y như back_to_intersection.
+                # Đo trên robot 03/08, chặng tới khu Samsung:
+                #     ADC [834, 270, 0, 0, 0, 930]  ngưỡng 279  → 3 đen đậm
+                #     ADC [591, 207, 0, 0, 0, 928]  ngưỡng 278  → 3 đen đậm
+                # Vạch line THƯỜNG (mắt 3,4,5) bị NGƯỠNG THÍCH NGHI thổi thành giao
+                # lộ: mắt 2 đọc 207-270, không đen, chỉ lọt dưới ngưỡng ~278. Hai
+                # tín hiệu giả này làm advance thoát giao lộ oan hai lần rồi lạc.
+                raw_gl = self.read_line_sensor_raw()
+                if LineSensor.dem_den_dam(raw_gl) < config.INTERSECTION_THRESHOLD:
+                    logger.info(
+                        "Advance: bỏ qua tín hiệu giao lộ ở %.2fs — chỉ %d/%d mắt đen "
+                        "ĐẬM, ADC %s. Vạch thường bị ngưỡng thích nghi thổi lên.",
+                        time.time() - start, LineSensor.dem_den_dam(raw_gl),
+                        config.INTERSECTION_THRESHOLD,
+                        [int(round(v * 1023)) for v in raw_gl])
+                    # follow_line() vừa gọi stop() — phải ra lệnh chạy lại, không thì
+                    # vòng sau nó lại thấy, lại phanh, robot đứng im vĩnh viễn.
+                    self.forward(base_speed)
+                    acquired = True
+                    lost_since = None
+                    time.sleep(0.01)
+                    continue
+
                 # TỰ SỬA khi niềm tin "đang đứng trên C0R0" sai đúng một giao lộ.
                 # Cờ đó do bước căn giữa của exit_start_zone() đặt, dựa trên MỘT
                 # lần đọc cảm biến giữa lúc robot còn xiên — không có cách nào chắc
