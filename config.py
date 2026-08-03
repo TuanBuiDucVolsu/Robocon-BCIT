@@ -429,6 +429,28 @@ LINE_KP = 16.0               # CHƯA calibrate thật
 LINE_KD = 6.5                # CHƯA calibrate thật
 INTERSECTION_THRESHOLD = 4   # Số mắt (/6) thấy line cùng lúc để nhận là giao lộ
 
+# Ngưỡng "đen ĐẬM" — chặt hơn hẳn ngưỡng thích nghi, dùng khi cần BẰNG CHỨNG chứ
+# không chỉ cần tín hiệu. Đo trên robot 03/08, cùng một robot cùng một buổi:
+#
+#   giao lộ C0R0 THẬT     ADC [921, 921,   0,   0,   0,   0]  → 4 mắt đen đậm
+#   "giao lộ" lúc căn giữa ADC [224, 232,   0,   0, 263, 826]  → 2 mắt đen đậm
+#
+# 224 và 232 KHÔNG phải đen — chúng chỉ lọt xuống dưới ngưỡng thích nghi (248) vì
+# dải sáng-tối lúc đó hẹp. Đó là MÉP MỜ của vạch R0 khi robot còn xiên, mà bước căn
+# giữa thì robot đang xiên theo đúng định nghĩa của nó. Nên đếm theo ngưỡng thích
+# nghi là bước căn giữa gần như luôn tự bịa ra một giao lộ.
+# 0.15 × 1023 ≈ ADC 153: dưới mức đó là mặt in đen thật, không phải mép vạch.
+LINE_STRICT_BLACK = 0.15
+
+# Đo lại khi ĐỨNG YÊN mà GẦN hơn mục tiêu quá mức này → approach_shelf THẤT BẠI,
+# không trả True nữa. Đứng gần hơn mục tiêu nhiều nghĩa là có gì đó ở TRƯỚC đã sai
+# (pose lệch một giao lộ, route đi lố), và bước kế tiếp — luồn càng — sẽ tiến MÙ
+# theo niềm tin "còn cách 11.9cm". Đó chính là cú húc vào kệ ngày 03/08: log đã in
+# rõ "bù THIẾU, nâng APPROACH_STOP_MARGIN 8.6 cm" rồi vẫn báo ✅ và đi tiếp.
+# Đây là lưới an toàn ĐỘC LẬP với mọi cơ chế điều hướng phía trên: dù pose sai kiểu
+# gì, dừng cách kệ 3cm là không thể coi là "đã tới vị trí lấy hàng".
+APPROACH_ARRIVAL_TOLERANCE = 4.0   # cm
+
 # --- Rời khỏi giao lộ (Motion._escape_intersection) ---
 # Chạy tới khi CẢM BIẾN hết báo giao lộ, không chạy mù một khoảng cố định.
 # Bản cũ chạy mù 0.3s — số viết cứng, chưa đo. Đo trên bản in: vạch dọc C0 rộng 20mm

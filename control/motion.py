@@ -105,6 +105,19 @@ class LineSensor:
         threshold = LineSensor.nguong_cho(raw)
         return [1 if v < threshold else 0 for v in raw]
 
+    @staticmethod
+    def dem_den_dam(raw: list[float]) -> int:
+        """Đếm số mắt đen ĐẬM — theo ngưỡng TUYỆT ĐỐI chặt, KHÔNG phải thích nghi.
+
+        Dùng khi cần BẰNG CHỨNG một mảng in đen thật, chứ không chỉ cần tín hiệu.
+        Ngưỡng thích nghi tự co theo dải sáng-tối của từng lần đọc, nên khi cả
+        thanh cùng nhìn vào vùng nhạt thì mép mờ của vạch cũng bị đếm là đen.
+        Lý do đầy đủ + số đo: config.LINE_STRICT_BLACK.
+        """
+        if not raw:
+            return 0
+        return sum(1 for v in raw if v <= config.LINE_STRICT_BLACK)
+
     def read(self) -> list[int]:
         """Đọc digital (0/1) sau ngưỡng — tương thích API cũ."""
         return self.digital_from_raw(self.read_raw())
@@ -429,13 +442,30 @@ class Motion:
         while time.time() - align_start < config.EXIT_START_ALIGN_TIME:
             at_intersection, values = self.follow_line(speed)
             if at_intersection:
+                # ĐÒI BẰNG CHỨNG ĐẬM trước khi tin. Cờ này quyết định pose, mà
+                # pose sai một giao lộ là robot đi lố vào kệ (hoặc dừng hẳn giữa
+                # đường). Bước căn giữa lại là lúc robot XIÊN nhất, nên tín hiệu
+                # giao lộ ở đây rất hay là mép mờ của chính vạch R0.
+                # Số đo phân biệt hai ca: config.LINE_STRICT_BLACK.
+                raw_gl = self.read_line_sensor_raw()
+                dam = LineSensor.dem_den_dam(raw_gl)
+                if dam < config.INTERSECTION_THRESHOLD:
+                    logger.info(
+                        "Căn line: tín hiệu giao lộ NHẠT (%d/%d mắt đen đậm, ADC %s) "
+                        "— nhiều khả năng là mép vạch khi robot còn xiên, KHÔNG phải "
+                        "C0R0. Bỏ qua, căn tiếp.",
+                        dam, config.INTERSECTION_THRESHOLD,
+                        [int(round(v * 1023)) for v in raw_gl])
+                    time.sleep(0.01)
+                    continue
                 # ⚠️ KHÔNG phải "ROUTE_START sẽ đếm" — route KHÔNG đếm được cái
                 # giao lộ robot đang đứng lên (navigate_intersections mở đầu bằng
                 # _escape_intersection). Lý do đầy đủ: navigation.pose_sau_xuat_phat.
                 self.tren_giao_lo_dau = True
-                logger.info("Chạm giao lộ khi căn line — robot ĐANG ĐỨNG TRÊN C0R0. "
-                            "Caller lấy pose bằng navigation.pose_sau_xuat_phat"
-                            "(motion.tren_giao_lo_dau), KHÔNG dùng START_POSE.")
+                logger.info("Chạm giao lộ khi căn line (%d/%d mắt đen ĐẬM) — robot "
+                            "ĐANG ĐỨNG TRÊN C0R0. Caller lấy pose bằng "
+                            "navigation.pose_sau_xuat_phat(motion.tren_giao_lo_dau).",
+                            dam, config.INTERSECTION_THRESHOLD)
                 self.stop()
                 break
             if sum(values) == 0:
@@ -904,6 +934,18 @@ class Motion:
                     logger.info("Đã đến vị trí kệ — khoảng cách %.1fcm "
                                 "(mốc %.1f + bù trễ %.1f); đo lại lỗi",
                                 dist, target_cm, config.APPROACH_STOP_MARGIN)
+                # Lưới an toàn ĐỘC LẬP với điều hướng: xem
+                # config.APPROACH_ARRIVAL_TOLERANCE.
+                if 0 <= that < target_cm - config.APPROACH_ARRIVAL_TOLERANCE:
+                    logger.error(
+                        "Tiếp cận THẤT BẠI: đứng cách %.1fcm, GẦN hơn mục tiêu %.1fcm "
+                        "tới %.1fcm (cho phép %.1f). Không phải sai số tiếp cận — có "
+                        "gì đó TRƯỚC ĐÓ đã sai (pose lệch một giao lộ, route đi lố). "
+                        "KHÔNG báo đã tới, vì bước luồn càng sau đây sẽ tiến MÙ theo "
+                        "niềm tin còn cách %.1fcm và húc vào kệ.",
+                        that, target_cm, target_cm - that,
+                        config.APPROACH_ARRIVAL_TOLERANCE, target_cm)
+                    return False
                 return True
 
             # KHÔNG TIẾN THÊM ĐƯỢC → dừng, đừng húc tiếp.

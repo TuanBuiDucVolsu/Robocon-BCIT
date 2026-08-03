@@ -859,6 +859,26 @@ class TestApproachShelf(unittest.TestCase):
         m._forward_guided = MagicMock()
         return m
 
+    def test_arriving_far_too_close_is_a_FAILURE_not_a_success(self):
+        """⚠️ HỒI QUY (húc kệ 03/08): dừng ở 3.3cm khi mục tiêu 11.9 KHÔNG phải ✅.
+
+        Log hôm đó đã in đúng con số — "bù THIẾU, nâng APPROACH_STOP_MARGIN 8.6 cm"
+        — rồi vẫn trả True. Bước luồn càng sau đó tiến MÙ theo niềm tin "còn cách
+        11.9cm" và húc thẳng vào kệ. Đứng gần hơn mục tiêu nhiều nghĩa là có gì đó
+        TRƯỚC ĐÓ đã sai (pose lệch một giao lộ), và đây là lưới an toàn ĐỘC LẬP với
+        toàn bộ phần điều hướng.
+        """
+        m = self._motion([3.3])
+        with self.assertLogs("control.motion", level="ERROR") as nk:
+            self.assertFalse(m.approach_shelf(config.APPROACH_DISTANCE))
+        self.assertIn("Tiếp cận THẤT BẠI", "\n".join(nk.output))
+
+    def test_normal_arrival_is_still_a_success(self):
+        """Sai số tiếp cận bình thường vẫn phải ĐẠT — lưới trên không được quá chặt."""
+        gan = config.APPROACH_DISTANCE - config.APPROACH_ARRIVAL_TOLERANCE + 0.5
+        m = self._motion([gan])
+        self.assertTrue(m.approach_shelf(config.APPROACH_DISTANCE))
+
     def test_stops_early_by_the_lag_margin(self):
         """Dừng ở mốc + bù, không phải ở đúng mốc — bù độ trễ siêu âm."""
         moc = config.APPROACH_DISTANCE
@@ -1191,13 +1211,34 @@ class TestExitStartZone(unittest.TestCase):
         mở đầu bằng _escape_intersection(). Xem navigation.pose_sau_xuat_phat.
         """
         m = self._motion([1, 1, 1, 0, 0, 0])
-        m.follow_line = MagicMock(return_value=(True, [1, 1, 1, 1, 0, 0]))
+        m.follow_line = MagicMock(return_value=(True, [0, 0, 1, 1, 1, 1]))
+        # Chữ ký C0R0 THẬT đo trên robot 03/08 — 4 mắt ADC bão hoà 0.
+        m.read_line_sensor_raw = lambda: [v / 1023 for v in (921, 921, 0, 0, 0, 0)]
         with patch.object(config, "EXIT_START_BLIND_TIME", 0.0):
             with patch.object(config, "EXIT_START_ALIGN_TIME", 1.0):
                 self.assertTrue(m.exit_start_zone(timeout=3.0))
         self.assertTrue(m.tren_giao_lo_dau)
         self.assertEqual(navigation.pose_sau_xuat_phat(m.tren_giao_lo_dau),
                          (navigation.NODE_DAU_TU_START, navigation.TOWARD_SHELVES))
+
+    def test_faint_intersection_during_alignment_does_not_set_the_flag(self):
+        """⚠️ HỒI QUY: mép vạch mờ lúc robot XIÊN không được tính là C0R0.
+
+        Đo trên robot 03/08 — bước căn giữa báo "chạm giao lộ" với ADC
+        [224, 232, 0, 0, 263, 826]. 224/232 chỉ lọt dưới ngưỡng THÍCH NGHI (248),
+        không phải đen. Tin nó → pose = C0R0 trong khi robot còn cách 20cm → route
+        bỏ mất lệnh forward → advance đâm ngay vào C0R0 thật và báo "Bản đồ hoặc vị
+        trí không khớp", robot dừng hẳn giữa đường.
+        """
+        m = self._motion([1, 1, 1, 0, 0, 0])
+        m.follow_line = MagicMock(return_value=(True, [1, 1, 0, 0, 1, 0]))
+        m.read_line_sensor_raw = lambda: [v / 1023 for v in (224, 232, 0, 0, 263, 826)]
+        with patch.object(config, "EXIT_START_BLIND_TIME", 0.0):
+            with patch.object(config, "EXIT_START_ALIGN_TIME", 0.1):
+                self.assertTrue(m.exit_start_zone(timeout=3.0))
+        self.assertFalse(m.tren_giao_lo_dau)
+        self.assertEqual(navigation.pose_sau_xuat_phat(m.tren_giao_lo_dau),
+                         navigation.START_POSE)
 
     def test_flag_stays_down_when_alignment_does_not_reach_it(self):
         """Không chạm giao lộ → pose vẫn là START, route giữ nguyên lệnh forward."""
@@ -1395,6 +1436,24 @@ class TestAdvanceToEnd(unittest.TestCase):
         m.get_distance = lambda: seq.pop(0) if len(seq) > 1 else seq[0]
         self.assertTrue(m.advance_to_end(timeout=3.0),
                         "phải dừng bằng siêu âm chứ không chạy tới hết line")
+
+
+class TestNgUongDenDam(unittest.TestCase):
+    """Phân biệt giao lộ THẬT với mép vạch mờ — bằng đúng 2 số đo trên robot."""
+
+    def test_real_C0R0_signature_counts_as_strong_evidence(self):
+        raw = [v / 1023 for v in (921, 921, 0, 0, 0, 0)]
+        self.assertGreaterEqual(LineSensor.dem_den_dam(raw),
+                                config.INTERSECTION_THRESHOLD)
+
+    def test_alignment_false_positive_does_not(self):
+        """ADC 224/232 lọt dưới ngưỡng THÍCH NGHI (248) nhưng KHÔNG phải đen."""
+        raw = [v / 1023 for v in (224, 232, 0, 0, 263, 826)]
+        self.assertEqual(sum(LineSensor.digital_from_raw(raw)),
+                         config.INTERSECTION_THRESHOLD,
+                         "tiền đề: ngưỡng thích nghi ĐANG gọi đây là giao lộ")
+        self.assertLess(LineSensor.dem_den_dam(raw), config.INTERSECTION_THRESHOLD,
+                        "ngưỡng đen ĐẬM phải bác bỏ nó")
 
 
 class TestPoseSauXuatPhat(unittest.TestCase):
