@@ -96,6 +96,17 @@ class LineSensor:
         if not raw or not getattr(config, "LINE_ADAPTIVE", False):
             return LineSensor._threshold_norm()
         lo, hi = min(raw), max(raw)
+        # ⛔ PHẢI CÓ CÁI GÌ ĐÓ ĐEN THẬT thì chia tỉ lệ mới có nghĩa.
+        # Công thức tương đối chia trên dải sáng-tối của CHÍNH lần đọc đó, nên khi
+        # cả thanh chỉ toàn xám nó vẫn bịa ra một ngưỡng nằm giữa đám xám.
+        # Đo trên robot 03/08, robot đứng trên TẤM IN khu nhà máy:
+        #     ADC [626, 750, 642, 863, 624, 555]   ngưỡng 667   → [1,0,1,0,1,1]
+        # Không mắt nào đen (tối nhất 555/1023), nhưng 4 mắt bị gọi là "thấy line".
+        # Hậu quả: advance tưởng VẪN ĐANG BÁM LINE nên không bao giờ thấy "hết
+        # line" — robot chạy đè qua khu nhà máy rồi ra khỏi mép sa bàn (có ảnh).
+        # Thể lệ: rời sa bàn = bị reset.
+        if lo > config.LINE_STRICT_BLACK:
+            return LineSensor._threshold_norm()
         dai_toi_thieu = config.LINE_ADAPTIVE_MIN_RANGE / 1023.0
         if hi - lo < dai_toi_thieu:
             return LineSensor._threshold_norm()
@@ -897,6 +908,16 @@ class Motion:
             xung_adv += self._doc_xung()
             if config.ENCODER_PULSES_PER_CM > 0:
                 quang_adv = xung_adv / config.ENCODER_PULSES_PER_CM
+            if 0 < config.ADVANCE_MAX_TRAVEL_CM <= quang_adv:
+                # Lưới an toàn ĐỘC LẬP với cảm biến line: xem
+                # config.ADVANCE_MAX_TRAVEL_CM.
+                self.stop()
+                logger.error(
+                    "Advance: ĐI QUÁ XA — %.1fcm (chặn %.1f) mà chưa tới điểm cuối. "
+                    "DỪNG để không rời sa bàn. Cảm biến %s",
+                    quang_adv, config.ADVANCE_MAX_TRAVEL_CM, values)
+                return False
+
             at_intersection, values = self.follow_line(base_speed)
             if at_intersection:
                 # ĐẾM MẮT ĐEN ĐẬM trước đã — y như back_to_intersection.

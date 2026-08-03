@@ -1952,6 +1952,37 @@ class TestAdvanceKhiCongHang(unittest.TestCase):
         self.assertIn("CHẶN CỨNG", "\n".join(nk.output))
 
 
+class TestNguongThichNghiDoiCoDenThat(unittest.TestCase):
+    """Ngưỡng thích nghi chỉ có nghĩa khi trên thanh CÓ CÁI GÌ ĐÓ ĐEN THẬT.
+
+    ⚠️ HỒI QUY (robot 03/08): robot đứng trên TẤM IN khu nhà máy —
+        ADC [626, 750, 642, 863, 624, 555]   ngưỡng thích nghi 667   → [1,0,1,0,1,1]
+    Không mắt nào đen (tối nhất 555/1023) nhưng 4 mắt bị gọi là "thấy line", vì
+    công thức chia tỉ lệ trên dải sáng-tối của CHÍNH lần đọc đó. Hậu quả: advance
+    tưởng vẫn đang bám line, không bao giờ thấy "hết line", robot chạy đè qua khu
+    nhà máy rồi thò càng ra ngoài mép sa bàn. Thể lệ: rời sa bàn = bị reset.
+    """
+
+    def test_all_grey_print_reads_as_NO_line(self):
+        raw = [v / 1023 for v in (626, 750, 642, 863, 624, 555)]
+        self.assertEqual(sum(LineSensor.digital_from_raw(raw)), 0,
+                         "tấm in xám phải đọc ra KHÔNG có line")
+
+    def test_a_real_line_still_uses_the_adaptive_threshold(self):
+        """Có đen thật thì giữ nguyên ngưỡng thích nghi — đừng phá cái đang chạy."""
+        raw = [v / 1023 for v in (917, 914, 0, 0, 0, 0)]
+        self.assertGreater(LineSensor.nguong_cho(raw),
+                           config.LINE_THRESHOLD / 1023.0,
+                           "ngưỡng thích nghi phải CAO hơn ngưỡng tuyệt đối ở đây")
+        self.assertEqual(sum(LineSensor.digital_from_raw(raw)), 4)
+
+    def test_dim_light_still_works(self):
+        """Ánh sáng tối đi (mọi giá trị tụt) vẫn phải bắt được vạch — lý do có
+        ngưỡng thích nghi ngay từ đầu."""
+        raw = [v / 1023 for v in (600, 590, 20, 15, 580, 610)]
+        self.assertEqual(sum(LineSensor.digital_from_raw(raw)), 2)
+
+
 class TestPoseSauXuatPhat(unittest.TestCase):
     """Căn giữa chạy tới C0R0 thì pose PHẢI là C0R0, không phải START.
 

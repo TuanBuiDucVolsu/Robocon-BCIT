@@ -628,6 +628,15 @@ ADVANCE_INTERSECTION_DAM = 5
 # tính nhầm (cửa sổ ân hạn lo phần đầu, số này lo phần sau).
 ADVANCE_FACTORY_DARK_MIN_CM = 10.0
 
+# ⛔ CHẶN CỨNG QUÃNG ĐƯỜNG của advance (đo bằng encoder). Thể lệ: robot rời sa bàn
+# là BỊ RESET (-10 điểm). Ngày 03/08 robot đã chạy đè qua khu Samsung và thò càng
+# ra ngoài mép sa bàn (có ảnh) vì tấm in đọc ra "vẫn còn line" nên nó không bao giờ
+# thấy hết line. Nguyên nhân gốc đã sửa (LineSensor.nguong_cho đòi có đen THẬT),
+# nhưng lưới này giữ cho MỌI nguyên nhân khác — nó không phụ thuộc cảm biến line.
+# ⚠️ 80 là số ĐẶT TẠM, chưa đo. Chặng advance dài nhất là C1 → khu nhà máy; đo
+# bằng thước rồi siết lại. Đặt quá nhỏ thì robot dừng non và không giao được hàng.
+ADVANCE_MAX_TRAVEL_CM = 80.0
+
 
 # --- XÁC NHẬN LẠI KHI ĐỨNG YÊN -------------------------------------------
 # Đo trên robot 03/08 (tools.check_sonar_jitter, 30 giây): robot ĐỨNG YÊN cho
