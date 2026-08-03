@@ -135,11 +135,11 @@ PWM_COMPENSATION_LEFT_REV = 0.952  # Bù bánh TRÁI khi lùi
 # CƠ CẤU NÂNG (giây)
 # ============================================================
 LIFT_TIME_FLOOR = 0.0
-LIFT_TIME_SHELF_1 = 0.660
+LIFT_TIME_SHELF_1 = 0.720
 LIFT_TIME_SHELF_2 = 4.20  # ĐO trên robot 03/08
 
 # Không có limit switch — home_to_floor() hạ liên tục bấy nhiêu giây để ép chạm đáy.
-LIFT_HOME_DURATION = 4.7   # min_home_duration() = LIFT_TIME_SHELF_2 + LOWER_EXTRA lớn
+LIFT_HOME_DURATION = 4.5   # min_home_duration() = LIFT_TIME_SHELF_2 + LOWER_EXTRA lớn
 
 # Bù lệch 2 càng theo VỊ TRÍ TUYỆT ĐỐI: thời gian từ SÀN lên tầng n = LIFT_TIME_SHELF_n
 # + bù. Thời gian mỗi lần chạy = hiệu 2 mốc (Lift._level_time) → không cộng dồn khi đi
@@ -167,7 +167,7 @@ LIFT_RIGHT_EXTRA_BY_LEVEL: dict[int, float] = {}
 # ra nằm NGOÀI thang tầng, và home_to_floor() xoá sạch sai lệch tích luỹ.
 LIFT_INSERT_EXTRA = 0.20
 LIFT_LEFT_LOWER_EXTRA = 0.150     # Càng TRÁI khi hạ — ĐÃ ĐO trên robot 03/08
-LIFT_RIGHT_LOWER_EXTRA = 0.400      # Càng PHẢI khi hạ — ĐÃ ĐO trên robot 03/08
+LIFT_RIGHT_LOWER_EXTRA = 0.250      # Càng PHẢI khi hạ — ĐÃ ĐO trên robot 03/08
 
 # Home RÚT GỌN khi đã biết chắc đang ở tầng nào (Lift.home_from). Hạ từ tầng 1 chỉ
 # cần ~0.9s trong khi home mặc định chạy 4.0s theo tầng cao nhất — hơn 3 giây motor
@@ -304,7 +304,7 @@ INSERT_MIN_DISTANCE = 2.2    # ĐANG DÒ — cửa sổ đúng rất hẹp, ch�
 # ⚠️ ĐÂY LÀ HẰNG SỐ CÓ TRẦN. Nhấc quá tay thì ở TẦNG 1 càng đội vào mặt tầng 2,
 # ở tầng 2 thì đội vào nóc kệ. Khe hở phía trên kiện hàng không nhiều — tăng tiếp
 # thì phải nhìn tận mắt, đừng tăng mò.
-LIFT_PICKUP_RAISE_TIME = 0.3    # ĐANG DÒ (measure_pickup ⑤ đo được 0.2, không đủ)
+LIFT_PICKUP_RAISE_TIME = 0.4    # ĐANG DÒ (measure_pickup ⑤ đo được 0.2, không đủ)
 
 # --- Tốc độ & timeout của bước luồn ------------------------------------------
 # ⚠️ Nâng 25 → 32. Ở 25% robot bò CHÉO khi luồn càng, đẩy pallet lệch đi.
