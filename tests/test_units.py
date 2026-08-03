@@ -1687,6 +1687,27 @@ class TestAdvanceToEnd(unittest.TestCase):
         self.assertIn("ĐÃ VÀO KHU NHÀ MÁY", ghi)
         self.assertNotIn("Bản đồ hoặc vị trí không khớp", ghi)
 
+    def test_factory_print_is_told_apart_by_the_BRIGHTEST_eye(self):
+        """⚠️ HỒI QUY: 4 mắt đen là chưa đủ để phân biệt tấm in với vạch line.
+
+        Đo trên robot 03/08 — cả bốn ca đều có 4 mắt đen ĐẬM, chỉ khác ở mắt SÁNG
+        NHẤT. Trên TẤM IN thì cả vùng đều tối, không mắt nào thấy nền trắng sạch:
+            tấm in Hana      4 đen, sáng nhất 509   ← đây là điểm thả
+            vạch line thường 4 đen, sáng nhất 926
+            giao lộ thật     4 đen, sáng nhất 911
+        Đòi 5 mắt (như trước) thì bỏ sót tấm in Hana → robot đi quá khỏi ô nhà máy.
+        Hạ xuống 4 mà không xét độ sáng thì vạch thường cũng bị nhận nhầm.
+        """
+        gia = {"tấm in Hana": ([0, 0, 15, 123, 509, 446], True),
+               "tấm in đậm":  ([138, 0, 0, 0, 0, 100], True),
+               "vạch thường": ([0, 703, 0, 0, 0, 926], False),
+               "giao lộ":     ([0, 0, 0, 0, 577, 911], False)}
+        for ten, (adc, mong_doi) in gia.items():
+            raw = [v / 1023 for v in adc]
+            la_nha_may = (LineSensor.dem_den_dam(raw) >= config.ADVANCE_FACTORY_DARK_EYES
+                          and max(raw) <= config.ADVANCE_FACTORY_MAX_BRIGHT)
+            self.assertEqual(la_nha_may, mong_doi, f"{ten}: ADC {adc}")
+
     def test_dark_patch_too_early_is_still_not_the_factory(self):
         """Chưa đi đủ xa thì mảng tối là giao lộ vừa thoát, không phải nhà máy."""
         m = self._motion([[1] * 6] * 400)

@@ -934,13 +934,18 @@ class Motion:
                 # để gặp. Line kết thúc vào MẢNG IN (ảnh nhà máy nền tối), nên mảng
                 # tối đậm ở đây nghĩa là ĐÃ TỚI, không phải lỗi bản đồ.
                 # Lý do + vệt ADC thật: config.ADVANCE_FACTORY_DARK_MIN_CM.
-                if (cong_hang and dam_gl >= config.ADVANCE_INTERSECTION_DAM
+                sang_nhat = max(raw_gl) if raw_gl else 1.0
+                if (cong_hang
+                        and dam_gl >= config.ADVANCE_FACTORY_DARK_EYES
+                        and sang_nhat <= config.ADVANCE_FACTORY_MAX_BRIGHT
                         and quang_adv >= config.ADVANCE_FACTORY_DARK_MIN_CM):
                     self.stop_gently(base_speed)
                     logger.info(
-                        "Advance: ĐÃ VÀO KHU NHÀ MÁY — %d/%d mắt đen ĐẬM sau khi đi "
-                        "%.1fcm, ADC %s. Line kết thúc vào mảng in, đây là điểm thả.",
-                        dam_gl, config.ADVANCE_INTERSECTION_DAM, quang_adv,
+                        "Advance: ĐÃ VÀO KHU NHÀ MÁY — %d/%d mắt đen ĐẬM và mắt SÁNG "
+                        "NHẤT chỉ %.0f (≤%.0f: cả vùng đều tối = tấm in, không phải "
+                        "vạch line), sau khi đi %.1fcm. ADC %s",
+                        dam_gl, config.ADVANCE_FACTORY_DARK_EYES, sang_nhat * 1023,
+                        config.ADVANCE_FACTORY_MAX_BRIGHT * 1023, quang_adv,
                         [int(round(v * 1023)) for v in raw_gl])
                     return True
 

@@ -627,6 +627,18 @@ ADVANCE_INTERSECTION_DAM = 5
 # Đòi thêm quãng đường tối thiểu để mảng đen của CHÍNH giao lộ vừa thoát không bị
 # tính nhầm (cửa sổ ân hạn lo phần đầu, số này lo phần sau).
 ADVANCE_FACTORY_DARK_MIN_CM = 10.0
+# Số mắt đen ĐẬM tối thiểu để coi là đã vào khu nhà máy. THẤP hơn
+# ADVANCE_INTERSECTION_DAM: tấm in Hana chỉ cho 4 mắt (ADC [0, 0, 15, 123, 509, 446])
+# nên đòi 5 là bỏ sót, robot đi quá khỏi ô nhà máy — đo trên robot 03/08.
+ADVANCE_FACTORY_DARK_EYES = 4
+# ...nhưng 4 mắt KHÔNG đủ để phân biệt: vạch line thường cũng cho 4. Chỗ khác nhau
+# nằm ở những mắt KHÔNG đen — trên TẤM IN thì cả vùng đều tối, không mắt nào thấy
+# nền trắng sạch. Số đo trên robot 03/08:
+#     tấm in nhà máy   4 mắt đen, sáng nhất 509   ← xám
+#     tấm in nhà máy   6 mắt đen, sáng nhất 138
+#     vạch line thường 4 mắt đen, sáng nhất 926   ← trắng sạch
+#     giao lộ thật     4 mắt đen, sáng nhất 911
+ADVANCE_FACTORY_MAX_BRIGHT = 0.75   # 0.75 × 1023 ≈ 767
 
 # ⛔ CHẶN CỨNG QUÃNG ĐƯỜNG của advance (đo bằng encoder). Thể lệ: robot rời sa bàn
 # là BỊ RESET (-10 điểm). Ngày 03/08 robot đã chạy đè qua khu Samsung và thò càng
