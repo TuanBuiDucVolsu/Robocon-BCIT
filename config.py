@@ -918,14 +918,19 @@ TURN_TIME = 0.90             # 0.5 (số của motor CŨ) chỉ quay được 45
 # Cần ĐÚNG MỘT số đo nữa: WHEEL_TRACK_CM = khoảng cách giữa hai ĐIỂM TIẾP ĐẤT của
 # 2 bánh dẫn động (đo bằng thước, tâm bánh tới tâm bánh). Để 0 = TẮT, dùng
 # TURN_TIME như cũ. Đo xong đặt số vào đây rồi xác nhận bằng test_motion option 10.
-WHEEL_TRACK_CM = 20.0        # ĐO BẰNG THƯỚC trên robot 03/08 (tâm bánh → tâm bánh)
-# ⚠️ CÁCH CHỈNH KHI XOAY CHƯA ĐÚNG 90°: số này vào công thức như một HỆ SỐ TỈ LỆ
-# thuần (xung cần = 2 × π × vệt/4 × xung_mỗi_cm), nên nhân thẳng theo góc đo được:
+WHEEL_TRACK_CM = 13.33       # ⚠️ ĐÂY LÀ SỐ HIỆU CHỈNH, KHÔNG PHẢI SỐ ĐO BẰNG THƯỚC.
+# Thước đo được 20.0cm (tâm bánh → tâm bánh) nhưng chạy test_motion option 10 với
+# số đó thì robot xoay 135°, tức QUÁ 45°. Robot quay NHIỀU hơn mô hình cung lăn dự
+# đoán → bán kính quay thực nhỏ hơn nửa vệt bánh đo được. Hiệu chỉnh theo tỉ lệ:
+#       20.0 × 90/135 = 13.33
+# ĐỪNG "sửa lại cho đúng thước" — 20.0 đã được thử và SAI. Số này là hằng số hiệu
+# chỉnh của cả cụm (bánh + caster + mặt sàn), không phải một kích thước hình học.
+#
+# CÁCH CHỈNH TIẾP nếu vẫn chưa đúng 90° — nó vào công thức như HỆ SỐ TỈ LỆ THUẦN
+# (xung cần = 2 × π × vệt/4 × xung_mỗi_cm) nên nhân thẳng theo góc đo được:
 #       vệt mới = vệt cũ × 90 / góc_thực_tế
-# Xoay được 80° → 20.0 × 90/80 = 22.5. Xoay quá thành 100° → 20.0 × 0.9 = 18.0.
-# Dự kiến phải NÂNG so với số thước: công thức giả định bánh lăn KHÔNG TRƯỢT, mà
-# xoay tại chỗ thì hai bánh cạ ngang mặt sàn và 2 bánh caster còn ghì lại — robot
-# quay được ÍT hơn phần bánh đã lăn. Số thước là điểm khởi đầu, không phải đích.
+# Đo lại bằng test_motion option 10, CẢ HAI CHIỀU. Hai chiều lệch nhau nhiều thì
+# mô hình một-hằng-số không đủ — nói ra, đừng chỉnh cho vừa lòng một chiều.
                              # → nhân đôi, trừ hao phần tăng tốc đầu mỗi lượt xoay
                              # (kéo dài gấp đôi cho HƠN gấp đôi góc).
                              # ⚠️ Mới xác nhận xoay TRÁI đạt 90° (test_motion op.10);
