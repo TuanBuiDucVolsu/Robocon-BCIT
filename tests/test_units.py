@@ -1262,13 +1262,44 @@ class TestAdvanceToEnd(unittest.TestCase):
 
         Nhánh "đi tới khi hết line" VỀ BẢN CHẤT là đâm vào kệ — line kéo tới cách
         chân kệ 1mm. Đây là lưới an toàn cuối cùng cho mọi đường dẫn tới đó.
+
+        ⚠️ Bản trước của test này chỉ kiểm "trả True và có gọi stop" — mà nhánh "tới
+        gần mục tiêu" cũng làm đúng vậy, nên nó KHÔNG phân biệt được hai nhánh. Nhờ
+        thế đoạn chặn cứng bị xoá nhầm ở 4fe93e7 mà test vẫn xanh, và robot lao vào
+        kệ thêm nhiều lần. Giờ bắt ĐÚNG dòng log của nhánh chặn cứng.
         """
         m = self._motion([[0, 0, 1, 1, 0, 0]] * 400)   # line KHÔNG bao giờ hết
         m.get_distance = lambda: config.ADVANCE_HARD_STOP_CM - 1.0
-        t0 = time.time()
-        self.assertTrue(m.advance_to_end(timeout=3.0))
-        self.assertLess(time.time() - t0, 1.0, "chặn cứng phải nổ ngay, không chờ")
-        m.stop.assert_called()   # stop_gently() thật gọi tới stop()
+        with self.assertLogs("control.motion", level="WARNING") as ghi:
+            self.assertTrue(m.advance_to_end(timeout=3.0))
+        self.assertTrue(any("CHẶN CỨNG" in d for d in ghi.output),
+                        f"phải đi qua nhánh CHẶN CỨNG, log thực tế: {ghi.output}")
+
+    def test_advance_does_not_drive_on_a_stale_reading(self):
+        """Số đo ĐỨNG YÊN thì advance cũng phải dừng chờ, y như approach_shelf.
+
+        Đo trên robot 03/08: advance dừng ở 4.3cm thay vì 20cm rồi approach_shelf
+        tiếp tục từ đó — robot đã ở sát kệ trước khi pha tiếp cận bắt đầu. Trước đây
+        tôi chỉ vá chống-số-đo-cũ ở approach_shelf mà quên chỗ này, mà đây mới là
+        chỗ chạy TRƯỚC.
+        """
+        gan = config.APPROACH_SLOW_DISTANCE + 2.0     # TRONG tầm nguy hiểm
+        m = self._motion([[0, 0, 1, 1, 0, 0]] * 400)
+        m.get_distance = lambda: gan                  # không bao giờ đổi
+        m.advance_to_end(timeout=0.6)
+        self.assertGreater(m.stop.call_count, 0,
+                           "số đo đứng yên trong tầm gần mà vẫn chạy = chạy mù")
+
+    def test_stale_guard_does_not_stall_on_a_far_reading(self):
+        """Số đo KỊCH TRẦN (không có tiếng vọng) cũng "không đổi" — không được chặn.
+
+        Chặn cả ca đó thì robot đứng im vĩnh viễn. Ở xa thì số đo cũ vô hại vì còn
+        lâu mới tới điểm dừng. Hai test cũ của lớp này bắt được đúng lỗi đó.
+        """
+        m = self._motion([[0, 0, 1, 1, 0, 0]] * 20 + [[0] * 6])
+        m.get_distance = lambda: 100.0                # kịch trần, không đổi
+        self.assertTrue(m.advance_to_end(timeout=3.0),
+                        "phải đi tới khi hết line, không đứng im chờ số mới")
 
     def test_near_target_still_works_when_reading_actually_changes(self):
         """⚠️ HỒI QUY: cơ chế chống-kiện-che KHÔNG được phá đường vào kệ.

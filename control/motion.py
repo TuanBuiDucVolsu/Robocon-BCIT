@@ -629,28 +629,53 @@ class Motion:
         # Đã bám được line lần nào chưa. Trước khi True thì "mất line" nghĩa là
         # KHÔNG TÌM THẤY, không phải "đã hết".
         acquired = False
+        vet_adv = []             # vệt số đo siêu âm, để soi khi hỏng
+        doi_luc = start          # lần cuối siêu âm ĐỔI giá trị
 
         while time.time() - start < timeout:
             if self._aborted():
                 return False
             dist = self.get_distance()
-            # ⚠️ CHỈ tin "đã tới gần" khi khoảng cách đã THỰC SỰ GIẢM kể từ lúc bắt
-            # đầu. Lệnh advance luôn xuất phát từ một giao lộ, cách điểm cuối 35cm
-            # trở lên — vật thật thì số đo phải giảm dần khi tiến tới.
-            # Số đo NHỎ NGAY TỪ ĐẦU và ĐỨNG YÊN nghĩa là siêu âm đang nhìn chính
-            # KIỆN HÀNG robot cõng: nó nằm trước cảm biến và đi cùng robot. Không có
-            # điều kiện này thì mọi chặng giao hàng đều "tới nhà máy" ngay khi vừa
-            # rời giao lộ, rồi thả kiện giữa sa bàn — mà log vẫn xanh hết.
-            # Dấu hiệu của "siêu âm đang nhìn KIỆN HÀNG robot cõng" là số đo ĐỨNG
-            # YÊN dù robot chạy — không phải "chưa giảm đủ". Bản trước đòi phải giảm
-            # ≥5cm rồi mới tin, và khi điều kiện đó không đạt thì advance chạy tới
-            # HẾT LINE — mà line kéo tới tận chân kệ, tức đâm thẳng vào kệ. Tiêu chí
-            # sai, không phải cơ chế sai.
+            if (not vet_adv) or abs(dist - vet_adv[-1][1]) > 0.05:
+                vet_adv.append((time.time() - start, dist))
+                doi_luc = time.time()
+
+            # ⚠️ KHÔNG DI CHUYỂN TRÊN SỐ ĐO CŨ — y như approach_shelf.
+            # Đo trên robot 03/08: advance dừng ở 4.3cm thay vì 20cm, rồi
+            # approach_shelf tiếp tục từ đó nên robot đã sát kệ trước khi pha tiếp
+            # cận bắt đầu. Cùng nguyên nhân: gpiozero bấm giờ xung echo bằng PHẦN
+            # MỀM nên luồng nền có lúc kẹt, số đo đứng yên trong khi robot vẫn chạy.
+            # Trước đây tôi chỉ vá ở approach_shelf mà quên chỗ này — mà đây mới là
+            # chỗ chạy TRƯỚC và đưa robot tới sát kệ.
+            # Chỉ chặn khi số đo đang TRONG TẦM NGUY HIỂM. Số đo kịch trần (không
+            # có tiếng vọng, ~100cm) cũng "không đổi" — chặn cả ca đó thì robot đứng
+            # im vĩnh viễn. Ở xa thì số đo cũ vô hại vì còn lâu mới tới điểm dừng.
+            if (0 <= dist <= config.APPROACH_SLOW_DISTANCE * 2
+                    and time.time() - doi_luc > config.ULTRASONIC_STALE_TIME):
+                self.stop()
+                time.sleep(0.01)
+                continue
+
+            # ⛔ CHẶN CỨNG — đứng trên mọi logic khác.
+            # Nhánh "đi tới khi hết line" VỀ BẢN CHẤT là đâm vào kệ: line kéo tới
+            # cách chân kệ 1mm (SA_BAN.md 3b). Đây là lưới an toàn cuối cùng.
+            # ⚠️ Đoạn này TỪNG BỊ XOÁ NHẦM khi gỡ cơ chế chống-kiện-che (4fe93e7):
+            # lệnh xoá cắt từ dòng comment phía trên xuống và nuốt luôn nó. Test
+            # viết cho nó lại không phân biệt được với nhánh "tới gần mục tiêu" nên
+            # không ai biết, và robot lao vào kệ thêm nhiều lần.
+            if 0 <= dist <= config.ADVANCE_HARD_STOP_CM:
+                self.stop_gently(base_speed)
+                logger.warning("Advance: CHẶN CỨNG ở %.1fcm (mốc %.1f). Vệt: %s",
+                               dist, config.ADVANCE_HARD_STOP_CM,
+                               " ".join(f"{t:.2f}s:{d:.1f}" for t, d in vet_adv[-10:]))
+                return True
+
             if 0 <= dist <= config.APPROACH_SLOW_DISTANCE:
                 near_streak += 1
                 if near_streak >= 2:
                     self.stop_gently(base_speed)
-                    logger.info("Advance: đã tới gần mục tiêu (%.1fcm)", dist)
+                    logger.info("Advance: đã tới gần mục tiêu (%.1fcm). Vệt: %s", dist,
+                                " ".join(f"{t:.2f}s:{d:.1f}" for t, d in vet_adv[-10:]))
                     return True
             else:
                 near_streak = 0
@@ -739,7 +764,11 @@ class Motion:
             # PWMSoftwareFallback mỗi lần khởi động) nên luồng nền có lúc kẹt.
             # Chưa cài được pigpio thì ít nhất ĐỪNG DI CHUYỂN trên dữ liệu cũ:
             # đứng chờ số mới. Đổi một cú vượt đà thành một nhịp khựng.
-            if time.time() - doi_luc > config.ULTRASONIC_STALE_TIME:
+            # Chỉ chặn khi số đo đang TRONG TẦM NGUY HIỂM. Số đo kịch trần (không
+            # có tiếng vọng, ~100cm) cũng "không đổi" — chặn cả ca đó thì robot đứng
+            # im vĩnh viễn. Ở xa thì số đo cũ vô hại vì còn lâu mới tới điểm dừng.
+            if (0 <= dist <= config.APPROACH_SLOW_DISTANCE * 2
+                    and time.time() - doi_luc > config.ULTRASONIC_STALE_TIME):
                 self.stop()
                 time.sleep(0.01)
                 continue
