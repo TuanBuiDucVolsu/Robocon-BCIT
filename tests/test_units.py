@@ -1786,6 +1786,25 @@ class TestAdvanceToEnd(unittest.TestCase):
 
 
 class TestNgUongDenDam(unittest.TestCase):
+    """Phân biệt giao lộ THẬT với mép vạch mờ / hình in — bằng số đo trên robot."""
+
+    def test_reverse_false_positive_is_rejected_by_contiguity(self):
+        """⚠️ HỒI QUY: chặng LÙI cũng phải đòi dãy đen LIỀN NHAU.
+
+        Đo trên robot 03/08, chặng lùi khỏi kệ:
+            cảm biến [0,1,1,0,1,1]   ADC [504, 0, 106, 454, 0, 0]   ngưỡng 151
+        Bốn mắt "đen" nhưng ĐỨT QUÃNG. back_to_intersection() nhận nhầm, dừng khi
+        còn cách C0R0 khá xa và vẫn gần kệ, rồi tiến bù 12cm VỀ PHÍA KỆ và xoay →
+        chạm kệ. Bộ lọc liền-nhau đã có ở exit_start_zone nhưng quên áp cho đây.
+        """
+        raw = [v / 1023 for v in (504, 0, 106, 454, 0, 0)]
+        self.assertGreaterEqual(sum(LineSensor.digital_from_raw(raw)),
+                                config.INTERSECTION_THRESHOLD,
+                                "tiền đề: ngưỡng thích nghi ĐANG gọi đây là giao lộ")
+        self.assertLess(LineSensor.day_den_dam_dai_nhat(raw),
+                        config.INTERSECTION_THRESHOLD,
+                        "dãy liền nhau phải bác bỏ nó")
+
     """Phân biệt giao lộ THẬT với mép vạch mờ — bằng đúng 2 số đo trên robot."""
 
     def test_real_C0R0_signature_counts_as_strong_evidence(self):
@@ -1964,6 +1983,8 @@ class TestBackMinTravel(unittest.TestCase):
         m.stop = MagicMock()
         m._escape_intersection = MagicMock()
         m.follow_line = MagicMock(return_value=(luon_bao_giao_lo, [1, 1, 1, 1, 0, 0]))
+        # Chữ ký giao lộ THẬT: 4 mắt đen đậm LIỀN NHAU (đo trên robot 03/08).
+        m.read_line_sensor_raw = lambda: [v / 1023 for v in (917, 914, 0, 0, 0, 0)]
         return m
 
     def _motion_seq(self, frames):
@@ -2012,6 +2033,8 @@ class TestReverseRecenter(unittest.TestCase):
         m._last_error = 0.0
         m.forward = MagicMock()
         m.backward = MagicMock()
+        # Chữ ký giao lộ THẬT: 4 mắt đen đậm LIỀN NHAU (đo trên robot 03/08).
+        m.read_line_sensor_raw = lambda: [v / 1023 for v in (917, 914, 0, 0, 0, 0)]
         m.stop = MagicMock()
         m._escape_intersection = MagicMock()
         m.follow_line = MagicMock(return_value=(True, [0, 0, 1, 1, 0, 0]))

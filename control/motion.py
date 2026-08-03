@@ -1622,6 +1622,27 @@ class Motion:
                                 "line thường lần nào, robot có thể còn trên mảng đen "
                                 "của điểm cuối. Cảm biến %s", time.time() - start, values)
                     at_intersection = False
+                # ĐÒI BẰNG CHỨNG LIỀN NHAU, y như bước căn giữa của
+                # exit_start_zone(). Đo trên robot 03/08, chính chặng lùi này:
+                #     cảm biến [0,1,1,0,1,1]  ADC [504, 0, 106, 454, 0, 0]
+                # Bốn mắt "đen" nhưng ĐỨT QUÃNG — mắt 4 sáng kẹp giữa hai cụm.
+                # Vạch line là dải LIỀN nên đó là hình in / mảng đen chân kệ, không
+                # phải giao lộ. Robot dừng ở đó, còn cách C0R0 khá xa và vẫn gần kệ,
+                # rồi tiến bù 12cm VỀ PHÍA KỆ và xoay → chạm kệ.
+                # Ngưỡng thích nghi lúc đó tụt còn 151 nên 504/454 mới thành "sáng"
+                # và 106 thành "đen"; ngưỡng đen ĐẬM tuyệt đối không bị kéo theo.
+                if at_intersection:
+                    raw_gl = self.read_line_sensor_raw()
+                    dam = LineSensor.day_den_dam_dai_nhat(raw_gl)
+                    if dam < config.INTERSECTION_THRESHOLD:
+                        logger.info(
+                            "Lùi: bỏ qua tín hiệu giao lộ ở %.2fs — dãy đen đậm LIỀN "
+                            "NHAU dài nhất chỉ %d/%d, ADC %s. Hình in hoặc mảng đen "
+                            "chân kệ, không phải giao lộ.",
+                            time.time() - start, dam, config.INTERSECTION_THRESHOLD,
+                            [int(round(v * 1023)) for v in raw_gl])
+                        at_intersection = False
+
                 if at_intersection:
                     reached = True
                     break
