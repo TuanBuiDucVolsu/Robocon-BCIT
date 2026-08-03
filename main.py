@@ -617,6 +617,24 @@ class Robot:
         # còn lại do IR trên mặt càng dẫn trong creep_until, đúng cảm biến cho việc
         # đó. Bỏ luôn một bước là bớt một chỗ hỏng và bớt ~2-3 giây mỗi lượt.
 
+        # ...NHƯNG phải kiểm ĐÃ TỚI KỆ THẬT chưa. Chặng quay về sau khi giao là
+        # chặng dài nhất trận (tới 4 lần xoay, 6-7 giao lộ) nên dễ lệch nhất, mà
+        # bước bốc thì không tự phát hiện được: nó luồn vào chỗ trống suốt 8 giây
+        # rồi mới báo lỗi. Lúc này siêu âm DÙNG ĐƯỢC vì đã thả hết hàng.
+        # Xem config.PICKUP_MAX_SHELF_DISTANCE.
+        try:
+            cach_ke = float(self.motion.get_distance())
+        except (TypeError, ValueError):
+            cach_ke = -1.0          # đọc lỗi → KHÔNG chặn, thà thử bốc
+        if 0 <= cach_ke > config.PICKUP_MAX_SHELF_DISTANCE:
+            logger.error(
+                "KHÔNG THẤY KỆ trước mặt — siêu âm đọc %.1fcm (tối đa %.1f). Chặng "
+                "quay về kệ đã đi lạc; bốc hàng lúc này là luồn càng vào chỗ trống "
+                "suốt %.1fs rồi mới hỏng. Thử lại điều hướng.",
+                cach_ke, config.PICKUP_MAX_SHELF_DISTANCE, config.INSERT_TIMEOUT)
+            return self._retry_or_skip_tier("navigate")
+        logger.info("Đã ở trước kệ — siêu âm %.1fcm", cach_ke)
+
         label_left, label_right = None, None
         for attempt in range(1, config.MAX_PAIR_SCAN_ATTEMPTS + 1):
             # Truyền TẦNG: camera cố định vào thân nên vùng quét phải dịch theo tầng,

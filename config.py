@@ -505,6 +505,19 @@ LINE_DEEP_BLACK = 0.04
 # gì, dừng cách kệ 3cm là không thể coi là "đã tới vị trí lấy hàng".
 APPROACH_ARRIVAL_TOLERANCE = 4.0   # cm
 
+# Khoảng cách TỐI ĐA tới kệ còn coi là "robot đang đứng trước kệ", kiểm ngay trước
+# khi bốc hàng. Vì sao cần:
+# Chặng QUAY VỀ KỆ sau khi giao xong là chặng DÀI NHẤT trận — tới 4 lần xoay và
+# 6-7 giao lộ — nên sai một chỗ là cộng dồn. Mà sau khi về, robot KHÔNG kiểm chứng
+# gì cả: nó nâng càng và luồn vào ngay (bước tiếp cận đã bỏ). Lệch chỗ thì nó luồn
+# vào chỗ trống suốt INSERT_TIMEOUT = 8s rồi mới báo lỗi, mất cả lượt.
+# Lúc này siêu âm DÙNG ĐƯỢC (đã thả hết hàng, không còn kiện chắn) và ở ~20cm nó
+# đọc mặt kệ rất chuẩn — advance vừa dừng bằng chính số đo đó. Nên một phép đo là
+# đủ để bắt "chặng về đi lạc" TRƯỚC khi phí 8 giây.
+# 35cm: advance dừng ở 20cm (APPROACH_SLOW_DISTANCE) cộng dư địa cho trôi và nhiễu.
+# Đọc lỗi (-1) thì KHÔNG chặn — thà thử bốc còn hơn bỏ tầng vì cảm biến hỏng.
+PICKUP_MAX_SHELF_DISTANCE = 35.0
+
 # --- Đoạn cuối tiếp cận: ĐI TỪNG NHỊP, DỪNG, ĐO ------------------------------
 # Vệt siêu âm thật khi tiếp cận kệ (robot 03/08, option 5 tầng 1):
 #

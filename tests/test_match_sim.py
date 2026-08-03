@@ -135,6 +135,9 @@ def run_match(seed: int, hw_fail_rate: float = 0.0, line_loss_rate: float = 0.0,
     # Motion thật không đặt sẵn cờ này (advance_to_end đọc bằng getattr mặc định
     # False). MagicMock thì trả về một Mock TRUTHY, nên phải đặt tay cho khớp.
     robot.motion.dang_cong_hang = False
+    # PICKUP_PAIR kiểm "đã tới kệ thật chưa" bằng siêu âm trước khi bốc. Cho số đo
+    # HỢP LỆ trong tầm — mô phỏng này kiểm logic điều hướng, không kiểm cảm biến.
+    robot.motion.get_distance.return_value = 19.5
     # Dò nhánh line tại giao lộ Kệ 3: THẤY line ⟺ đang ở nửa chuẩn
     if probe_result == "auto":
         robot.motion.probe_side_branch.side_effect = lambda *a, **k: not nav.MIRRORED

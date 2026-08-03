@@ -683,6 +683,63 @@ class TestDetectSide(unittest.TestCase):
         self.assertFalse(self.robot._side_detected)
 
 
+class TestKiemDaToiKeTruocKhiBoc(unittest.TestCase):
+    """⚠️ Trước khi bốc phải KIỂM đã tới kệ thật chưa — chặng về là chặng dễ lệch nhất.
+
+    Chặng quay về kệ sau khi giao xong dài nhất trận (tới 4 lần xoay, 6-7 giao lộ)
+    nên sai một chỗ là cộng dồn. Mà bước bốc KHÔNG tự phát hiện được: bước tiếp cận
+    đã bỏ, nên robot nâng càng rồi luồn vào chỗ trống suốt INSERT_TIMEOUT = 8s mới
+    báo lỗi — mất cả lượt.
+    Lúc này siêu âm DÙNG ĐƯỢC (đã thả hết hàng, không còn kiện chắn) và ở ~20cm nó
+    đọc mặt kệ rất chuẩn — advance vừa dừng bằng chính số đo đó.
+    """
+
+    def _robot(self, dist):
+        from unittest.mock import MagicMock
+        import main
+        r = object.__new__(main.Robot)
+        r.motion = MagicMock()
+        r.motion.get_distance.return_value = dist
+        r.current_shelf, r.current_tier = 0, 1
+        r.is_time_safe = lambda: True
+        r._retry_or_skip_tier = MagicMock(return_value="RETRY")
+        r.vision = MagicMock()
+        r.vision.classify_pair.return_value = ("samsung", "amkor")
+        # Chỉ kiểm CỬA CHẶN đầu hàm; phần sau giả lập cho qua.
+        r.carried_labels = [None, None]
+        r._dat_co_cong_hang = MagicMock()
+        r._plan_delivery = MagicMock()
+        r._insert_and_lift = MagicMock(return_value=True)
+        r._retreat_from_shelf = MagicMock()
+        r._clear_carry_state = MagicMock()
+        r._tier_retries = 0
+        r.pickup_count = 0
+        return r
+
+    def test_far_from_any_shelf_retries_navigation(self):
+        r = self._robot(dist=100.0)          # không thấy gì trước mặt
+        r._handle_pickup_pair()
+        r._retry_or_skip_tier.assert_called_once_with("navigate")
+
+    def test_in_front_of_the_shelf_proceeds(self):
+        r = self._robot(dist=19.5)
+        r._handle_pickup_pair()
+        r._retry_or_skip_tier.assert_not_called()
+        r.vision.classify_pair.assert_called()
+
+    def test_read_error_does_NOT_block(self):
+        """Cảm biến lỗi thì thà THỬ BỐC còn hơn bỏ tầng."""
+        r = self._robot(dist=-1.0)
+        r._handle_pickup_pair()
+        r._retry_or_skip_tier.assert_not_called()
+
+    def test_non_numeric_reading_does_NOT_crash(self):
+        from unittest.mock import MagicMock
+        r = self._robot(dist=MagicMock())    # mock trả về vật lạ
+        r._handle_pickup_pair()
+        r._retry_or_skip_tier.assert_not_called()
+
+
 class TestCoCongHangDuocHaSauKhiGiao(unittest.TestCase):
     """⚠️ Cờ "đang cõng hàng" phải HẠ sau khi giao xong, không kẹt cả trận.
 

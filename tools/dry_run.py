@@ -176,6 +176,7 @@ def build_robot(scenario, rec):
 
     r.motion.exit_start_zone.side_effect = exit_start
     r.motion.tren_giao_lo_dau = False
+    r.motion.get_distance.return_value = 19.5   # PICKUP_PAIR kiểm đã tới kệ chưa
     r.motion.execute_route.side_effect = execute_route
     r.motion.probe_side_branch.side_effect = probe
     r.motion.approach_shelf.side_effect = approach
