@@ -1820,7 +1820,29 @@ class Motion:
                 return False
             at_intersection, values = self.follow_line(base_speed)
             if at_intersection:
-                return True
+                # ĐẾM MẮT ĐEN ĐẬM — chỗ ĐẾM GIAO LỘ cuối cùng còn thiếu bộ lọc này.
+                # Ngưỡng thích nghi co theo dải sáng-tối của từng lần đọc, nên một
+                # VẠCH LINE THƯỜNG mà mắt rìa đọc 200-400 cũng thành "4 mắt = giao
+                # lộ". Ba chỗ đếm khác đã lọc; chỗ này thì chưa, và nó là chỗ NGUY
+                # HIỂM NHẤT: đếm thừa một giao lộ là robot dừng SỚM MỘT HÀNG và
+                # giao hàng vào NHÀ MÁY BÊN CẠNH.
+                # Đo trên robot 03/08: định giao foxconn (R0) thì thả ở amkor (R1),
+                # rồi kiện sau lệch tiếp sang samsung. IR vẫn xác nhận đã thả,
+                # packages_delivered vẫn cộng — MẤT SẠCH ĐIỂM MÀ KHÔNG BÁO LỖI.
+                raw_gl = self.read_line_sensor_raw()
+                dam = LineSensor.dem_den_dam(raw_gl)
+                if dam >= config.INTERSECTION_THRESHOLD:
+                    return True
+                logger.info(
+                    "Bỏ qua tín hiệu giao lộ ở %.2fs — chỉ %d/%d mắt đen ĐẬM, ADC %s. "
+                    "Vạch thường bị ngưỡng thích nghi thổi lên, KHÔNG đếm.",
+                    time.time() - start, dam, config.INTERSECTION_THRESHOLD,
+                    [int(round(v * 1023)) for v in raw_gl])
+                # follow_line() vừa gọi stop() khi thấy giao lộ — phải ra lệnh chạy
+                # lại, không thì vòng sau nó lại thấy, lại phanh, robot đứng im.
+                self.forward(base_speed)
+                time.sleep(0.01)
+                continue
 
             if sum(values) == 0:
                 # Mất line: có thể là khoảng ĐỨT thật của sa bàn (ô xuất phát trên
@@ -1993,7 +2015,12 @@ class Motion:
             values = LineSensor.digital_from_raw(raw)
             active = sum(values)
 
-            if active >= config.INTERSECTION_THRESHOLD:
+            # Cùng bộ lọc như follow_line_until_intersection: ngưỡng thích nghi
+            # thổi vạch thường thành giao lộ, và đếm thừa ở đây cũng làm robot dừng
+            # sớm một hàng rồi giao nhầm nhà máy. Chế độ này đang TẮT
+            # (CONTINUOUS_INTERSECTIONS) nhưng bật lên là dính y hệt.
+            if (active >= config.INTERSECTION_THRESHOLD
+                    and LineSensor.dem_den_dam(raw) >= config.INTERSECTION_THRESHOLD):
                 if not on_mark:
                     on_mark = True
                     seen += 1

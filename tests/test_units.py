@@ -2156,6 +2156,45 @@ class TestBuLechTheoTang(unittest.TestCase):
                                + config.LIFT_RIGHT_LOWER_EXTRA, places=3)
 
 
+class TestDemGiaoLoDoiDenDam(unittest.TestCase):
+    """⚠️ Đếm giao lộ phải đòi mắt ĐEN ĐẬM — đếm thừa là GIAO NHẦM NHÀ MÁY.
+
+    Đo trên robot 03/08: định giao foxconn (hàng R0) thì thả ở amkor (R1), kiện sau
+    lệch tiếp sang samsung. IR vẫn xác nhận đã thả và packages_delivered vẫn cộng —
+    mất sạch điểm mà KHÔNG có tín hiệu báo lỗi nào, cùng loại với gạt sai công tắc
+    nửa sân.
+    Đây là chỗ ĐẾM GIAO LỘ cuối cùng còn thiếu bộ lọc; ba chỗ kia (exit_start_zone,
+    back_to_intersection, advance_to_end) đã có từ trước.
+    """
+
+    def _motion(self, raw_adc, luon_bao=True):
+        m = object.__new__(Motion)
+        m._aborted = lambda: False
+        m.forward = MagicMock()
+        m.stop = MagicMock()
+        m._recover_line = MagicMock(return_value=False)
+        m.follow_line = MagicMock(return_value=(luon_bao, [0, 1, 1, 1, 1, 0]))
+        m.read_line_sensor_raw = lambda: [v / 1023 for v in raw_adc]
+        return m
+
+    def test_plain_line_inflated_by_the_threshold_is_NOT_counted(self):
+        m = self._motion((834, 270, 0, 0, 0, 930))      # 3 mắt đen đậm
+        with self.assertLogs("control.motion", level="INFO") as nk:
+            self.assertFalse(m.follow_line_until_intersection(timeout=0.4))
+        self.assertIn("KHÔNG đếm", "\n".join(nk.output))
+        self.assertGreater(m.forward.call_count, 1,
+                           "bác tín hiệu mà không chạy lại = khoá chết, vì "
+                           "follow_line() tự stop() khi thấy giao lộ")
+
+    def test_a_real_junction_is_still_counted(self):
+        m = self._motion((917, 914, 0, 0, 0, 0))        # 4 mắt đen đậm — C0R0 thật
+        self.assertTrue(m.follow_line_until_intersection(timeout=1.0))
+
+    def test_full_crossing_is_counted(self):
+        m = self._motion((0, 0, 0, 0, 0, 0))            # ngã tư đủ 6 mắt
+        self.assertTrue(m.follow_line_until_intersection(timeout=1.0))
+
+
 class TestPoseSauXuatPhat(unittest.TestCase):
     """Căn giữa chạy tới C0R0 thì pose PHẢI là C0R0, không phải START.
 
