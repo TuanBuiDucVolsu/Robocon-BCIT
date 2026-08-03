@@ -676,7 +676,8 @@ REVERSE_RECENTER_TIME = 1.3
 #   RECENTER_CM            — khoảng cách thanh cảm biến → trục bánh, đo bằng thước
 #   ENCODER_PULSES_PER_CM  — chốt bằng python3 -m tools.calibrate_encoder_cm
 # Chưa calibrate (= 0) thì tự động rơi về cách cũ theo thời gian.
-ENCODER_PULSES_PER_CM = 0.0   # 0 = CHƯA CALIBRATE → dùng REVERSE_RECENTER_TIME
+ENCODER_PULSES_PER_CM = 35.940  # ĐÃ CHỐT trên robot 03/08 — 3 lần nhất quán
+                                # (tools/calibrate_encoder_cm.py). 0 = chưa calibrate
 RECENTER_CM = 12.0            # cm — ĐO BẰNG THƯỚC trên robot, không phải số đoán
 RECENTER_MAX_TIME = 3.0       # Giây chặn trên: encoder hỏng thì không chạy vô hạn
 # Giây tiến bù TRƯỚC KHI XOAY, khi vừa TIẾN tới giao lộ (chặng "forward" ngay trước
@@ -893,7 +894,26 @@ SAFETY_MARGIN = 10           # Giây dừng sớm trước khi hết giờ
 # lúc đang chạy giữa sân thay vì đứng yên. Đo lại bằng tools.measure_phases rồi
 # chỉnh cho khớp thời gian NV2 thật.
 TASK2_MIN_TIME = 30          # Giây tối thiểu còn lại thì mới bắt đầu NV2
-TURN_TIME = 0.95             # 0.5 (số của motor CŨ) chỉ quay được 45° trên JGA25-370
+TURN_TIME = 0.90             # 0.5 (số của motor CŨ) chỉ quay được 45° trên JGA25-370.
+                             # 0.95 → 0.90 ngày 03/08: người dùng báo xoay HƠI QUÁ
+                             # một chút (~5°; ở 0.95 thì 1° ≈ 0.0106s).
+
+# --- XOAY ĐO BẰNG ENCODER (tắt cho tới khi đo được vệt bánh) ---------------
+# TURN_TIME có cùng điểm yếu với REVERSE_RECENTER_TIME: nó là hằng số THỜI GIAN
+# nên góc quay đổi theo pin, ma sát sàn và tải trên càng. Tệ hơn, nó chỉ có MỘT
+# giá trị cho CẢ HAI chiều, mà hệ số bù PWM hai chiều lại khác nhau — chỉnh khớp
+# chiều này là lệch chiều kia, không có cách nào đúng cả hai.
+#
+# Encoder chữa được: xoay tại chỗ 90° thì MỖI bánh lăn một cung
+#     cung = (π/2) × (vệt bánh / 2) = π × vệt bánh / 4
+# Bộ đếm không đọc chiều quay, nhưng xoay tại chỗ hai bánh cùng sinh xung nên
+# TỔNG xung = 2 × cung × ENCODER_PULSES_PER_CM. Không phụ thuộc pin hay tải, và
+# tự đúng cho cả hai chiều.
+#
+# Cần ĐÚNG MỘT số đo nữa: WHEEL_TRACK_CM = khoảng cách giữa hai ĐIỂM TIẾP ĐẤT của
+# 2 bánh dẫn động (đo bằng thước, tâm bánh tới tâm bánh). Để 0 = TẮT, dùng
+# TURN_TIME như cũ. Đo xong đặt số vào đây rồi xác nhận bằng test_motion option 10.
+WHEEL_TRACK_CM = 0.0
                              # → nhân đôi, trừ hao phần tăng tốc đầu mỗi lượt xoay
                              # (kéo dài gấp đôi cho HƠN gấp đôi góc).
                              # ⚠️ Mới xác nhận xoay TRÁI đạt 90° (test_motion op.10);

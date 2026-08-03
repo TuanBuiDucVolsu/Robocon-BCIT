@@ -902,6 +902,57 @@ class TestTienBuCm(unittest.TestCase):
         m.stop.assert_called()
 
 
+class TestXoay90BangEncoder(unittest.TestCase):
+    """Xoay 90° đo bằng encoder — TẮT cho tới khi đo được vệt bánh."""
+
+    def _motion(self, xung_moi_lan: int, co_encoder: bool = True):
+        m = object.__new__(Motion)
+        m._aborted = lambda: False
+        m.stop = MagicMock()
+        m.turn_left = MagicMock()
+        m.turn_right = MagicMock()
+        m._encoder_left = _EncoderGia(xung_moi_lan, co_encoder)
+        m._encoder_right = _EncoderGia(xung_moi_lan, co_encoder)
+        return m
+
+    def test_disabled_until_the_wheel_track_is_measured(self):
+        """WHEEL_TRACK_CM = 0 → giữ NGUYÊN cách cũ theo TURN_TIME.
+
+        Thêm một cơ chế xoay mới ngay trước ngày thi mà bật sẵn là đánh cược. Nó
+        chỉ bật khi có số đo thật, và cho tới lúc đó hành vi không đổi một chút nào.
+        """
+        m = self._motion(10)
+        with patch.object(config, "WHEEL_TRACK_CM", 0.0):
+            with patch.object(config, "ENCODER_PULSES_PER_CM", 35.94):
+                m.turn_left_90()
+        m.turn_left.assert_called_once()      # vẫn xoay, nhưng bằng đồng hồ
+        self.assertEqual(m._encoder_left.xung, 10)
+
+    def test_uses_the_arc_length_when_measured(self):
+        """Có vệt bánh thì dừng theo XUNG, không theo TURN_TIME."""
+        import math
+        vet, xung_cm = 20.0, 35.94
+        can = 2 * (math.pi * vet / 4) * xung_cm
+        m = self._motion(int(can))            # đủ ngay nhịp đầu
+        with patch.object(config, "WHEEL_TRACK_CM", vet):
+            with patch.object(config, "ENCODER_PULSES_PER_CM", xung_cm):
+                t0 = time.time()
+                m.turn_right_90()
+        self.assertLess(time.time() - t0, config.TURN_TIME,
+                        "vẫn chờ hết TURN_TIME = không hề đếm xung")
+        m.turn_right.assert_called_once()
+
+    def test_slipping_wheels_stop_at_the_time_cap(self):
+        """Bánh trượt / encoder im thì phải dừng, không xoay vô hạn."""
+        m = self._motion(0)
+        with patch.object(config, "WHEEL_TRACK_CM", 20.0):
+            with patch.object(config, "ENCODER_PULSES_PER_CM", 35.94):
+                with self.assertLogs("control.motion", level="WARNING") as nk:
+                    m.turn_left_90()
+        self.assertIn("HẾT CHẶN TRÊN", "\n".join(nk.output))
+        m.stop.assert_called()
+
+
 class TestCreepStallGuard(unittest.TestCase):
     """Chặn cứng khi luồn càng phải dùng ENCODER, không phải siêu âm.
 

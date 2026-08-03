@@ -4,6 +4,7 @@ Line sensor: QTR-8A (analog) qua MCP3008 (SPI ADC).
 Dùng gpiozero (tương thích RPi 4 trên cả Bullseye lẫn Bookworm).
 """
 
+import math
 import time
 import logging
 
@@ -571,14 +572,53 @@ class Motion:
     # Xoay 90° và điều hướng route
     # ----------------------------------------------------------
 
+    def _xoay_90_bang_encoder(self, quay, ten: str) -> bool:
+        """Xoay 90° đo bằng ENCODER. Trả False nếu chưa đo được vệt bánh.
+
+        Xoay tại chỗ thì mỗi bánh lăn một cung π × vệt bánh / 4. Bộ đếm không đọc
+        chiều quay, nhưng xoay tại chỗ hai bánh CÙNG sinh xung nên tổng xung =
+        2 × cung × số xung mỗi cm. Lý do dùng cách này: config.WHEEL_TRACK_CM.
+        """
+        vet = getattr(config, "WHEEL_TRACK_CM", 0.0)
+        xung_cm = getattr(config, "ENCODER_PULSES_PER_CM", 0.0)
+        co_enc = (getattr(getattr(self, "_encoder_left", None), "available", False)
+                  and getattr(getattr(self, "_encoder_right", None), "available", False))
+        if vet <= 0 or xung_cm <= 0 or not co_enc:
+            return False
+
+        can = 2 * (math.pi * vet / 4) * xung_cm
+        self._doc_xung()
+        quay(config.SPEED_TURN)
+        start, da = time.time(), 0
+        cap = config.TURN_TIME * 3
+        while da < can and time.time() - start < cap:
+            if self._aborted():
+                break
+            da += self._doc_xung()
+            time.sleep(0.005)
+        self.stop()
+        het_gio = da < can
+        (logger.warning if het_gio else logger.info)(
+            "Xoay 90° %s (encoder): %d/%.0f xung trong %.2fs%s", ten, da, can,
+            time.time() - start,
+            " — HẾT CHẶN TRÊN, chưa đủ cung. Bánh trượt hay encoder rớt xung?"
+            if het_gio else "")
+        return True
+
     def turn_left_90(self):
-        logger.info("Xoay 90° trái")
+        if self._xoay_90_bang_encoder(self.turn_left, "trái"):
+            return
+        logger.info("Xoay 90° trái (%.2fs — chưa đo vệt bánh, chạy mù theo đồng hồ)",
+                    config.TURN_TIME)
         self.turn_left(config.SPEED_TURN)
         time.sleep(config.TURN_TIME)
         self.stop()
 
     def turn_right_90(self):
-        logger.info("Xoay 90° phải")
+        if self._xoay_90_bang_encoder(self.turn_right, "phải"):
+            return
+        logger.info("Xoay 90° phải (%.2fs — chưa đo vệt bánh, chạy mù theo đồng hồ)",
+                    config.TURN_TIME)
         self.turn_right(config.SPEED_TURN)
         time.sleep(config.TURN_TIME)
         self.stop()
