@@ -1,91 +1,108 @@
-# Bố cục kiện hàng "dễ nhất" — dùng khi TỰ ĐẶT được (thi cấp trường, luyện tập)
+# Bố cục kiện hàng tốt nhất — khi TỰ ĐẶT được (thi cấp trường, luyện tập)
 
-> ⚠️ **Chỉ dùng khi được tự xếp.** Thi chính thức thì **BTC xếp NGẪU NHIÊN** — bố cục
-> này không mang ra đó được. Nó để chứng minh luồng chạy thông và lấy điểm ở vòng
-> mà mình chủ động xếp.
+> ⚠️ **Bản đầu của tài liệu này SAI.** Nó dựng trên giả định hai kiện cùng một cặp có
+> thể CÙNG loại — khi đó robot thả một lần bằng cả hai càng và tiết kiệm rất nhiều.
+> Thực tế **mỗi cặp luôn là hai loại KHÁC nhau**, nên toàn bộ phần tiết kiệm đó không
+> tồn tại. Bản này viết lại theo ràng buộc đúng.
+
+## Ràng buộc
+
+Mỗi cặp (2 ô trên một tầng) là **hai nhà máy khác nhau**. 12 kiện, 4 nhà máy → mỗi
+nhà máy **3 kiện**. 6 cặp, mỗi nhà máy xuất hiện đúng 3 lần → đó chính là **6 cạnh
+của đồ thị đủ 4 đỉnh**, không có cách chia nào khác:
+
+```
+FOXCONN+AMKOR   FOXCONN+HANA   FOXCONN+SAMSUNG
+AMKOR+HANA      AMKOR+SAMSUNG  HANA+SAMSUNG
+```
+
+Việc duy nhất còn tự do là **gán 6 cặp đó vào 6 tầng kệ**. Đã duyệt hết **720 cách**
+bằng chính bộ tính chi phí của `main.py`.
 
 ## Bảng xếp — in ra, dán lên kệ
 
-Robot lấy hàng theo đúng thứ tự này: **Kệ 3 → Kệ 2 → Kệ 1**, mỗi kệ **tầng 1 trước, tầng 2 sau**.
+Robot lấy theo thứ tự **Kệ 3 → Kệ 2 → Kệ 1**, mỗi kệ **tầng 1 trước**.
 
-| Thứ tự lấy | Kệ | Tầng | Ô TRÁI | Ô PHẢI |
-|---|---|---|---|---|
-| 1 | **Kệ 3** (hàng R0) | 1 | FOXCONN | FOXCONN |
-| 2 | **Kệ 3** | 2 | FOXCONN | FOXCONN |
-| 3 | **Kệ 2** (hàng R2) | 1 | AMKOR | AMKOR |
-| 4 | **Kệ 2** | 2 | HANA MICRON | HANA MICRON |
-| 5 | **Kệ 1** (hàng R4) | 1 | SAMSUNG | SAMSUNG |
-| 6 | **Kệ 1** | 2 | SAMSUNG | SAMSUNG |
-
-Tổng: Foxconn 4 · Samsung 4 · Amkor 2 · Hana Micron 2 = **12 kiện**.
-
-## Vì sao bố cục này
-
-**Đòn bẩy 1 — hai kiện cùng cặp CÙNG LOẠI.** Robot thả **một lần bằng cả hai càng**
-(`drop_both`), bỏ hẳn chặng giao thứ hai và bước nâng lại càng. Sáu lượt bốc chỉ còn
-**sáu** chặng giao thay vì tối đa mười hai.
-
-**Đòn bẩy 2 — nhà máy CÙNG HÀNG với kệ.** Kệ 3 ở R0 cùng hàng **Foxconn**; Kệ 1 ở R4
-cùng hàng **Samsung**. Hai tuyến đó ngắn nhất trong toàn bộ bản đồ. Kệ 2 ở R2 thì
-Amkor (R1) và Hana (R3) đều chỉ cách một hàng.
-
-## Chênh lệch đo được (`tools.dry_run`)
-
-| | Bố cục này | Trộn đều (mặc định) |
-|---|---|---|
-| Số bước | **133** | 190 |
-| Ước tính | **264s** | 377s |
-| Giao được trong 240s | **12/12** | 8/12 |
-| **Điểm NV1** | **240** | 160 |
-| Lệnh xoay | 34 | 42 |
-
-Chênh **80 điểm**, chỉ do cách xếp — không đụng một dòng code nào.
-
-Xem từng bước:
-```bash
-python3 -m tools.dry_run --scenario "foxconn,foxconn foxconn,foxconn amkor,amkor hana_micron,hana_micron samsung,samsung samsung,samsung"
-```
-
-## Nó cũng giải luôn bài toán xếp chồng ở nhà máy
-
-Mỗi nhà máy nhận **số CHẴN** kiện, mà robot thả hai kiện **cạnh nhau** trong một lần
-hạ càng. Nên:
-
-| Nhà máy | Nhận | Số HÀNG kiện phải xếp | Chiều sâu cần |
+| Thứ tự lấy | Kệ | Tầng | Hai ô |
 |---|---|---|---|
-| Foxconn, Samsung | 4 | **2 hàng** (2 lần thả × 2 kiện) | 2 × 9 = **18cm** |
-| Amkor, Hana | 2 | **1 hàng** | 9cm |
+| 1 | **Kệ 3** (hàng R0) | 1 | FOXCONN + AMKOR |
+| 2 | **Kệ 3** | 2 | FOXCONN + HANA MICRON |
+| 3 | **Kệ 2** (hàng R2) | 1 | FOXCONN + SAMSUNG |
+| 4 | **Kệ 2** | 2 | AMKOR + HANA MICRON |
+| 5 | **Kệ 1** (hàng R4) | 1 | HANA MICRON + SAMSUNG |
+| 6 | **Kệ 1** | 2 | AMKOR + SAMSUNG |
 
-Khu nhà máy sâu **25cm** → vừa thoải mái. Còn bố cục trộn đều thì có nhà máy phải
-xếp **3 hàng = 27cm > 25cm**, không lọt.
+Trái/phải trong mỗi cặp **không quan trọng** — robot tự chọn thứ tự giao rẻ hơn.
 
-⚠️ Vẫn cần **lùi điểm dừng ~10cm cho lần thả THỨ HAI** ở Foxconn và Samsung, không
-thì kiện mới đè lên kiện cũ. Đây là việc chưa làm — xem phần cuối.
+## Được bao nhiêu
 
-## Thứ tự việc robot làm (để đứng ngoài đối chiếu)
+| | Chi phí | Ước tính | Giao trong 240s | Điểm |
+|---|---|---|---|---|
+| **Bố cục này** | **198** | 381s | **8/12** | **160** |
+| Xếp ngẫu nhiên | ~206 | 377s | 8/12 | 160 |
+| Cách tệ nhất | 214 | 413s | 7/12 | 140 |
+
+**Chỉ chênh ~20 điểm.** Vì mỗi lượt bốc đều buộc phải ghé **hai** nhà máy, cách xếp
+không đổi được điều đó — nó chỉ rút ngắn quãng nối giữa chúng.
+
+## Thứ thật sự chặn: thời gian, không phải cách xếp
+
+Cần ~380s cho 12 kiện, chỉ có 240s. Độ nhạy theo từng pha:
+
+| Đổi gì | Ước tính | Giao được | Điểm |
+|---|---|---|---|
+| nguyên trạng | 381s | 8/12 | 160 |
+| chạy thẳng nhanh gấp 1.5 | 344s | 8/12 | 160 |
+| chạy thẳng nhanh **gấp 2** | 324s | 9/12 | 180 |
+| xoay nhanh gấp 2 | 355s | 8/12 | 160 |
+| vào điểm cuối nhanh gấp 2 | 361s | 8/12 | 160 |
+| **cả ba nhanh gấp 1.5** | 314s | 10/12 | 200 |
+| **cả ba nhanh gấp 2** | 277s | **11/12** | **220** |
+
+Đổi **một** pha thì gần như không nhúc nhích — chặn nằm ở **tổng quãng đường**, phải
+kéo cả ba cùng lúc. Và ngay cả nhanh gấp đôi cũng **chưa đủ 12/12**.
+
+⚠️ Mấy con số trên tính từ tham số MẶC ĐỊNH của `tools.dry_run` (2.5s mỗi giao lộ,
+1.2s mỗi lần xoay) — đó là **số đặt tạm, chưa ai đo**. Lấy số thật:
+
+```bash
+bash scripts/practice.sh && python3 -m tools.measure_phases
+```
+
+Trước khi có số thật thì đọc bảng trên theo **tỉ lệ**, đừng theo trị tuyệt đối.
+
+## Vậy nên làm gì
+
+1. **Xếp theo bảng trên** — miễn phí, được ~20 điểm.
+2. **Đo ngân sách thật** (`practice.sh` + `measure_phases`) trước khi tối ưu tiếp.
+3. **Nâng `SPEED_DEFAULT`** (đang 50, mức bring-up) theo quy trình ở `NGHIEM_THU`
+   — đo giới hạn bằng `test_motion` option 17 trước, không nâng bừa.
+4. **Bật đếm giao lộ CHẠY LIỀN** (`test_motion` option 16, A/B) — đòn phần mềm mà
+   mô hình trên chưa tính tới.
+5. Hết 240s vẫn **giữ điểm kiện đã giao**, nên câu hỏi đúng là *"worst case được bao
+   nhiêu điểm"*, không phải *"có kịp không"*.
+
+## Xếp chồng ở nhà máy
+
+Mỗi nhà máy nhận **3 kiện**, và vì mỗi cặp hai loại khác nhau nên robot **luôn thả
+từng kiện một** — 3 lần thả riêng, tức **3 hàng** nối đuôi nhau:
 
 ```
-xuất phát → Kệ 3 T1 → giao Foxconn (thả 2 càng) → về Kệ 3
-          → Kệ 3 T2 → giao Foxconn              → về Kệ 2
-          → Kệ 2 T1 → giao Amkor                → về Kệ 2
-          → Kệ 2 T2 → giao Hana Micron          → về Kệ 1
-          → Kệ 1 T1 → giao Samsung              → về Kệ 1
-          → Kệ 1 T2 → giao Samsung              → NV2
+3 × 9cm = 27cm  >  25cm chiều sâu khu nhà máy
 ```
+
+**Không lọt.** Cần một trong hai:
+- Lùi điểm dừng ~9-10cm cho mỗi lần thả sau, và chấp nhận kiện thứ 3 nhô ra ~2cm;
+- Hoặc thả so le trái/phải — robot có 2 càng ở 2 vị trí ngang khác nhau, nên chọn
+  càng nào để thả sẽ quyết định kiện nằm cột trái hay cột phải. Hai cột × 2 hàng
+  đủ chỗ cho 3 kiện trong 18cm.
+
+Cách thứ hai gọn hơn nhưng cần `main.py` chọn càng theo **số kiện đã có ở nhà máy
+đó**, chứ không theo càng nào đang giữ nhãn. Chưa làm.
 
 ## Trước khi chạy — 3 việc bắt buộc
 
-1. **Gạt công tắc nửa sân đúng.** Bảng trên viết cho nửa sân có Foxconn cùng hàng ô
-   xuất phát. Nửa kia thì **đảo Foxconn ↔ Samsung** trong bảng. Kiểm bằng mắt: đứng ở
-   ô xuất phát nhìn sang tường, khu ngang tầm mình là khu nào.
+1. **Gạt công tắc nửa sân đúng.** Bảng trên không phụ thuộc nửa sân (mọi cặp đều có
+   mặt cả 4 nhà máy), nhưng gạt sai vẫn làm robot giao nhầm chỗ mà log không báo.
 2. **Hạ càng về sàn bằng tay** (`HOME_AT_INIT = False`).
 3. **Đặt robot đúng dấu đã dán** trong ô xuất phát 400×400mm.
-
-## Còn thiếu gì để chạy được bố cục này
-
-| | Trạng thái |
-|---|---|
-| Lùi điểm dừng cho lần thả thứ 2 cùng nhà máy | ❌ **chưa làm** — cần đo siêu âm có thấy kiện đã thả không |
-| `test_smoke` option 5 chạy trọn 3/3 lần | ❌ chưa |
-| `test_smoke` option 8 chạy trọn 3/3 lần | ⚠️ đã mượt 1 lần |
-| Nhận diện 4/4 ô | ✅ đã đạt (chụp lại ảnh mẫu nếu đổi sân/ánh sáng) |
