@@ -1983,6 +1983,55 @@ class TestNguongThichNghiDoiCoDenThat(unittest.TestCase):
         self.assertEqual(sum(LineSensor.digital_from_raw(raw)), 2)
 
 
+class TestThuTuThaVaNangCang(unittest.TestCase):
+    """THẢ → LÙI → NÂNG. Nâng càng khi còn đứng trên kiện là XÚC NÓ LÊN LẠI.
+
+    ⚠️ HỒI QUY (robot 03/08): thả xong ở Samsung, robot nâng càng NGAY TẠI CHỖ nên
+    xúc lại chính kiện vừa đặt, rồi mang sang thả ở Hana. HAI kiện sai nhà máy mà
+    log vẫn báo thả OK và packages_delivered vẫn cộng — lỗi KHÔNG có tín hiệu báo.
+    """
+
+    def _lift(self):
+        lift = MagicMock()
+        lift.dropoff_left.return_value = True
+        lift.dropoff_right.return_value = True
+        return lift
+
+    def test_retreat_happens_between_drop_and_raise(self):
+        from control.handling import drop_side
+        thu_tu = []
+        lift = self._lift()
+        lift.dropoff_right.side_effect = lambda: thu_tu.append("tha") or True
+        lift.raise_after_drop.side_effect = lambda s: thu_tu.append("nang")
+        drop_side(lift, "right", last=False, lui=lambda: thu_tu.append("lui"))
+        self.assertEqual(thu_tu, ["tha", "lui", "nang"])
+
+    def test_stow_also_waits_for_the_retreat(self):
+        from control.handling import drop_side
+        thu_tu = []
+        lift = self._lift()
+        lift.dropoff_left.side_effect = lambda: thu_tu.append("tha") or True
+        lift.stow_forks.side_effect = lambda s: thu_tu.append("gap")
+        drop_side(lift, "left", last=True, lui=lambda: thu_tu.append("lui"))
+        self.assertEqual(thu_tu, ["tha", "lui", "gap"])
+
+    def test_raise_still_happens_when_IR_says_the_drop_failed(self):
+        """BẤT BIẾN cũ phải giữ: càng nằm thấp mà chạy tiếp là cạ sàn/vướng kệ."""
+        from control.handling import drop_side
+        lift = self._lift()
+        lift.dropoff_right.return_value = False
+        self.assertFalse(drop_side(lift, "right", last=False, lui=lambda: None))
+        lift.raise_after_drop.assert_called_once_with("right")
+
+    def test_missing_retreat_callback_warns_loudly(self):
+        """Quên truyền bước lùi = quay lại đúng lỗi cũ → phải kêu, đừng im lặng."""
+        from control.handling import drop_side
+        lift = self._lift()
+        with self.assertLogs("control.handling", level="WARNING") as nk:
+            drop_side(lift, "right", last=False)
+        self.assertIn("xúc nó lên lại", "\n".join(nk.output))
+
+
 class TestPoseSauXuatPhat(unittest.TestCase):
     """Căn giữa chạy tới C0R0 thì pose PHẢI là C0R0, không phải START.
 

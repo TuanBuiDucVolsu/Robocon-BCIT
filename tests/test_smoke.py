@@ -239,7 +239,10 @@ def smoke_drop_single_side(lift: Lift, **_):
         return False, None
 
     # Chuỗi thả ở control/handling.py — CÙNG hàm main.py gọi, nên không thể lệch
-    dropped = drop_side(lift, side, last=False)
+    # Bài này là bài BÀN THỬ — robot đứng yên, không có gì để lùi. Truyền hàm rỗng
+    # cho tường minh; để trống thì drop_side() cảnh báo (đúng, vì trên sa bàn thật
+    # thiếu bước lùi là xúc lại kiện vừa thả).
+    dropped = drop_side(lift, side, last=False, lui=lambda: None)
     print(f"  drop_side({side}, last=False): "
           f"{'✅ IR xác nhận đã rời càng' if dropped else '❌ IR vẫn thấy pallet / lỗi đọc'}")
     print(f"  ✅ đã nâng lại càng {side} — chạy LUÔN dù IR {'OK' if dropped else 'FAIL'}")
@@ -250,7 +253,7 @@ def smoke_drop_single_side(lift: Lift, **_):
     if _ask(f"Thả nốt càng {other} + gập càng? (y/N): ") != "y":
         return dropped, None
 
-    dropped2 = drop_side(lift, other, last=True)
+    dropped2 = drop_side(lift, other, last=True, lui=lambda: None)
     print(f"  drop_side({other}, last=True): {'✅' if dropped2 else '❌'}")
     print("  ✅ đã gập càng — cả 2 càng về sàn, sẵn sàng di chuyển")
     return dropped and dropped2, None
@@ -337,9 +340,12 @@ def smoke_full_lap(m: Motion, lift: Lift, vision: Vision, **_):
         else:
             side = "left" if carried[0] == label else "right"
             last = i >= len(queue)          # kiện cuối → gập càng, còn nữa → nâng lại
-            dropped = drop_side(lift, side, last=last)
+            # LÙI nằm GIỮA thả và nâng càng — xem control/handling.drop_side.
+            dropped = drop_side(lift, side, last=last,
+                                lui=lambda: m.retreat_from_shelf())
             print(f"  drop_side({side}, last={last}): {'✅' if dropped else '❌'}"
-                  f" — đã {'gập càng' if last else 'nâng lại càng'}")
+                  f" — đã lùi ra rồi {'gập càng' if last else 'nâng lại càng'}")
+            continue
         m.retreat_from_shelf()
 
     m.dang_cong_hang = False         # đã thả hết, siêu âm dùng lại được

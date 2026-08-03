@@ -696,7 +696,9 @@ class Robot:
 
     def _drop_single_side(self, side: str) -> bool:
         """Thả 1 kiện rồi nâng lại càng — chuỗi ở control/handling.py."""
-        return drop_side(self.lift, side, last=False)
+        # LÙI nằm GIỮA thả và nâng càng — xem control/handling.drop_side.
+        return drop_side(self.lift, side, last=False,
+                         lui=lambda: self._retreat_from_shelf("sau khi thả"))
 
     def _delivery_is_trustworthy(self, approach_ok: bool, context: str) -> bool:
         """Có đủ căn cứ để TIN rằng đang đứng trong khu nhà máy không?
@@ -755,7 +757,11 @@ class Robot:
             else:
                 logger.error("DROP_FIRST thất bại — càng %s chưa thả được pallet", side)
 
-        self._retreat_from_shelf(f"DROP_FIRST {label}")
+        # KHÔNG lùi ở đây nữa: drop_side() đã lùi GIỮA thả và nâng càng. Còn nhánh
+        # same_factory dùng drop_both() thì hạ đồng bộ, không nâng lại, nên lùi sau
+        # vẫn đúng — gọi riêng cho nhánh đó.
+        if same_factory:
+            self._retreat_from_shelf(f"DROP_FIRST {label}")
 
         logger.info("Đã giao %d/%d kiện",
                      self.packages_delivered, config.TOTAL_PACKAGES_TASK1)
@@ -817,13 +823,15 @@ class Robot:
 
             # Chuỗi thả ở control/handling.py — gập càng chạy LUÔN, kể cả khi IR
             # không xác nhận (càng nằm thấp mà robot chạy tiếp là cạ sàn/vướng kệ).
-            dropped = drop_side(self.lift, side, last=True)
+            dropped = drop_side(
+                self.lift, side, last=True,
+                lui=lambda: self._retreat_from_shelf(f"sau khi thả {label}"))
             if dropped and trusted:
                 self.packages_delivered += 1
             else:
                 logger.error("DROP_SECOND thất bại — càng %s chưa thả được pallet", side)
 
-            self._retreat_from_shelf(f"DROP_SECOND {label}")
+            # drop_side() đã lùi rồi (giữa thả và gập càng).
         logger.info("Đã giao %d/%d kiện",
                      self.packages_delivered, config.TOTAL_PACKAGES_TASK1)
 

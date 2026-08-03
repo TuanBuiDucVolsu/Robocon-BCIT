@@ -68,21 +68,35 @@ def insert_and_lift_once(motion, lift, tier: int, require_both: bool = True,
     return lift.confirm_pickup(require_both=require_both)
 
 
-def drop_side(lift, side: str, last: bool) -> bool:
-    """Thả kiện ở càng `side`. Trả True khi IR xác nhận pallet đã RỜI càng.
+def drop_side(lift, side: str, last: bool, lui=None) -> bool:
+    """Thả kiện ở càng `side`, LÙI RA, rồi mới nâng/gập càng. Trả True khi IR xác
+    nhận pallet đã RỜI càng.
 
     last=False (DROP_FIRST, còn kiện nữa) → NÂNG LẠI càng vừa thả cho ngang càng kia.
     last=True  (DROP_SECOND, hết kiện)    → GẬP nốt càng còn lại về sàn.
 
+    ⚠️ THỨ TỰ LÀ BẮT BUỘC: THẢ → LÙI → NÂNG. Nâng càng khi robot còn ĐỨNG NGAY TRÊN
+    kiện vừa đặt là XÚC NÓ LÊN LẠI. Đo trên robot 03/08: thả xong ở Samsung, nâng
+    càng tại chỗ, kiện Samsung được xúc lên và mang sang thả ở Hana — hai kiện sai
+    nhà máy mà log vẫn báo thả OK và điểm vẫn cộng.
+    `lui` là hàm không tham số do caller cung cấp (thường là
+    Motion.retreat_from_shelf). Nhận qua tham số thay vì để caller tự gọi sau, để
+    thứ tự này KHÔNG THỂ viết sai ở chỗ khác — đã sai một lần vì nó nằm ngoài.
+
     ⚠️ BẤT BIẾN QUAN TRỌNG: nâng lại / gập càng chạy LUÔN LUÔN, kể cả khi IR KHÔNG
-    xác nhận. Càng còn nằm thấp mà robot lùi rồi chạy tiếp là cạ sàn, vướng mép kệ,
-    hoặc kéo đổ kiện hàng. Viết thành `if dropped: lift.raise_after_drop(...)` là
-    nhánh "IR fail" không bao giờ nâng càng lên — và đó đúng là nhánh hay xảy ra nhất.
+    xác nhận. Càng còn nằm thấp mà robot chạy tiếp là cạ sàn, vướng mép kệ, hoặc
+    kéo đổ kiện hàng. Viết thành `if dropped: lift.raise_after_drop(...)` là nhánh
+    "IR fail" không bao giờ nâng càng lên — và đó đúng là nhánh hay xảy ra nhất.
 
     Giá trị trả về CHỈ dùng để quyết định có cộng điểm hay không
     (`packages_delivered`), không dùng để quyết định có nâng càng hay không.
     """
     dropped = lift.dropoff_left() if side == "left" else lift.dropoff_right()
+    if lui is not None:
+        lui()
+    else:
+        logger.warning("Thả càng %s: KHÔNG có bước lùi trước khi nâng càng — robot "
+                       "sẽ nâng ngay trên kiện vừa đặt và xúc nó lên lại.", side)
     if last:
         lift.stow_forks(side)
     else:
