@@ -879,6 +879,21 @@ class TestApproachShelf(unittest.TestCase):
         m = self._motion([gan])
         self.assertTrue(m.approach_shelf(config.APPROACH_DISTANCE))
 
+    def test_near_zone_stops_between_steps_so_it_measures_standing_still(self):
+        """⚠️ Đoạn cuối phải ĐI TỪNG NHỊP — DỪNG — ĐO, không đo trong lúc chạy.
+
+        Vệt thật 03/08: cảm biến mất mục tiêu 0.2s giữa đoạn quyết định (báo 23cm
+        khi kệ ở 15cm), rồi nhảy 16.6 → 8.8, bỏ qua hẳn mốc dừng 14.4cm. Biên từ
+        16.5cm tới điểm dừng chỉ 2.1cm, bằng ĐÚNG MỘT nhịp cập nhật siêu âm.
+        Cảm biến đứng yên thì σ = 0.20cm (997 mẫu) — nên dừng lại mà đo.
+        """
+        moc = config.APPROACH_DISTANCE
+        m = self._motion([18.0, 16.0, moc + config.APPROACH_STOP_MARGIN])
+        self.assertTrue(m.approach_shelf(moc))
+        self.assertGreaterEqual(
+            m.stop_gently.call_count, 2,
+            "phải dừng GIỮA các nhịp, không chỉ dừng một lần lúc tới nơi")
+
     def test_a_single_noise_spike_must_not_send_it_back_to_FAST(self):
         """⚠️ HỒI QUY: chuyển pha phải CHỐT MỘT CHIỀU.
 
@@ -910,7 +925,11 @@ class TestApproachShelf(unittest.TestCase):
         """Còn xa hơn mốc + bù thì phải tiến tiếp, không dừng non."""
         moc = config.APPROACH_DISTANCE
         bu = config.APPROACH_STOP_MARGIN
-        m = self._motion([moc + bu + 3.0] * 5 + [moc + bu])
+        # Số đo GIẢM DẦN — robot đang thật sự tiến. Dãy hằng số sẽ bị cơ chế
+        # "KHÔNG TIẾN THÊM ĐƯỢC" bắt (đúng), nhất là ở chế độ đi từng nhịp vốn
+        # tốn ~0.4s mỗi vòng thay vì 0.02s.
+        m = self._motion([moc + bu + 3.0, moc + bu + 2.2, moc + bu + 1.4,
+                          moc + bu + 0.7, moc + bu])
         self.assertTrue(m.approach_shelf(moc))
         self.assertGreater(m._forward_guided.call_count, 0,
                            "phải tiến ít nhất một nhịp trước khi dừng")

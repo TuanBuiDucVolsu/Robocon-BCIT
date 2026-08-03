@@ -451,6 +451,25 @@ LINE_STRICT_BLACK = 0.15
 # gì, dừng cách kệ 3cm là không thể coi là "đã tới vị trí lấy hàng".
 APPROACH_ARRIVAL_TOLERANCE = 4.0   # cm
 
+# --- Đoạn cuối tiếp cận: ĐI TỪNG NHỊP, DỪNG, ĐO ------------------------------
+# Vệt siêu âm thật khi tiếp cận kệ (robot 03/08, option 5 tầng 1):
+#
+#   0.00s:16.5  0.17s:15.9  0.37s:23.2  0.44s:23.5  0.50s:23.2  0.57s:22.6
+#   0.63s:16.6  0.70s:8.8        ← đo lại lúc đứng yên: 6.4cm
+#
+# Cảm biến MẤT MỤC TIÊU 0.2 giây ngay giữa đoạn quyết định, báo 23cm trong khi kệ
+# ở ~15cm; rồi nhảy thẳng 16.6 → 8.8, BỎ QUA hoàn toàn mốc dừng 14.4cm.
+#
+# Không hằng số nào cứu được ca này. Từ 16.5cm tới điểm dừng chỉ còn 2.1cm, mà mỗi
+# nhịp cập nhật (queue_len × 60ms) robot đã đi ~2.5cm — biên bằng ĐÚNG MỘT nhịp đo.
+#
+# Thứ duy nhất đã chứng minh được bằng số là cảm biến đọc rất chuẩn khi ĐỨNG YÊN:
+# tools.check_sonar_jitter 30 cho 997 mẫu, σ = 0.20cm, 0 mẫu lệch > 2cm, 0 mẫu kịch
+# trần. Nên đoạn cuối đi TỪNG NHỊP rồi DỪNG LẠI MÀ ĐO, không đo trong lúc chạy.
+# Giá: thêm ~2-3 giây mỗi lần tiếp cận. Đổi lấy việc không húc kệ thì rẻ.
+APPROACH_STEPPED = True       # False = về hành vi cũ (chạy liền, đo khi đang chạy)
+APPROACH_STEP_TIME = 0.15     # Giây chạy mỗi nhịp trong vùng gần
+
 # --- Rời khỏi giao lộ (Motion._escape_intersection) ---
 # Chạy tới khi CẢM BIẾN hết báo giao lộ, không chạy mù một khoảng cố định.
 # Bản cũ chạy mù 0.3s — số viết cứng, chưa đo. Đo trên bản in: vạch dọc C0 rộng 20mm

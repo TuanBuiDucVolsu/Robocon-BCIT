@@ -906,6 +906,16 @@ class Motion:
         best_at = start
         nhieu_ap = 0             # số gai nhiễu đã bỏ qua
         da_vao_gan = False       # đã vào vùng gần chưa (chốt MỘT CHIỀU)
+        # APPROACH_NO_PROGRESS_TIME = 1.2s được chọn cho vòng lặp 0.02s. Chế độ đi
+        # từng nhịp tốn ~0.5s mỗi vòng, nên giữ nguyên 1.2s là chỉ còn 2 nhịp trước
+        # khi nó kêu "kẹt" — dễ bỏ cuộc oan. Nới theo ĐÚNG NHỊP thay vì viết cứng
+        # một số mới, để đổi APPROACH_STEP_TIME không âm thầm phá cơ chế này.
+        moc_ket = config.APPROACH_NO_PROGRESS_TIME
+        if getattr(config, "APPROACH_STEPPED", False):
+            mot_nhip = (config.APPROACH_STEP_TIME
+                        + config.ULTRASONIC_QUEUE_LEN * 0.06 + 0.05
+                        + getattr(config, "STOP_SETTLE_TIME", 0.0))
+            moc_ket = max(moc_ket, 4 * mot_nhip)
         # Tốc độ của nhịp GẦN NHẤT — stop_gently() cần biết đang chạy nhanh cỡ nào
         # để giảm dần từ đó. Khởi tạo cho vòng lặp đầu (chưa qua nhánh chọn tốc độ).
         speed = config.APPROACH_FAST_SPEED
@@ -1017,7 +1027,7 @@ class Motion:
             if dist < best_dist - config.APPROACH_NO_PROGRESS_CM:
                 best_dist = dist
                 best_at = time.time()
-            elif time.time() - best_at > config.APPROACH_NO_PROGRESS_TIME:
+            elif time.time() - best_at > moc_ket:
                 self.stop()
                 logger.warning("Vệt siêu âm (%d mẫu đổi): %s", len(vet),
                                " ".join(f"{t:.2f}s:{d:.1f}" for t, d in vet[-18:]))
@@ -1025,7 +1035,7 @@ class Motion:
                              "cần %.1fcm) — DỪNG, nhiều khả năng càng đã chạm kệ. "
                              "Kiểm APPROACH_DISTANCE có đúng khoảng cách CẢM BIẾN→kệ "
                              "lúc càng vào đúng khe pallet không.",
-                             config.APPROACH_NO_PROGRESS_TIME, dist, target_cm)
+                             moc_ket, dist, target_cm)
                 return False
 
             if dist <= config.APPROACH_DETECT_DISTANCE:
@@ -1058,8 +1068,19 @@ class Motion:
                 da_vao_gan = True
             speed = (config.APPROACH_SLOW_SPEED if da_vao_gan
                      else config.APPROACH_FAST_SPEED)
-            self._forward_guided(speed)
-            time.sleep(0.02)
+            if da_vao_gan and getattr(config, "APPROACH_STEPPED", False):
+                # ĐI TỪNG NHỊP RỒI DỪNG MÀ ĐO. Lý do + vệt số đo thật:
+                # config.APPROACH_STEPPED. Vòng lặp phía trên đọc get_distance()
+                # ở đầu mỗi vòng, nên sau khi dừng ở đây thì số đo kế tiếp là số
+                # đo LÚC ĐỨNG YÊN — loại hẳn cả độ trễ hàng đợi lẫn nhiễu khi chạy.
+                self._forward_guided(speed)
+                time.sleep(config.APPROACH_STEP_TIME)
+                self.stop_gently(speed)
+                time.sleep(config.ULTRASONIC_QUEUE_LEN * 0.06 + 0.05)
+                doi_luc = time.time()
+            else:
+                self._forward_guided(speed)
+                time.sleep(0.02)
 
         self.stop()
         logger.warning("Timeout tiếp cận kệ sau %.1fs! Vệt siêu âm (%d mẫu đổi): %s",
