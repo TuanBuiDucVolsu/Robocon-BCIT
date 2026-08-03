@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import config
 from control import Motion
+from control.motion import LineSensor
 from tests.config_editor import save_config
 from control.mcp3008_bus import reset_mcp3008_bus
 

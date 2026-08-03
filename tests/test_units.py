@@ -2018,6 +2018,63 @@ class TestBackMinTravel(unittest.TestCase):
                          "mốc thời gian đã bị thay bằng bằng chứng 'đã thấy vạch'")
 
 
+class TestBackMinTravelCm(unittest.TestCase):
+    """Chặng lùi bỏ qua giao lộ cho tới khi ĐÃ LÙI ĐỦ XA (đo bằng encoder).
+
+    ⚠️ Vì sao không lọc bằng HÌNH DẠNG tín hiệu: đo trên robot 03/08, chữ ký GIẢ ở
+    chân kệ và chữ ký THẬT ở giao lộ CÙNG MỘT DẠNG —
+        giả  ADC [504,   0, 106, 454,   0,   0]   đen ở 2,3,5,6
+        thật ADC [  0, 703,   0,   0,   0, 926]   đen ở 1,3,4,5
+    cả hai đều 4 mắt đen với đúng một mắt hở. Bộ lọc "dãy liền nhau" (đúng cho
+    exit_start_zone) bác luôn cả cái thật: robot bỏ qua giao lộ rồi lùi tới 3.2s,
+    vượt xa C0R0. Quãng đường thì phân biệt được — mảng đen chân kệ nằm NGAY ĐẦU
+    chặng lùi, giao lộ thì cách một đoạn.
+    """
+
+    def _motion(self, xung_moi_lan: int, co_encoder: bool = True):
+        m = object.__new__(Motion)
+        m._aborted = lambda: False
+        m._last_error = 0.0
+        m.forward = MagicMock()
+        m.backward = MagicMock()
+        m.stop = MagicMock()
+        m._escape_intersection = MagicMock()
+        m.tien_bu_cm = MagicMock(return_value=True)
+        m.read_line_sensor_raw = lambda: [v / 1023 for v in (0, 703, 0, 0, 0, 926)]
+        n = config.LINE_SENSOR_COUNT
+        vach = [0] * n
+        vach[n // 2 - 1] = vach[n // 2] = 1
+        dem = {"n": 0}
+
+        def fl(speed, reverse=False):
+            dem["n"] += 1
+            return (dem["n"] > 2, [1] * n if dem["n"] > 2 else vach)
+
+        m.follow_line = fl
+        m._encoder_left = _EncoderGia(xung_moi_lan, co_encoder)
+        m._encoder_right = _EncoderGia(0, co_encoder)
+        return m
+
+    def test_intersection_within_the_first_few_cm_is_ignored(self):
+        """Chưa lùi đủ xa thì tín hiệu giao lộ là mảng đen chân kệ, không phải C0R0."""
+        m = self._motion(xung_moi_lan=0)          # không nhúc nhích
+        with self.assertLogs("control.motion", level="INFO") as nk:
+            self.assertFalse(m.back_to_intersection(1, timeout=0.6))
+        self.assertIn("mới lùi", "\n".join(nk.output))
+
+    def test_intersection_after_enough_travel_is_accepted(self):
+        can = int(config.BACK_MIN_TRAVEL_CM * config.ENCODER_PULSES_PER_CM) + 10
+        m = self._motion(xung_moi_lan=can)        # đủ ngay nhịp đầu
+        self.assertTrue(m.back_to_intersection(1, timeout=2.0))
+
+    def test_no_encoder_falls_back_instead_of_reversing_forever(self):
+        """⚠️ HỒI QUY: thiếu encoder mà vẫn áp cổng thì lui_cm luôn = 0 → lùi vô hạn."""
+        m = self._motion(xung_moi_lan=0, co_encoder=False)
+        with self.assertLogs("control.motion", level="WARNING") as nk:
+            self.assertTrue(m.back_to_intersection(1, timeout=2.0))
+        self.assertIn("KHÔNG đo được quãng", "\n".join(nk.output))
+
+
 class TestReverseRecenter(unittest.TestCase):
     """Đoạn tiến bù sau khi lùi phải dùng ĐÚNG tốc độ mà thời gian được đo ra.
 
@@ -2296,6 +2353,13 @@ class TestBackToIntersection(unittest.TestCase):
         cls.m.cleanup()
 
     def setUp(self):
+        # Lớp này dùng Motion() thật với chân GPIO GIẢ, nên encoder "khả dụng"
+        # nhưng KHÔNG BAO GIỜ sinh xung — robot mô phỏng không hề nhúc nhích. Cổng
+        # quãng-đường-tối-thiểu vì thế chặn mọi giao lộ, mà đó không phải thứ mấy
+        # bài này kiểm. Tắt cổng ở đây; nó có bài riêng bên dưới.
+        gate = patch.object(config, "BACK_MIN_TRAVEL_CM", 0.0)
+        gate.start()
+        self.addCleanup(gate.stop)
         n = config.LINE_SENSOR_COUNT
         # Vài nhịp đầu đọc VẠCH THƯỜNG (2 mắt giữa), rồi mới tới giao lộ (mọi mắt).
         # Không có mấy nhịp vạch thường đó thì back_to_intersection bỏ qua tín hiệu

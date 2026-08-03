@@ -685,6 +685,19 @@ RECENTER_MAX_TIME = 3.0       # Giây chặn trên: encoder hỏng thì không c
 # đếm sẵn quãng luồn vào bằng encoder nên không phải đoán thêm hằng số nào. Hệ số
 # > 1 để càng ra HẲN khỏi khe pallet chứ không dừng ngay ở mép.
 RETREAT_BACKOUT_MARGIN = 1.15
+
+# Quãng LÙI tối thiểu trước khi tin một tín hiệu giao lộ (đo bằng encoder).
+# Vì sao không lọc bằng HÌNH DẠNG tín hiệu: đo trên robot 03/08 cho thấy chữ ký
+# GIẢ ở chân kệ và chữ ký THẬT ở giao lộ có cùng một dạng —
+#     giả  ADC [504,   0, 106, 454,   0,   0]   đen ở 2,3,5,6
+#     thật ADC [  0, 703,   0,   0,   0, 926]   đen ở 1,3,4,5
+# cả hai đều 4 mắt đen với đúng một mắt hở ở giữa. Đòi dãy LIỀN NHAU (bộ lọc dùng
+# cho exit_start_zone) thì bác luôn cả cái thật: robot bỏ qua giao lộ và lùi tới
+# 3.2s, tức đã vượt xa C0R0.
+# Quãng đường thì phân biệt được: mảng đen chân kệ nằm NGAY ĐẦU chặng lùi, còn
+# giao lộ thì cách một đoạn. Để nhỏ thôi — sau retreat_from_shelf robot đã lùi
+# sẵn ~20cm nên phần còn lại tới giao lộ không nhiều.
+BACK_MIN_TRAVEL_CM = 5.0
 # Giây tiến bù TRƯỚC KHI XOAY, khi vừa TIẾN tới giao lộ (chặng "forward" ngay trước
 # lệnh xoay). TÁCH RIÊNG khỏi REVERSE_RECENTER_TIME để chỉnh/tắt được độc lập —
 # hai chiều dừng ở hai mép khác nhau của vạch nên quãng bù có thể không bằng nhau.

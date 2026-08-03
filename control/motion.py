@@ -1595,10 +1595,27 @@ class Motion:
             lost_since = None
             reached = False
             da_thay_vach = False   # đã đọc được VẠCH LINE THƯỜNG lần nào chưa
+            # Cổng quãng đường CHỈ dùng được khi có encoder VÀ đã calibrate.
+            # Thiếu một trong hai mà vẫn áp thì lui_cm luôn = 0 và mọi giao lộ đều
+            # bị bác → robot lùi vô hạn. Bộ test bắt được đúng ca này.
+            do_duoc_quang = (config.ENCODER_PULSES_PER_CM > 0
+                             and getattr(getattr(self, "_encoder_left", None),
+                                         "available", False)
+                             and getattr(getattr(self, "_encoder_right", None),
+                                         "available", False))
+            self._doc_xung()       # xả bộ đếm — đo quãng lùi của CHẶNG NÀY
+            lui_xung_gl = 0
+            if not do_duoc_quang:
+                logger.warning("Lùi: KHÔNG đo được quãng (encoder %s) — mất cổng "
+                               "chống nhận nhầm mảng đen chân kệ, chỉ còn bằng chứng "
+                               "'đã thấy vạch thường'.",
+                               "chưa calibrate" if config.ENCODER_PULSES_PER_CM <= 0
+                               else "không khả dụng")
 
             while time.time() - start < timeout:
                 if self._aborted():
                     return False
+                lui_xung_gl += self._doc_xung()
                 at_intersection, values = self.follow_line(base_speed, reverse=True)
                 # ⚠️ KHÔNG nhận giao lộ trong những giây đầu. Từ điểm cuối (kệ/nhà
                 # máy) tới giao lộ là 35.4cm, mà robot đứng cách kệ ~12.9cm, nên cảm
@@ -1631,17 +1648,16 @@ class Motion:
                 # rồi tiến bù 12cm VỀ PHÍA KỆ và xoay → chạm kệ.
                 # Ngưỡng thích nghi lúc đó tụt còn 151 nên 504/454 mới thành "sáng"
                 # và 106 thành "đen"; ngưỡng đen ĐẬM tuyệt đối không bị kéo theo.
-                if at_intersection:
-                    raw_gl = self.read_line_sensor_raw()
-                    dam = LineSensor.day_den_dam_dai_nhat(raw_gl)
-                    if dam < config.INTERSECTION_THRESHOLD:
-                        logger.info(
-                            "Lùi: bỏ qua tín hiệu giao lộ ở %.2fs — dãy đen đậm LIỀN "
-                            "NHAU dài nhất chỉ %d/%d, ADC %s. Hình in hoặc mảng đen "
-                            "chân kệ, không phải giao lộ.",
-                            time.time() - start, dam, config.INTERSECTION_THRESHOLD,
-                            [int(round(v * 1023)) for v in raw_gl])
-                        at_intersection = False
+                lui_cm = (lui_xung_gl / config.ENCODER_PULSES_PER_CM
+                          if do_duoc_quang else None)
+                if at_intersection and lui_cm is not None \
+                        and lui_cm < config.BACK_MIN_TRAVEL_CM:
+                    logger.info(
+                        "Lùi: bỏ qua tín hiệu giao lộ ở %.2fs — mới lùi %.1fcm "
+                        "(cần %.1f). Mảng đen chân kệ nằm ngay đầu chặng lùi, giao "
+                        "lộ thì cách một đoạn. Cảm biến %s",
+                        time.time() - start, lui_cm, config.BACK_MIN_TRAVEL_CM, values)
+                    at_intersection = False
 
                 if at_intersection:
                     reached = True
