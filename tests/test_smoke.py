@@ -51,6 +51,23 @@ def _ask(msg: str, default: str = "") -> str:
     return input(f"  {msg}").strip().lower() or default
 
 
+def _hoi_tang(mac_dinh: int = 1) -> int:
+    """Hỏi lấy hàng ở TẦNG nào. Sai tầng thì hỏng im lặng ở HAI chỗ cùng lúc.
+
+    1. Càng nâng lên sai độ cao → luồn trượt ra ngoài khe pallet, IR không báo.
+    2. Vùng quét camera DỊCH THEO TẦNG (config.ROI_Y_CENTER) — soi nhầm tầng thì
+       classify_pair vẫn trả về nhãn, chỉ là nhãn của kiện tầng kia. Không có tín
+       hiệu lỗi nào; log vẫn ✅.
+    """
+    while True:
+        tra_loi = _ask(f"Lấy hàng ở TẦNG nào? (1/2) [{mac_dinh}]: ", str(mac_dinh))
+        if tra_loi in ("1", "2"):
+            tang = int(tra_loi)
+            print(f"  → Tầng {tang}. Kiểm: kệ CÓ 2 kiện ở tầng {tang} chứ?")
+            return tang
+        print("  Chỉ nhận 1 hoặc 2.")
+
+
 def _run(m: Motion, goal: str, pose) -> tuple[bool, tuple]:
     """Đi từ `pose` tới `goal` bằng đúng route mà main.py sẽ dùng."""
     route, new_pose = nav.plan(pose, goal)
@@ -258,22 +275,25 @@ def smoke_nv2_pickup(m: Motion, lift: Lift, **_):
 # ==========================================================
 
 def smoke_full_lap(m: Motion, lift: Lift, vision: Vision, **_):
-    """Kệ 3 T1 → giao 2 nhà máy → quay về Kệ 3 T2.
+    """Kệ 3 (tầng CHỌN được) → giao 2 nhà máy → quay về Kệ 3 lấy tầng kia.
 
     Đây là kịch bản duy nhất chạy qua ĐỦ 3 loại tuyến vừa viết lại:
     kệ→nhà máy, nhà máy→nhà máy, nhà máy→kệ. Cũng là chỗ mà bảng route tĩnh cũ sai
     9/12 trường hợp — bắt buộc chạy trước khi tin vào bản đồ.
     """
-    print("\n[SMOKE 5] MỘT LƯỢT ĐẦY ĐỦ — pickup → giao 2 nhà máy → quay về lấy tầng 2")
+    print("\n[SMOKE 5] MỘT LƯỢT ĐẦY ĐỦ — pickup → giao 2 nhà máy → quay về lấy tầng kia")
     print(f"  Nửa sân đang dùng: nhà máy cùng hàng ô xuất phát = "
           f"{nav.FACTORY_AT_START_ROW.upper()}")
     print("  ⚠ Sai nửa sân = giao nhầm nhà máy mà không có báo lỗi nào.")
+
+    tang = _hoi_tang()
+    tang_sau = 2 if tang == 1 else 1
 
     ok, pose = smoke_exit_and_navigate(m)
     if not ok:
         return False, None
 
-    ok, labels = smoke_pickup_cycle(m, lift, vision, tier=1, doc_lap=False)
+    ok, labels = smoke_pickup_cycle(m, lift, vision, tier=tang, doc_lap=False)
     if not ok:
         return False, None
     label_l, label_r = labels
@@ -317,8 +337,8 @@ def smoke_full_lap(m: Motion, lift: Lift, vision: Vision, **_):
                   f" — đã {'gập càng' if last else 'nâng lại càng'}")
         m.retreat_from_shelf()
 
-    # --- Quay về kho lấy TẦNG 2 cùng kệ ---
-    print("\n  --- Quay về Kệ 3 để lấy tầng 2 ---")
+    # --- Quay về kho lấy TẦNG CÒN LẠI cùng kệ ---
+    print(f"\n  --- Quay về Kệ 3 để lấy tầng {tang_sau} ---")
     ok, cur_pose = _run(m, "SHELF0", cur_pose)
     if not ok:
         print("  ❌ Quay về kho THẤT BẠI")
@@ -326,8 +346,8 @@ def smoke_full_lap(m: Motion, lift: Lift, vision: Vision, **_):
 
     print("\n  ✅ HOÀN TẤT 1 lượt đầy đủ.")
     print("  Kiểm bằng mắt: robot có đang đứng ĐÚNG trước Kệ 3, quay mặt vào kệ không?")
-    if _ask("  Chạy tiếp pickup tầng 2 để khép vòng? (y/N): ") == "y":
-        return smoke_pickup_cycle(m, lift, vision, tier=2)
+    if _ask(f"  Chạy tiếp pickup tầng {tang_sau} để khép vòng? (y/N): ") == "y":
+        return smoke_pickup_cycle(m, lift, vision, tier=tang_sau)
     return True, None
 
 
@@ -496,7 +516,8 @@ SMOKES = {
     "2": ("Pickup 1 lượt (approach + classify_pair + nâng)", smoke_pickup_cycle),
     "3": ("Thả từng càng + nâng lại / gập càng", smoke_drop_single_side),
     "4": ("NV2 — chỉ nhấc hàng rời", smoke_nv2_pickup),
-    "5": ("★ MỘT LƯỢT ĐẦY ĐỦ: pickup → giao 2 NM → quay về tầng 2", smoke_full_lap),
+    "5": ("★ MỘT LƯỢT ĐẦY ĐỦ: pickup (chọn tầng) → giao 2 NM → quay về tầng kia",
+          smoke_full_lap),
     "6": ("Chặn chạy mù của approach_shelf", smoke_approach_blind_guard),
     "7": ("NHIỆM VỤ 2 đầy đủ: Kệ 4 → nhà máy liên hợp", smoke_task2_full),
     "8": ("Đường dài KHÔNG bốc hàng: xuất phát → trước Kệ 3 → lùi → Samsung",
