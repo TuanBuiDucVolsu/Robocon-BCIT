@@ -612,13 +612,18 @@ class Motion:
             #     xoay sau khi TIẾN → rời giao lộ [0,0,0,0,0,0]  TRẮNG HẾT → gãy
             # Cả hai chiều đều cần tiến thêm ĐÚNG 12cm, nên dùng chung hằng số.
             if (action in ("left", "right") and i > 0
-                    and route[i - 1][0] == "forward"
-                    and config.TURN_RECENTER_TIME > 0):
-                logger.info("Tiến bù %.2fs ở %d%% để tâm xoay về đúng giao lộ",
-                            config.TURN_RECENTER_TIME, config.REVERSE_RECENTER_SPEED)
-                self.forward(config.REVERSE_RECENTER_SPEED)
-                time.sleep(config.TURN_RECENTER_TIME)
-                self.stop()
+                    and route[i - 1][0] == "forward"):
+                if self.tien_bu_cm(config.RECENTER_CM,
+                                   config.REVERSE_RECENTER_SPEED, "trước khi xoay"):
+                    pass
+                elif config.TURN_RECENTER_TIME > 0:
+                    logger.info("Tiến bù %.2fs ở %d%% để tâm xoay về đúng giao lộ "
+                                "(CHƯA calibrate encoder — chạy mù theo đồng hồ)",
+                                config.TURN_RECENTER_TIME,
+                                config.REVERSE_RECENTER_SPEED)
+                    self.forward(config.REVERSE_RECENTER_SPEED)
+                    time.sleep(config.TURN_RECENTER_TIME)
+                    self.stop()
             if action == "forward":
                 # Gọi MỘT lần cho cả N giao lộ (chia nhỏ sẽ ép dừng ở từng cái, mất
                 # hết cái lợi của chế độ chạy liền); tiến độ ghi qua callback.
@@ -1121,6 +1126,40 @@ class Motion:
         else:
             self._steer(raw, speed)
 
+    def tien_bu_cm(self, cm: float, speed: float, ly_do: str = "") -> bool:
+        """Tiến ĐÚNG `cm` centimet, đo bằng ENCODER. Trả True nếu đo được bằng encoder.
+
+        Dùng cho bước tiến bù trước khi xoay: xoay 90° tại chỗ thì TRỤC BÁNH phải
+        nằm trong ~±1.5cm của giao lộ, mà thanh cảm biến lại ở đầu xe cách trục
+        ~12cm. Trước đây bù bằng THỜI GIAN — quãng đường đổi theo pin, ma sát và
+        tải trên càng, nên lúc đúng lúc sai. Xem config.ENCODER_PULSES_PER_CM.
+
+        Chưa calibrate hoặc encoder hỏng → trả False để caller rơi về cách cũ.
+        """
+        xung_cm = getattr(config, "ENCODER_PULSES_PER_CM", 0.0)
+        co_enc = (getattr(getattr(self, "_encoder_left", None), "available", False)
+                  and getattr(getattr(self, "_encoder_right", None), "available", False))
+        if xung_cm <= 0 or not co_enc:
+            return False
+
+        # Trung bình 2 bánh: xung_cm chốt theo TỔNG 2 bánh nên dùng thẳng tổng.
+        can = cm * xung_cm
+        self._doc_xung()                      # xả bộ đếm của chặng trước
+        self.forward(speed)
+        start, da = time.time(), 0
+        while da < can and time.time() - start < config.RECENTER_MAX_TIME:
+            if self._aborted():
+                break
+            da += self._doc_xung()
+            time.sleep(0.01)
+        self.stop()
+        het_gio = da < can
+        (logger.warning if het_gio else logger.info)(
+            "Tiến bù %s%.1fcm: %d/%.0f xung trong %.2fs%s",
+            f"({ly_do}) " if ly_do else "", cm, da, can, time.time() - start,
+            " — HẾT CHẶN TRÊN, chưa đủ quãng. Encoder rớt xung?" if het_gio else "")
+        return True
+
     def _doc_xung(self) -> int:
         """Tổng xung encoder 2 bánh kể từ lần gọi trước (đọc xong là RESET).
 
@@ -1510,7 +1549,10 @@ class Motion:
 
             # Thân xe đang nằm QUÁ giao lộ một đoạn = khoảng cách trục bánh → cảm biến
             # (tiến thì nằm trước giao lộ đúng bấy nhiêu). Tiến bù nếu đã calibrate.
-            if config.REVERSE_RECENTER_TIME > 0:
+            if self.tien_bu_cm(config.RECENTER_CM, config.REVERSE_RECENTER_SPEED,
+                               "sau khi lùi"):
+                pass
+            elif config.REVERSE_RECENTER_TIME > 0:
                 # ⚠️ Dùng REVERSE_RECENTER_SPEED, KHÔNG dùng base_speed. Đoạn tiến bù
                 # này chạy MÙ theo thời gian, nên quãng đường phụ thuộc thẳng vào tốc
                 # độ — đổi tốc độ là hằng số thời gian đã calibrate mất hiệu lực.

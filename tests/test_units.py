@@ -848,6 +848,60 @@ class _EncoderGia:
         return self.xung
 
 
+class TestTienBuCm(unittest.TestCase):
+    """Tiến bù trước khi xoay phải đo bằng QUÃNG ĐƯỜNG, không phải đồng hồ.
+
+    ⚠️ Xoay 90° tại chỗ đòi TRỤC BÁNH nằm trong ~±1.5cm của giao lộ (vạch rộng
+    20mm, thanh cảm biến trải 47mm). Thanh cảm biến ở đầu xe cách trục ~12cm, nên
+    lùi tới khi cảm biến thấy giao lộ là trục đã vượt qua 12cm.
+    REVERSE_RECENTER_TIME là hằng số THỜI GIAN: quãng đường của nó đổi theo pin, ma
+    sát sàn và tải trên càng. Đo trên robot 03/08: lùi-rồi-tiến-để-xoay chạy không
+    ổn định — lúc xoay đúng vào line, lúc lùi ít quá, lúc tiến quá đà va vào kệ.
+    """
+
+    def _motion(self, xung_moi_lan: int, co_encoder: bool = True):
+        m = object.__new__(Motion)
+        m._aborted = lambda: False
+        m.stop = MagicMock()
+        m.forward = MagicMock()
+        m._encoder_left = _EncoderGia(xung_moi_lan, co_encoder)
+        m._encoder_right = _EncoderGia(xung_moi_lan, co_encoder)
+        return m
+
+    def test_uncalibrated_falls_back_to_the_old_timed_nudge(self):
+        """ENCODER_PULSES_PER_CM = 0 → trả False để caller dùng cách cũ."""
+        m = self._motion(10)
+        with patch.object(config, "ENCODER_PULSES_PER_CM", 0.0):
+            self.assertFalse(m.tien_bu_cm(12.0, 35))
+        m.forward.assert_not_called()
+
+    def test_missing_encoder_falls_back_too(self):
+        m = self._motion(10, co_encoder=False)
+        with patch.object(config, "ENCODER_PULSES_PER_CM", 5.0):
+            self.assertFalse(m.tien_bu_cm(12.0, 35))
+        m.forward.assert_not_called()
+
+    def test_stops_once_the_pulse_target_is_reached(self):
+        """Đủ xung là DỪNG — không chạy tiếp cho hết chặn trên."""
+        m = self._motion(10)
+        with patch.object(config, "ENCODER_PULSES_PER_CM", 5.0):
+            t0 = time.time()
+            self.assertTrue(m.tien_bu_cm(12.0, 35))     # cần 60 xung, 10/nhịp
+        self.assertLess(time.time() - t0, config.RECENTER_MAX_TIME,
+                        "chạy hết chặn trên = không hề đếm xung")
+        m.stop.assert_called()
+
+    def test_dead_encoder_still_stops_at_the_time_cap(self):
+        """Encoder im (0 xung) thì phải dừng ở chặn trên, không chạy vô hạn."""
+        m = self._motion(0)
+        with patch.object(config, "ENCODER_PULSES_PER_CM", 5.0):
+            with patch.object(config, "RECENTER_MAX_TIME", 0.4):
+                with self.assertLogs("control.motion", level="WARNING") as nk:
+                    self.assertTrue(m.tien_bu_cm(12.0, 35))
+        self.assertIn("HẾT CHẶN TRÊN", "\n".join(nk.output))
+        m.stop.assert_called()
+
+
 class TestCreepStallGuard(unittest.TestCase):
     """Chặn cứng khi luồn càng phải dùng ENCODER, không phải siêu âm.
 

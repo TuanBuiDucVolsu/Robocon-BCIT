@@ -663,6 +663,22 @@ EDGE_COST_REVERSE = 1        # Phụ phí so với tiến 1 giao lộ → hoà t
 
 REVERSE_RECENTER_SPEED = 35
 REVERSE_RECENTER_TIME = 1.3
+
+# --- TIẾN BÙ ĐO BẰNG ENCODER thay vì bằng đồng hồ -------------------------
+# Xoay 90° tại chỗ thì TRỤC BÁNH phải nằm trong ~±1.5cm của giao lộ (vạch rộng
+# 20mm, thanh cảm biến trải 47mm) — lệch hơn là xoay xong cảm biến văng ra vùng
+# trắng. Mà REVERSE_RECENTER_TIME là một con số THỜI GIAN: quãng đường nó đi đổi
+# theo pin, ma sát sàn, và tải trên càng (cõng 2 kiện nặng hơn hẳn lúc đi không).
+# Đo trên robot 03/08: lùi-rồi-tiến-để-xoay chạy KHÔNG ỔN ĐỊNH — lúc xoay đúng vào
+# line, lúc lùi ít quá, lúc tiến quá đà rồi va vào kệ khi xoay.
+#
+# Encoder biến nó thành QUÃNG ĐƯỜNG thật. Cần đúng hai số ĐO ĐƯỢC:
+#   RECENTER_CM            — khoảng cách thanh cảm biến → trục bánh, đo bằng thước
+#   ENCODER_PULSES_PER_CM  — chốt bằng python3 -m tools.calibrate_encoder_cm
+# Chưa calibrate (= 0) thì tự động rơi về cách cũ theo thời gian.
+ENCODER_PULSES_PER_CM = 0.0   # 0 = CHƯA CALIBRATE → dùng REVERSE_RECENTER_TIME
+RECENTER_CM = 12.0            # cm — ĐO BẰNG THƯỚC trên robot, không phải số đoán
+RECENTER_MAX_TIME = 3.0       # Giây chặn trên: encoder hỏng thì không chạy vô hạn
 # Giây tiến bù TRƯỚC KHI XOAY, khi vừa TIẾN tới giao lộ (chặng "forward" ngay trước
 # lệnh xoay). TÁCH RIÊNG khỏi REVERSE_RECENTER_TIME để chỉnh/tắt được độc lập —
 # hai chiều dừng ở hai mép khác nhau của vạch nên quãng bù có thể không bằng nhau.
