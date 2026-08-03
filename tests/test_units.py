@@ -2198,24 +2198,43 @@ class TestDemGiaoLoDoiDenDam(unittest.TestCase):
         m = self._motion((141, 119, 53, 148, 101, 131))
         m._encoder_left = _EncoderGia(0)          # không nhúc nhích
         m._encoder_right = _EncoderGia(0)
-        m.read_line_sensor_adc = lambda: [141, 119, 53, 148, 101, 131]
         with self.assertLogs("control.motion", level="INFO") as nk:
-            self.assertFalse(m.follow_line_until_intersection(timeout=0.5))
+            self.assertFalse(m.follow_line_until_intersection(
+                timeout=0.5, roi_diem_cuoi=True))
         self.assertIn("mới đi", "\n".join(nk.output))
+
+    def test_gate_is_OFF_when_starting_on_the_clean_board(self):
+        """⚠️ HỒI QUY: cổng quãng đường KHÔNG được áp cho chặng đầu từ ô xuất phát.
+
+        exit_start_zone() bỏ robot lại RẤT GẦN C0R0. Áp cổng 10cm là bác luôn giao
+        lộ thật đó — robot đi tiếp, mảng đen chân kệ thành "giao lộ", rồi advance
+        khởi hành khi đã sát kệ và LAO VÀO KỆ. Đo trên robot 03/08.
+        Nhận ra "đang trên tấm in" bằng lần đọc ĐẦU: trên sa bàn trắng luôn có mắt
+        đọc ~900, trên tấm in thì không mắt nào quá ~250.
+        """
+        # Route START → SHELF0 mở đầu bằng `forward`, KHÔNG phải `back`, nên
+        # execute_route không bật cờ → cổng tắt. Đây là mặc định.
+        m = self._motion((917, 914, 0, 0, 0, 0))
+        m._encoder_left = _EncoderGia(0)           # chưa đi được cm nào
+        m._encoder_right = _EncoderGia(0)
+        self.assertTrue(m.follow_line_until_intersection(timeout=1.0),
+                        "cổng đã bác nhầm giao lộ thật ngay sau ô xuất phát")
 
     def test_junction_after_enough_travel_is_counted(self):
         m = self._motion((917, 914, 0, 0, 0, 0))
         can = int(config.FORWARD_MIN_TRAVEL_CM * config.ENCODER_PULSES_PER_CM) + 10
         m._encoder_left = _EncoderGia(can)
         m._encoder_right = _EncoderGia(0)
-        self.assertTrue(m.follow_line_until_intersection(timeout=1.0))
+        self.assertTrue(m.follow_line_until_intersection(timeout=1.0,
+                                                        roi_diem_cuoi=True))
 
     def test_no_encoder_still_counts_instead_of_never_arriving(self):
         """Thiếu encoder mà vẫn áp cổng thì di_cm luôn = 0 → không bao giờ tới nơi."""
         m = self._motion((917, 914, 0, 0, 0, 0))
         m._encoder_left = _EncoderGia(0, available=False)
         m._encoder_right = _EncoderGia(0, available=False)
-        self.assertTrue(m.follow_line_until_intersection(timeout=1.0))
+        self.assertTrue(m.follow_line_until_intersection(timeout=1.0,
+                                                        roi_diem_cuoi=True))
 
     def test_plain_line_inflated_by_the_threshold_is_NOT_counted(self):
         m = self._motion((834, 270, 0, 0, 0, 930))      # 3 mắt đen đậm

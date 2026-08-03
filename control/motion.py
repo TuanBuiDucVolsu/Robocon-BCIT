@@ -657,6 +657,12 @@ class Motion:
         # Xoá ở CUỐI route đầu tiên, để chặng START (nơi cờ có nghĩa) vẫn dùng được.
         xoa_co_sau_route = getattr(self, "tren_giao_lo_dau", False)
 
+        # Route khởi hành TỪ ĐIỂM CUỐI (kệ / khu nhà máy) luôn mở đầu bằng LÙI —
+        # bộ tìm đường không có cách nào khác để rút khỏi điểm cuối. Chặng `forward`
+        # ĐẦU TIÊN của route đó vẫn còn ở trên tấm in nên cần cổng quãng đường; các
+        # chặng sau thì không. Xem follow_line_until_intersection.
+        tu_diem_cuoi = bool(route) and route[0][0] == "back"
+
         try:
             for i, step in enumerate(route):
                 action = step[0]
@@ -689,8 +695,10 @@ class Motion:
                     count = max(0, step[1])
                     if count and not self.navigate_intersections(
                             count,
-                            on_reached=lambda: self.last_route_progress.append(("forward", 1))):
+                            on_reached=lambda: self.last_route_progress.append(("forward", 1)),
+                            roi_diem_cuoi=tu_diem_cuoi):
                         return False
+                    tu_diem_cuoi = False        # chỉ chặng forward ĐẦU TIÊN
                 elif action == "back":
                     # Rút khỏi kệ/nhà máy mà không xoay 180° — cũng đi từng giao lộ một
                     # để biết chính xác dừng ở đâu khi hỏng giữa chừng.
@@ -1811,7 +1819,8 @@ class Motion:
         return True
 
     def follow_line_until_intersection(self, base_speed: float = config.SPEED_DEFAULT,
-                                       timeout: float = 15.0) -> bool:
+                                       timeout: float = 15.0,
+                                       roi_diem_cuoi: bool = False) -> bool:
         start = time.time()
         lost_since = None
         # Cổng quãng đường — chỉ dùng được khi có encoder VÀ đã calibrate. Thiếu
@@ -1819,6 +1828,21 @@ class Motion:
         do_duoc = (config.ENCODER_PULSES_PER_CM > 0
                    and getattr(getattr(self, "_encoder_left", None), "available", False)
                    and getattr(getattr(self, "_encoder_right", None), "available", False))
+        # ⛔ CỔNG QUÃNG ĐƯỜNG CHỈ ÁP KHI KHỞI HÀNH TRÊN TẤM IN.
+        # Nó sinh ra để robot rời khu nhà máy không đếm tấm in dưới chân thành giao
+        # lộ. Nhưng áp cho MỌI chặng thì phá chặng ĐẦU TIÊN: exit_start_zone() bỏ
+        # robot lại rất gần C0R0 (đó là lý do có cờ tren_giao_lo_dau), nên cổng 10cm
+        # bác luôn giao lộ thật đó — robot đi tiếp, mảng đen chân kệ thành "giao lộ",
+        # rồi advance khởi hành khi đã sát kệ và LAO VÀO KỆ. Đã gặp thật 03/08.
+        # Nhận ra "đang trên tấm in" bằng chính lần đọc đầu: cả thanh xam xám, KHÔNG
+        # mắt nào thấy nền trắng sạch. Trên sa bàn trắng thì luôn có mắt đọc ~900.
+        raw_dau = self.read_line_sensor_raw()
+        tren_tam_in = bool(raw_dau) and max(raw_dau) <= config.ADVANCE_FACTORY_MAX_BRIGHT
+        if tren_tam_in:
+            logger.info("Khởi hành TRÊN MẢNG IN (sáng nhất %.0f) — bật cổng %.1fcm "
+                        "để không đếm nó thành giao lộ",
+                        max(raw_dau) * 1023, config.FORWARD_MIN_TRAVEL_CM)
+        do_duoc = do_duoc and tren_tam_in
         self._doc_xung()
         di_xung = 0
 
