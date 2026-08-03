@@ -109,6 +109,23 @@
         "ENCODER_PULSES_PER_CM": 35.94
       },
       "ghi_chu": "Điểm dừng do nhánh 'hết line' quyết định, và nó CHỈ đúng nhờ nguong_cho() đòi có đen THẬT — không có ràng buộc đó thì tấm in khu nhà máy đọc ra 'vẫn còn line' và robot chạy ra khỏi sa bàn. ADVANCE_MAX_TRAVEL_CM = 80 là lưới an toàn, CHƯA ĐO, chưa được kích hoạt trong lượt này."
+    },
+    {
+      "ten": "test_lift / smoke 2 — BỐC HÀNG TẦNG 2",
+      "ngay": "2026-08-03",
+      "ket_qua": "ĐẠT — nâng và bốc kiện tầng 2 OK sau khi chỉnh bù lệch 2 càng (chênh 50ms → 150ms) và nâng thêm khi luồn. MỚI 1/3 LẦN.",
+      "gia_tri": {
+        "LIFT_TIME_SHELF_2": 3.8,
+        "LIFT_HOME_DURATION": 4.0,
+        "LIFT_LEFT_EXTRA": -0.05,
+        "LIFT_RIGHT_EXTRA": 0.1,
+        "LIFT_INSERT_EXTRA": 0.2,
+        "LIFT_LEFT_LOWER_EXTRA": 0.15,
+        "LIFT_RIGHT_LOWER_EXTRA": 0.15,
+        "INSERT_SPEED": 40,
+        "INSERT_TIMEOUT": 8.0
+      },
+      "ghi_chu": "Tầng 2 là NỬA SỐ KIỆN của trận và trước đó chưa từng được kiểm. Trước khi chỉnh, càng phải nâng thiếu nên luồn không tới khe pallet — lùi ra chỉ càng trái bốc được kiện."
     }
   ]
 }
