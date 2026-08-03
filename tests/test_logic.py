@@ -683,6 +683,40 @@ class TestDetectSide(unittest.TestCase):
         self.assertFalse(self.robot._side_detected)
 
 
+class TestKhongQuayDauTaiDiemCuoi(unittest.TestCase):
+    """⚠️ KHÔNG route nào được QUAY ĐẦU 180° ngay tại điểm cuối.
+
+    Quay đầu tại điểm cuối = hai lần xoay CÙNG CHIỀU ở lệnh đầu route. Hai thứ hỏng
+    theo, đo trên robot 03/08:
+      • execute_route chỉ chèn TIẾN BÙ khi lệnh trước là `forward`; route mở đầu
+        bằng xoay thì không có gì, robot quay quanh chỗ retreat bỏ nó lại nên tâm
+        xoay sai và xoay xong cảm biến văng khỏi vạch — "bám line một lúc rồi đi
+        lung tung, không về được kệ".
+      • cổng quãng đường nhận "vừa rời điểm cuối" qua route[0] == "back", nên route
+        quay đầu lọt lưới và robot đếm TẤM IN dưới chân thành giao lộ.
+    EDGE_COST_REVERSE = 0 khiến bộ tìm đường luôn chọn LÙI để rút khỏi điểm cuối.
+    """
+
+    def _quay_dau(self, route):
+        return (len(route) > 1 and route[0][0] in ("left", "right")
+                and route[0][0] == route[1][0])
+
+    def test_no_return_route_starts_with_a_uturn(self):
+        for nm, t in nav.FACTORY_TERMINAL.items():
+            route, _ = nav.plan(nav.pose_at(t), "SHELF0")
+            self.assertFalse(self._quay_dau(route),
+                             f"{nm} → Kệ 3 quay đầu tại nhà máy: "
+                             f"{nav.route_to_text(route)}")
+
+    def test_no_delivery_route_starts_with_a_uturn(self):
+        for ke in ("SHELF0", "SHELF1", "SHELF2"):
+            for nm, t in nav.FACTORY_TERMINAL.items():
+                route, _ = nav.plan(nav.pose_at(ke), t)
+                self.assertFalse(self._quay_dau(route),
+                                 f"{ke} → {nm} quay đầu tại kệ: "
+                                 f"{nav.route_to_text(route)}")
+
+
 class TestReverseExit(unittest.TestCase):
     """Lệnh ("back", N) — rút khỏi kệ/nhà máy mà không xoay 180°.
 

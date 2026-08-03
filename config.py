@@ -733,7 +733,20 @@ ULTRASONIC_MAX_GLITCH = 3          # Số lần bỏ qua gai nhiễu tối đa m
 # MỌI tuyến giao hàng — ~28 lần mỗi trận.
 REVERSE_SPEED = 40           # Đủ trên vùng chết để CÒN lái được (±10)
 REVERSE_TIMEOUT = 8.0
-EDGE_COST_REVERSE = 1        # Phụ phí so với tiến 1 giao lộ → hoà thì vẫn ưu tiên tiến
+EDGE_COST_REVERSE = 0        # Rút khỏi điểm cuối bằng LÙI — không phụ phí
+# ⚠️ 1 → 0 ngày 03/08. Với phụ phí 1, tuyến VỀ từ Samsung mở đầu bằng "xoay trái →
+# xoay trái", tức QUAY ĐẦU 180° NGAY TẠI KHU NHÀ MÁY. Hai thứ hỏng theo:
+#   • execute_route chỉ chèn TIẾN BÙ khi lệnh trước là `forward`; route mở đầu bằng
+#     xoay thì không có gì, nên robot quay quanh chỗ retreat bỏ nó lại — tâm xoay
+#     sai, xoay xong cảm biến văng khỏi vạch. Đo trên robot: "bám line một lúc rồi
+#     đi lung tung, không về được kệ".
+#   • cổng quãng đường nhận diện "vừa rời điểm cuối" bằng route[0] == "back", nên
+#     route mở đầu bằng xoay thì cổng TẮT và robot đếm tấm in thành giao lộ.
+# Cùng loại lỗi đã gặp với tuyến ĐI tới foxconn (xoay phải hai lần tại kệ).
+#
+# Hạ về 0 thì bộ tìm đường luôn rút khỏi điểm cuối bằng LÙI — đường đã được đo kỹ
+# (back_to_intersection có cả bằng chứng vạch, cổng quãng đường, tiến bù riêng).
+# Không phải đánh đổi: tổng chi phí 4 nhà máy đi+về còn GIẢM 131 → 124.
 
 # Sau khi lùi tới giao lộ, thân xe nằm QUÁ giao lộ một đoạn bằng khoảng cách từ trục
 # bánh tới thanh cảm biến (tiến thì thân nằm trước giao lộ đúng bấy nhiêu). Nếu xoay

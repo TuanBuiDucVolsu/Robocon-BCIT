@@ -679,7 +679,14 @@ class Motion:
         # bộ tìm đường không có cách nào khác để rút khỏi điểm cuối. Chặng `forward`
         # ĐẦU TIÊN của route đó vẫn còn ở trên tấm in nên cần cổng quãng đường; các
         # chặng sau thì không. Xem follow_line_until_intersection.
-        tu_diem_cuoi = bool(route) and route[0][0] == "back"
+        # Rút khỏi điểm cuối có HAI dạng: LÙI (thường), hoặc QUAY ĐẦU 180° = hai lần
+        # xoay CÙNG CHIỀU. Chỉ nhận dạng thứ nhất thì route quay đầu lọt lưới và
+        # robot đếm tấm in dưới chân thành giao lộ. EDGE_COST_REVERSE = 0 khiến bộ
+        # tìm đường không sinh dạng thứ hai nữa, nhưng giữ nhận diện cho chắc.
+        tu_diem_cuoi = bool(route) and (
+            route[0][0] == "back"
+            or (len(route) > 1 and route[0][0] in ("left", "right")
+                and route[0][0] == route[1][0]))
 
         try:
             for i, step in enumerate(route):
