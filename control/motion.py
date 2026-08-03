@@ -756,6 +756,18 @@ class Motion:
         # KHÔNG TÌM THẤY, không phải "đã hết".
         acquired = False
         vet_adv = []             # vệt số đo siêu âm, để soi khi hỏng
+        # ⛔ CÕNG HÀNG THÌ SIÊU ÂM VÔ DỤNG — bỏ hẳn mọi nhánh dựa vào nó.
+        # Đo trên robot 03/08, chặng giao hàng: vừa rời giao lộ đã đọc 9.4cm rồi
+        # 10.2cm; lùi 0.8s mà số chỉ đổi 1.6cm. Thả xong hàng và gập càng thì cùng
+        # cảm biến đó đọc 100.0cm. Kiện hàng cõng trên càng CHẮN CHÙM SÓNG.
+        # (Bài check_load_blocks_sonar trước đây kết luận "không chắn" là do chỉ
+        # đặt PALLET TRẦN lên càng — thiếu 4 khối mút cao 40mm ở trên, chính chúng
+        # mới là thứ chắn. Bài đo đó cần làm lại với KIỆN ĐẦY ĐỦ.)
+        # Ở khu nhà máy vốn cũng chẳng có mặt phẳng nào để canh, nên điểm dừng đúng
+        # là HẾT LINE — line kết thúc ở mép ô nhà máy.
+        cong_hang = getattr(self, "dang_cong_hang", False)
+        if cong_hang:
+            logger.info("Advance: ĐANG CÕNG HÀNG — bỏ qua siêu âm, đi tới HẾT LINE")
         thay_muc_tieu = False    # đã từng thấy vật trong APPROACH_DETECT_DISTANCE
         mat_vong = 0             # số nhịp kịch trần LIÊN TIẾP
         nhieu = 0                # số gai nhiễu đã bỏ qua
@@ -780,7 +792,8 @@ class Motion:
             # Chỉ chặn khi số đo đang TRONG TẦM NGUY HIỂM. Số đo kịch trần (không
             # có tiếng vọng, ~100cm) cũng "không đổi" — chặn cả ca đó thì robot đứng
             # im vĩnh viễn. Ở xa thì số đo cũ vô hại vì còn lâu mới tới điểm dừng.
-            if (0 <= dist <= config.APPROACH_SLOW_DISTANCE * 2
+            if (not cong_hang
+                    and 0 <= dist <= config.APPROACH_SLOW_DISTANCE * 2
                     and time.time() - doi_luc > config.ULTRASONIC_STALE_TIME):
                 self.stop()
                 time.sleep(0.01)
@@ -788,14 +801,17 @@ class Motion:
 
             # ⛔ MÙ SIÊU ÂM — nhánh "hết line" ở kệ CHÍNH LÀ đâm vào kệ (vạch
             # kéo tới cách chân kệ 1mm), nên không có số đo là không được đi tiếp.
-            if dist >= config.ADVANCE_MAX_RANGE_CM:
+            if cong_hang:
+                pass                      # mọi nhánh siêu âm dưới đây đều bỏ qua
+            elif dist >= config.ADVANCE_MAX_RANGE_CM:
                 mat_vong += 1
             else:
                 mat_vong = 0
                 if dist <= config.APPROACH_DETECT_DISTANCE:
                     thay_muc_tieu = True
 
-            if thay_muc_tieu and mat_vong >= config.ADVANCE_LOST_ECHO_COUNT:
+            if (not cong_hang) and thay_muc_tieu \
+                    and mat_vong >= config.ADVANCE_LOST_ECHO_COUNT:
                 # Ca giết robot: thấy 30→25→22 rồi 100,100,100 mà vẫn chạy tiếp.
                 self.stop_gently(base_speed)
                 logger.warning(
@@ -805,7 +821,7 @@ class Motion:
                     mat_vong, " ".join(f"{t:.2f}s:{d:.1f}" for t, d in vet_adv[-10:]))
                 return True
 
-            if (not thay_muc_tieu
+            if ((not cong_hang) and (not thay_muc_tieu)
                     and time.time() - start >= config.ADVANCE_BLIND_TIMEOUT):
                 self.stop()
                 logger.error(
@@ -823,7 +839,7 @@ class Motion:
             # lệnh xoá cắt từ dòng comment phía trên xuống và nuốt luôn nó. Test
             # viết cho nó lại không phân biệt được với nhánh "tới gần mục tiêu" nên
             # không ai biết, và robot lao vào kệ thêm nhiều lần.
-            if 0 <= dist <= config.ADVANCE_HARD_STOP_CM:
+            if (not cong_hang) and 0 <= dist <= config.ADVANCE_HARD_STOP_CM:
                 that, khop = self._do_lai_khi_dung(dist, base_speed)
                 if (not khop) and that > config.ADVANCE_HARD_STOP_CM \
                         and nhieu < config.ULTRASONIC_MAX_GLITCH:
@@ -839,7 +855,7 @@ class Motion:
                                " ".join(f"{t:.2f}s:{d:.1f}" for t, d in vet_adv[-10:]))
                 return True
 
-            if 0 <= dist <= config.APPROACH_SLOW_DISTANCE:
+            if (not cong_hang) and 0 <= dist <= config.APPROACH_SLOW_DISTANCE:
                 near_streak += 1
                 if near_streak >= 2:
                     that, khop = self._do_lai_khi_dung(dist, base_speed)

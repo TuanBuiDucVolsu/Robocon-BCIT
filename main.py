@@ -306,8 +306,34 @@ class Robot:
             return False
         return True
 
+    def _dat_co_cong_hang(self) -> None:
+        """Đồng bộ cờ "đang cõng hàng" của Motion theo carried_labels.
+
+        Cõng hàng thì siêu âm VÔ DỤNG: kiện trên càng chắn chùm sóng. Đo trên robot
+        03/08 — vừa rời giao lộ đã đọc 9.4cm, thả xong hàng thì cùng cảm biến đó đọc
+        100.0cm. Robot vì thế "tới nơi" ngay giữa đường và thả hàng trên line.
+        Gọi ở MỌI chỗ carried_labels đổi, không rải cờ lung tung.
+        """
+        motion = getattr(self, "motion", None)
+        if motion is None:
+            return          # _reset_for_new_run() chạy được cả trước khi dựng Motion
+        cong = any(x is not None for x in self.carried_labels)
+        if getattr(motion, "dang_cong_hang", False) != cong:
+            logger.info("Cờ cõng hàng → %s (kiện đang giữ: %s)",
+                        "CÓ" if cong else "KHÔNG", self.carried_labels)
+        motion.dang_cong_hang = cong
+
     def _approach_for_drop(self, context: str) -> bool:
         """Tiếp cận điểm thả hàng, thử lại 1 lần trước khi đành thả tại chỗ."""
+        if getattr(self.motion, "dang_cong_hang", False):
+            # Không tiếp cận được bằng siêu âm khi đang cõng hàng (kiện chắn chùm
+            # sóng — xem _dat_co_cong_hang). Ở khu nhà máy cũng chẳng có mặt phẳng
+            # nào để canh: advance_to_end() đã đưa robot tới HẾT LINE, tức mép ô
+            # nhà máy, và đó chính là điểm thả.
+            logger.info("Bỏ bước tiếp cận điểm thả (%s) — đang cõng hàng nên siêu âm "
+                        "không dùng được; advance đã dừng ở cuối line = mép ô nhà máy.",
+                        context)
+            return True
         if self._approach_shelf(context):
             return True
         logger.warning("Thử tiếp cận lại điểm thả — %s", context)
@@ -609,6 +635,7 @@ class Robot:
             return self._retry_or_skip_tier("scan")
 
         self.carried_labels = [label_left, label_right]
+        self._dat_co_cong_hang()
         self._plan_delivery(label_left, label_right)
 
         success = self._insert_and_lift(self.current_tier)
@@ -938,6 +965,7 @@ class Robot:
     def _clear_carry_state(self):
         """Xóa trạng thái kiện hàng đang mang (sau nâng thất bại)."""
         self.carried_labels = [None, None]
+        self._dat_co_cong_hang()
         self.delivery_queue = []
 
     def _finish_task1_or_done(self) -> State:
@@ -1097,6 +1125,7 @@ class Robot:
         self.task2_done = False
         self.pose = navigation.START_POSE
         self.carried_labels = [None, None]
+        self._dat_co_cong_hang()
         self.delivery_queue = []
         self._last_delivered_label = None
 

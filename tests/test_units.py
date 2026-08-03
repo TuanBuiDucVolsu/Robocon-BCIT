@@ -1757,6 +1757,50 @@ class TestNgUongDenDam(unittest.TestCase):
                         "ngưỡng đen ĐẬM phải bác bỏ nó")
 
 
+class TestAdvanceKhiCongHang(unittest.TestCase):
+    """Cõng hàng thì advance phải BỎ QUA siêu âm và đi tới hết line.
+
+    ⚠️ HỒI QUY: đo trên robot 03/08, chặng giao hàng — vừa rời giao lộ đã đọc
+    9.4cm rồi 10.2cm, lùi 0.8s mà số chỉ đổi 1.6cm. Thả xong hàng và gập càng thì
+    CÙNG cảm biến đó đọc 100.0cm. Kiện trên càng chắn chùm sóng, nên chặn cứng
+    kích hoạt ngay khi robot vừa rời giao lộ và nó THẢ HÀNG GIỮA ĐƯỜNG.
+    (check_load_blocks_sonar trước đây kết luận "không chắn" vì chỉ đặt PALLET
+    TRẦN — thiếu 4 khối mút cao 40mm, chính chúng mới chắn.)
+    """
+
+    def _motion(self, frames):
+        m = object.__new__(Motion)
+        m._aborted = lambda: False
+        m.stop = MagicMock()
+        m.stop_gently = MagicMock()
+        m.forward = MagicMock()
+        m._escape_intersection = MagicMock(return_value=True)
+        m.read_line_sensor_adc = lambda: [0] * 6
+        seq = list(frames)
+        m.follow_line = lambda speed: (False, seq.pop(0) if len(seq) > 1 else seq[0])
+        return m
+
+    def test_carrying_ignores_the_blocked_reading_and_runs_to_end_of_line(self):
+        m = self._motion([[0, 0, 1, 1, 0, 0]] * 20 + [[0] * 6])
+        m.dang_cong_hang = True
+        m.get_distance = lambda *a, **k: 9.4        # bị kiện chắn, đứng yên
+        with self.assertLogs("control.motion", level="INFO") as nk:
+            self.assertTrue(m.advance_to_end(timeout=3.0))
+        ghi = "\n".join(nk.output)
+        self.assertIn("ĐANG CÕNG HÀNG", ghi)
+        self.assertIn("đã hết line", ghi)
+        self.assertNotIn("CHẶN CỨNG", ghi)
+
+    def test_not_carrying_still_uses_the_sonar(self):
+        """Không cõng hàng thì mọi chặn siêu âm giữ nguyên — không nới lỏng gì."""
+        m = self._motion([[0, 0, 1, 1, 0, 0]] * 400)
+        m.dang_cong_hang = False
+        m.get_distance = lambda *a, **k: 9.4
+        with self.assertLogs("control.motion", level="WARNING") as nk:
+            self.assertTrue(m.advance_to_end(timeout=3.0))
+        self.assertIn("CHẶN CỨNG", "\n".join(nk.output))
+
+
 class TestPoseSauXuatPhat(unittest.TestCase):
     """Căn giữa chạy tới C0R0 thì pose PHẢI là C0R0, không phải START.
 

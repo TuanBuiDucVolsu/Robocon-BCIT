@@ -296,6 +296,7 @@ def smoke_full_lap(m: Motion, lift: Lift, vision: Vision, **_):
     if not ok:
         return False, None
     label_l, label_r = labels
+    m.dang_cong_hang = True          # như main._dat_co_cong_hang()
 
     # --- Chọn thứ tự giao giống _plan_delivery() của main.py ---
     if label_l == label_r:
@@ -322,8 +323,9 @@ def smoke_full_lap(m: Motion, lift: Lift, vision: Vision, **_):
             print("  ⚠ Navigation lệch — main.py vẫn thử hạ. Dừng smoke ở đây để xem xét.")
             return False, None
 
-        if not m.approach_shelf():
-            print("  ⚠ Không tiếp cận được điểm thả (main.py sẽ thử lại 1 lần rồi thả tại chỗ)")
+        # Không tiếp cận bằng siêu âm khi đang cõng hàng — kiện trên càng chắn
+        # chùm sóng (xem main._dat_co_cong_hang). advance đã dừng ở cuối line.
+        print("  (bỏ bước tiếp cận điểm thả: đang cõng hàng, siêu âm bị kiện chắn)")
 
         if len(queue) == 1:
             dropped = drop_both(lift)
@@ -335,6 +337,8 @@ def smoke_full_lap(m: Motion, lift: Lift, vision: Vision, **_):
             print(f"  drop_side({side}, last={last}): {'✅' if dropped else '❌'}"
                   f" — đã {'gập càng' if last else 'nâng lại càng'}")
         m.retreat_from_shelf()
+
+    m.dang_cong_hang = False         # đã thả hết, siêu âm dùng lại được
 
     # --- Quay về kho lấy TẦNG CÒN LẠI cùng kệ ---
     print(f"\n  --- Quay về Kệ 3 để lấy tầng {tang_sau} ---")
