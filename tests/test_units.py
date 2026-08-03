@@ -1571,12 +1571,54 @@ class TestAdvanceToEnd(unittest.TestCase):
         # ĐẬM (cao hơn INTERSECTION_THRESHOLD có chủ ý — xem config). Ngã tư thật
         # cho 6 mắt nên thừa sức đạt.
         m.read_line_sensor_raw = lambda: [v / 1023 for v in (917, 0, 0, 0, 0, 0)]
+        # advance_to_end() QUÉT TÌM LẠI line trước khi bỏ cuộc. Mặc định cho quét
+        # THẤT BẠI để mấy bài "không thấy line = thất bại" giữ nguyên ý nghĩa; bài
+        # nào kiểm chính cơ chế quét thì tự đặt lại.
+        m._recover_line = MagicMock(return_value=False)
         return m
 
     def test_end_of_line_after_seeing_it_is_success(self):
         """Thấy line rồi mới mất = đã tới điểm cuối thật."""
         m = self._motion([[0, 0, 1, 1, 0, 0]] * 5 + [[0] * 6])
         self.assertTrue(m.advance_to_end(timeout=3.0))
+
+    def test_scans_for_the_line_before_giving_up(self):
+        """⚠️ HỒI QUY: xoay xong mà cảm biến lệch khỏi vạch thì phải QUÉT, đừng bỏ cuộc.
+
+        Đo trên robot 03/08: robot đi ĐÚNG tới C1R1 (cả 3 giao lộ đều thật), xoay
+        trái xong thì cảm biến rơi ra ngoài vạch — xoay tại chỗ có trượt ngang, và
+        lượt đó robot chạy chậm hẳn (xoay mất 1.59s so với 1.06s lúc không tải).
+        Nó DỪNG LUÔN TẠI CHỖ, không thả hàng, dù chỉ lệch vài cm là quét ra.
+        follow_line_until_intersection() đã có cơ chế quét từ lâu; advance thì chưa.
+        """
+        m = self._motion([[0] * 6] * 400)
+        # Trắng cho tới khi QUÁ cửa sổ tìm line, rồi mới có vạch — dùng ĐỒNG HỒ chứ
+        # không đếm khung, vì số lần đọc mỗi vòng lặp không cố định.
+        t0 = time.time()
+        mo_line = config.ADVANCE_ACQUIRE_TIME + 0.1     # trắng tới đây, rồi có vạch
+        het_line = mo_line + 0.5                        # rồi hết vạch = tới điểm cuối
+
+        def follow(_speed):
+            t = time.time() - t0
+            if t < mo_line or t > het_line:
+                return False, [0] * 6
+            return False, [0, 0, 1, 1, 0, 0]
+
+        m.follow_line = follow
+        m._recover_line = MagicMock(return_value=True)
+        # 42cm: đã thấy mục tiêu nhưng NGOÀI tầm chặn-số-đo-cũ, và chưa tới mốc dừng
+        # — để advance kết thúc bằng nhánh HẾT LINE chứ không phải bằng siêu âm.
+        m.get_distance = lambda *a, **k: 42.0
+        self.assertTrue(m.advance_to_end(timeout=3.0),
+                        "quét ra line rồi mà vẫn báo thất bại")
+        m._recover_line.assert_called_once()
+
+    def test_scan_is_tried_only_once(self):
+        """Quét hỏng thì thôi — không quay vòng mãi giữa sa bàn."""
+        m = self._motion([[0] * 6] * 400)
+        m._recover_line = MagicMock(return_value=False)
+        self.assertFalse(m.advance_to_end(timeout=3.0))
+        m._recover_line.assert_called_once()
 
     def test_never_seeing_line_is_failure(self):
         """Không nằm trên line từ đầu -> THẤT BẠI, không phải 'đã tới điểm cuối'."""

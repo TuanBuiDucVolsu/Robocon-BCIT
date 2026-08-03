@@ -823,6 +823,7 @@ class Motion:
         mat_vong = 0             # số nhịp kịch trần LIÊN TIẾP
         nhieu = 0                # số gai nhiễu đã bỏ qua
         bo_qua_dau = False       # đã dùng cửa sổ ân hạn đầu chưa
+        da_quet = False          # đã quét tìm lại line chưa (1 lần)
         # Quãng advance đã đi, để phân biệt mảng in khu nhà máy với mảng đen của
         # chính giao lộ vừa thoát.
         self._doc_xung()
@@ -1038,11 +1039,26 @@ class Motion:
                 # Chưa bao giờ thấy line. Cho một khoảng ngắn để tìm, hết thì DỪNG —
                 # không được chạy mù hết ADVANCE_TIMEOUT ở tốc độ này.
                 if time.time() - start >= config.ADVANCE_ACQUIRE_TIME:
+                    # QUÉT TÌM LẠI trước khi bỏ cuộc. follow_line_until_intersection()
+                    # đã làm việc này từ lâu; advance_to_end thì chưa, nên nó bỏ cuộc
+                    # ngay cả khi line chỉ nằm lệch vài centimet.
+                    # Đo trên robot 03/08: robot đi ĐÚNG tới C1R1, xoay trái xong thì
+                    # cảm biến rơi ra ngoài vạch (xoay tại chỗ có trượt ngang, mà lượt
+                    # đó robot chạy chậm hẳn — xoay mất 1.59s so với 1.06s lúc không
+                    # tải). Nó dừng luôn tại chỗ, không thả hàng, dù chỉ cần lệch vài
+                    # cm là quét ra.
+                    if not da_quet and self._recover_line():
+                        da_quet = True
+                        acquired = True
+                        lost_since = None
+                        start = time.time()     # cho lại thời gian tìm line
+                        continue
                     self.stop()
                     logger.error(
-                        "Advance: không thấy line trong %.2fs đầu — robot KHÔNG nằm "
-                        "trên line (hay gặp sau bước dò nửa sân). Không coi là đã "
-                        "tới điểm cuối.", config.ADVANCE_ACQUIRE_TIME)
+                        "Advance: không thấy line trong %.2fs đầu%s — robot KHÔNG nằm "
+                        "trên line. Không coi là đã tới điểm cuối.",
+                        config.ADVANCE_ACQUIRE_TIME,
+                        " (đã quét tìm lại nhưng không thấy)" if da_quet else "")
                     return False
             elif lost_since is None:
                 lost_since = time.time()
