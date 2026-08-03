@@ -953,6 +953,44 @@ class TestXoay90BangEncoder(unittest.TestCase):
         m.stop.assert_called()
 
 
+class TestRetreatTheoQuangLuonVao(unittest.TestCase):
+    """Lùi khỏi kệ = lùi ĐÚNG quãng đã luồn vào, đo bằng encoder.
+
+    ⚠️ HỒI QUY (option 5, robot 03/08): siêu âm bị kiện cõng chắn nên retreat rơi
+    về lùi mù RETREAT_BLIND_TIME = 1.5s. Nhưng 1.5s lúc cõng 2 kiện đi được ít hơn
+    hẳn lúc đi không, nên robot lùi NGẮN QUÁ rồi tiến lên xoay thì chệch khỏi line.
+    Option 18 chạy khớp vì bài đó không cõng gì — đúng cái bẫy của hằng số thời gian.
+    Không cần hằng số mới: creep_until() vừa đếm xong quãng luồn vào.
+    """
+
+    def _motion(self, xung_moi_lan: int, xung_da_luon: int):
+        m = object.__new__(Motion)
+        m._aborted = lambda: False
+        m._distance_sensor = MagicMock()
+        m.stop = MagicMock()
+        m.backward = MagicMock()
+        m.get_distance = lambda *a, **k: 9.4      # bị kiện chắn — đứng số
+        m._encoder_left = _EncoderGia(xung_moi_lan)
+        m._encoder_right = _EncoderGia(0)
+        m.xung_da_luon = xung_da_luon
+        return m
+
+    def test_backs_out_by_the_measured_creep_distance(self):
+        m = self._motion(xung_moi_lan=200, xung_da_luon=400)
+        with self.assertLogs("control.motion", level="INFO") as nk:
+            self.assertTrue(m.retreat_from_shelf())
+        ghi = "\n".join(nk.output)
+        self.assertIn("quãng đã luồn vào", ghi)
+        self.assertNotIn("lùi mù", ghi)
+
+    def test_falls_back_to_time_when_there_is_no_creep_measurement(self):
+        """Không có số xung luồn vào (vd bốc hàng lỗi) → vẫn lùi mù như cũ."""
+        m = self._motion(xung_moi_lan=0, xung_da_luon=0)
+        with self.assertLogs("control.motion", level="INFO") as nk:
+            self.assertTrue(m.retreat_from_shelf())
+        self.assertIn("lùi mù", "\n".join(nk.output))
+
+
 class TestCreepStallGuard(unittest.TestCase):
     """Chặn cứng khi luồn càng phải dùng ENCODER, không phải siêu âm.
 

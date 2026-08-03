@@ -1255,6 +1255,11 @@ class Motion:
         self._doc_xung()          # xả bộ đếm, không tính xung của chặng trước
         xung_cua_so = 0
         moc_cua_so = start
+        # Tổng quãng đã LUỒN VÀO, để lùi ra đúng bấy nhiêu. Xem retreat_from_shelf:
+        # lùi mù theo THỜI GIAN đi được ít hơn hẳn khi cõng 2 kiện, nên robot lùi
+        # ngắn quá rồi xoay lệch khỏi line (đo trên robot 03/08, option 5 — trong
+        # khi option 18 chạy khớp vì bài đó không cõng gì).
+        self.xung_da_luon = 0
         try:
             if check():
                 logger.info("Luồn càng: đã đạt điều kiện ngay từ đầu")
@@ -1273,7 +1278,9 @@ class Motion:
             # sóng lọt qua. Chặn cứng dựa vào nó vừa không bắt được lúc cần, vừa
             # bắn nhầm khi có gai nhiễu ngắn. Encoder không cần calibrate cm: càng
             # chạm kệ là bánh kẹt, xung im ngay.
-            xung_cua_so += self._doc_xung()
+            moi = self._doc_xung()
+            xung_cua_so += moi
+            self.xung_da_luon += moi
             if time.time() - moc_cua_so >= config.INSERT_STALL_TIME:
                 if (time.time() - start >= config.INSERT_STALL_GRACE
                         and co_encoder and xung_cua_so < config.INSERT_STALL_PULSES):
@@ -1321,6 +1328,8 @@ class Motion:
             return False
 
         logger.info("Lùi ra khỏi kệ — mục tiêu %.1fcm", target_cm)
+        self._doc_xung()          # xả bộ đếm trước khi đo quãng lùi
+        lui_xung = 0
         start = time.time()
         self.backward(speed)
         dau = None          # khoảng cách đọc được lần đầu
@@ -1359,10 +1368,30 @@ class Motion:
                     "Lùi ra: sau %.1fs mà khoảng cách chỉ đổi %.1fcm (%.1f→%.1f) — "
                     "siêu âm không dùng được. Chuyển sang lùi theo thời gian %.1fs.",
                     troi, dist - dau, dau, dist, config.RETREAT_BLIND_TIME)
-            if mu and troi >= config.RETREAT_BLIND_TIME:
-                self.stop()
-                logger.info("Đã lùi mù %.1fs — coi như đã rời kệ", troi)
-                return True
+            if mu:
+                # Lùi ĐÚNG quãng đã luồn vào (× RETREAT_BACKOUT_MARGIN), đo bằng
+                # encoder. Hằng số THỜI GIAN không dùng được ở đây: cõng 2 kiện thì
+                # 1.5s đi được ít hơn hẳn lúc đi không, robot lùi ngắn quá rồi xoay
+                # lệch khỏi line. Không cần hằng số mới — quãng luồn vào chính là
+                # quãng phải lùi ra, và creep_until vừa đếm nó xong.
+                can = (getattr(self, "xung_da_luon", 0)
+                       * getattr(config, "RETREAT_BACKOUT_MARGIN", 1.15))
+                if can > 0:
+                    lui_xung += self._doc_xung()
+                    if lui_xung >= can:
+                        self.stop()
+                        logger.info("Đã lùi %d/%.0f xung (= quãng đã luồn vào × %.2f) "
+                                    "— rời kệ", lui_xung, can,
+                                    config.RETREAT_BACKOUT_MARGIN)
+                        return True
+                    if troi < config.APPROACH_TIMEOUT:
+                        time.sleep(0.01)
+                        continue
+                if troi >= config.RETREAT_BLIND_TIME:
+                    self.stop()
+                    logger.info("Đã lùi mù %.1fs — coi như đã rời kệ (KHÔNG có số "
+                                "xung luồn vào để đối chiếu)", troi)
+                    return True
             time.sleep(0.02)
 
         self.stop()

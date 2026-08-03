@@ -680,6 +680,11 @@ ENCODER_PULSES_PER_CM = 35.940  # ĐÃ CHỐT trên robot 03/08 — 3 lần nh�
                                 # (tools/calibrate_encoder_cm.py). 0 = chưa calibrate
 RECENTER_CM = 12.0            # cm — ĐO BẰNG THƯỚC trên robot, không phải số đoán
 RECENTER_MAX_TIME = 3.0       # Giây chặn trên: encoder hỏng thì không chạy vô hạn
+
+# Lùi ra khỏi kệ = lùi ĐÚNG quãng đã luồn vào, nhân hệ số dư này. creep_until()
+# đếm sẵn quãng luồn vào bằng encoder nên không phải đoán thêm hằng số nào. Hệ số
+# > 1 để càng ra HẲN khỏi khe pallet chứ không dừng ngay ở mép.
+RETREAT_BACKOUT_MARGIN = 1.15
 # Giây tiến bù TRƯỚC KHI XOAY, khi vừa TIẾN tới giao lộ (chặng "forward" ngay trước
 # lệnh xoay). TÁCH RIÊNG khỏi REVERSE_RECENTER_TIME để chỉnh/tắt được độc lập —
 # hai chiều dừng ở hai mép khác nhau của vạch nên quãng bù có thể không bằng nhau.
