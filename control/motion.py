@@ -630,6 +630,8 @@ class Motion:
         # KHÔNG TÌM THẤY, không phải "đã hết".
         acquired = False
         vet_adv = []             # vệt số đo siêu âm, để soi khi hỏng
+        thay_muc_tieu = False    # đã từng thấy vật trong APPROACH_DETECT_DISTANCE
+        mat_vong = 0             # số nhịp kịch trần LIÊN TIẾP
         doi_luc = start          # lần cuối siêu âm ĐỔI giá trị
 
         while time.time() - start < timeout:
@@ -655,6 +657,36 @@ class Motion:
                 self.stop()
                 time.sleep(0.01)
                 continue
+
+            # ⛔ MÙ SIÊU ÂM — nhánh "hết line" ở kệ CHÍNH LÀ đâm vào kệ (vạch
+            # kéo tới cách chân kệ 1mm), nên không có số đo là không được đi tiếp.
+            if dist >= config.ADVANCE_MAX_RANGE_CM:
+                mat_vong += 1
+            else:
+                mat_vong = 0
+                if dist <= config.APPROACH_DETECT_DISTANCE:
+                    thay_muc_tieu = True
+
+            if thay_muc_tieu and mat_vong >= config.ADVANCE_LOST_ECHO_COUNT:
+                # Ca giết robot: thấy 30→25→22 rồi 100,100,100 mà vẫn chạy tiếp.
+                self.stop_gently(base_speed)
+                logger.warning(
+                    "Advance: MẤT TIẾNG VỌNG — %d nhịp kịch trần liên tiếp sau khi "
+                    "đã thấy mục tiêu. Dừng tại chỗ chứ KHÔNG đi tới hết line (ở kệ "
+                    "thì hết line = đâm vào kệ). Vệt: %s",
+                    mat_vong, " ".join(f"{t:.2f}s:{d:.1f}" for t, d in vet_adv[-10:]))
+                return True
+
+            if (not thay_muc_tieu
+                    and time.time() - start >= config.ADVANCE_BLIND_TIMEOUT):
+                self.stop()
+                logger.error(
+                    "Advance: CHƯA TỪNG thấy gì trong %.0fcm sau %.1fs — siêu âm mù. "
+                    "Ở kệ thì mục tiêu chỉ cách giao lộ 35.4cm nên nhịp đầu đã phải "
+                    "thấy. Không đi tới hết line. Vệt: %s",
+                    config.APPROACH_DETECT_DISTANCE, config.ADVANCE_BLIND_TIMEOUT,
+                    " ".join(f"{t:.2f}s:{d:.1f}" for t, d in vet_adv[-10:]))
+                return False
 
             # ⛔ CHẶN CỨNG — đứng trên mọi logic khác.
             # Nhánh "đi tới khi hết line" VỀ BẢN CHẤT là đâm vào kệ: line kéo tới

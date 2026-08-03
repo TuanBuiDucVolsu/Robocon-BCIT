@@ -1290,6 +1290,27 @@ class TestAdvanceToEnd(unittest.TestCase):
         self.assertGreater(m.stop.call_count, 0,
                            "số đo đứng yên trong tầm gần mà vẫn chạy = chạy mù")
 
+    def test_lost_echo_after_seeing_target_stops_instead_of_ramming(self):
+        """Thấy mục tiêu rồi số đo nhảy KỊCH TRẦN = mất tiếng vọng, không phải "xa ra".
+
+        Đây là ca giết robot: 30→25→22 rồi 100,100,100 mà vẫn chạy tiếp. Nhánh
+        "hết line" ở kệ CHÍNH LÀ đâm vào kệ — vạch kéo tới cách chân kệ 1mm.
+        """
+        doc = iter([30.0, 25.0, 22.0] + [100.0] * 40)
+        m = self._motion([[0, 0, 1, 1, 0, 0]] * 400)
+        m.get_distance = lambda *a, **k: next(doc)
+        with self.assertLogs("control.motion", level="WARNING") as nk:
+            self.assertTrue(m.advance_to_end(timeout=3.0))
+        self.assertIn("MẤT TIẾNG VỌNG", "\n".join(nk.output))
+
+    def test_never_seeing_anything_stops_instead_of_driving_to_end_of_line(self):
+        """Siêu âm mù suốt = KHÔNG được đi tới hết line (ở kệ thì đó là chân kệ)."""
+        m = self._motion([[0, 0, 1, 1, 0, 0]] * 900)
+        m.get_distance = lambda *a, **k: 100.0
+        t0 = time.time()
+        self.assertFalse(m.advance_to_end(timeout=6.0))
+        self.assertLess(time.time() - t0, config.ADVANCE_BLIND_TIMEOUT + 0.7)
+
     def test_stale_guard_does_not_stall_on_a_far_reading(self):
         """Số đo KỊCH TRẦN (không có tiếng vọng) cũng "không đổi" — không được chặn.
 
@@ -1297,7 +1318,9 @@ class TestAdvanceToEnd(unittest.TestCase):
         lâu mới tới điểm dừng. Hai test cũ của lớp này bắt được đúng lỗi đó.
         """
         m = self._motion([[0, 0, 1, 1, 0, 0]] * 20 + [[0] * 6])
-        m.get_distance = lambda: 100.0                # kịch trần, không đổi
+        # 42cm: ĐÃ thấy mục tiêu (≤ APPROACH_DETECT_DISTANCE = 45) nhưng vẫn NGOÀI
+        # tầm nguy hiểm của chặn-số-đo-cũ (2 × APPROACH_SLOW_DISTANCE = 40).
+        m.get_distance = lambda: 42.0                 # không đổi, và không kịch trần
         self.assertTrue(m.advance_to_end(timeout=3.0),
                         "phải đi tới khi hết line, không đứng im chờ số mới")
 

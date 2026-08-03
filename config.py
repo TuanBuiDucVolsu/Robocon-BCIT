@@ -501,6 +501,25 @@ ADVANCE_HARD_STOP_CM = 11.9
 
 ADVANCE_TIMEOUT = 6.0
 
+# --- advance_to_end: chống MÙ SIÊU ÂM ------------------------------------
+# advance_to_end có 3 lối dừng, nhưng chỉ 2 lối đầu cần siêu âm. Lối thứ ba
+# ("hết line") KHÔNG cần — và ở kệ thì nó CHÍNH LÀ ĐÂM VÀO KỆ: vạch line kéo
+# tới cách chân kệ 1mm (docs/SA_BAN.md mục 3b). Nên siêu âm mù = robot chạy
+# thẳng vào kệ, không cơ chế nào chặn được. approach_shelf đã có
+# APPROACH_BLIND_TIMEOUT lo chuyện này từ lâu; advance_to_end thì không.
+#
+# Đo trên robot 03/08: sau khi dừng trước kệ, đo lại lúc ĐỨNG YÊN ra 100.0cm
+# = kịch trần = MẤT TIẾNG VỌNG, trong khi kệ đang ở ngay trước mũi.
+ADVANCE_BLIND_TIMEOUT = 2.5   # Giây: chưa từng thấy gì ≤ APPROACH_DETECT_DISTANCE
+                              # thì DỪNG. Ở kệ, mục tiêu cách giao lộ 35.4cm nên
+                              # nhịp ĐẦU TIÊN đã phải thấy (ngưỡng 45cm). Để rộng
+                              # cho chặng vào khu nhà máy — chặng đó dài hơn.
+ADVANCE_MAX_RANGE_CM = 99.0   # ≥ mức này coi như KỊCH TRẦN (mất tiếng vọng),
+                              # không phải "mục tiêu ở xa"
+ADVANCE_LOST_ECHO_COUNT = 3   # Số nhịp kịch trần LIÊN TIẾP, SAU KHI đã thấy mục
+                              # tiêu, thì dừng. Đây mới là ca giết robot: thấy
+                              # 30→25→22 rồi 100,100,100 mà vẫn chạy tiếp.
+
 # ============================================================
 # LÙI RA KHỎI KỆ / NHÀ MÁY — lệnh ("back", N)
 # ============================================================
