@@ -520,6 +520,26 @@ ADVANCE_LOST_ECHO_COUNT = 3   # Số nhịp kịch trần LIÊN TIẾP, SAU KHI 
                               # tiêu, thì dừng. Đây mới là ca giết robot: thấy
                               # 30→25→22 rồi 100,100,100 mà vẫn chạy tiếp.
 
+# --- XÁC NHẬN LẠI KHI ĐỨNG YÊN -------------------------------------------
+# Đo trên robot 03/08 (tools.check_sonar_jitter, 30 giây): robot ĐỨNG YÊN cho
+# 997 mẫu, trung vị 74.6cm, độ lệch chuẩn 0.20cm, KHÔNG một mẫu nào lệch quá
+# 2cm và KHÔNG mẫu nào kịch trần. Cảm biến hoàn toàn tốt.
+# Nhưng CÙNG cảm biến đó, lúc ĐANG CHẠY, báo 4.6cm khi kệ ở ~35cm — hai lần
+# liên tiếp, ổn định. Khác biệt duy nhất: động cơ đang quay. gpiozero bấm giờ
+# xung echo bằng PHẦN MỀM (cảnh báo PWMSoftwareFallback), nên nhiễu L298N hoặc
+# CPU bị tranh chiếm sinh ra xung giả rất ngắn — 4.6cm ≈ 268µs, đúng cỡ một gai.
+# pigpio (bấm giờ phần cứng) chữa tận gốc nhưng phantom chưa tải được gói.
+#
+# Vá theo đúng thứ vừa đo được: cảm biến ĐÁNG TIN KHI ĐỨNG YÊN, nên mọi quyết
+# định DỪNG đều phải hỏi lại lúc đứng yên. Dừng thì luôn an toàn; còn tin nhầm
+# một gai nhiễu thì robot đứng cách kệ 35cm mà tưởng đã tới — rồi bước luồn
+# càng tiến lên mù và HÚC THẲNG VÀO KỆ. Đó chính là lỗi ngày 03/08.
+ULTRASONIC_VERIFY_TOLERANCE = 5.0  # cm: đo lại lệch quá mức này = số lúc chạy
+                                   # là gai nhiễu, không phải khoảng cách thật
+ULTRASONIC_MAX_GLITCH = 3          # Số lần bỏ qua gai nhiễu tối đa mỗi chặng.
+                                   # Hết quota thì TIN số đo và dừng — thà dừng
+                                   # sớm còn hơn lặp vô hạn cạnh kệ.
+
 # ============================================================
 # LÙI RA KHỎI KỆ / NHÀ MÁY — lệnh ("back", N)
 # ============================================================

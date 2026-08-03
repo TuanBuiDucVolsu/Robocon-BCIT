@@ -587,6 +587,24 @@ class Motion:
                 return False
         return True
 
+    def _do_lai_khi_dung(self, dist_quyet: float,
+                         base_speed: float) -> tuple[float, bool]:
+        """Dừng hẳn rồi ĐO LẠI — số đo lúc ĐỨNG YÊN mới đáng tin.
+
+        Lý do đầy đủ ở config.ULTRASONIC_VERIFY_TOLERANCE. Tóm tắt: cảm biến đo
+        được 0.20cm độ lệch chuẩn khi đứng yên nhưng báo 4.6cm giữa lúc chạy với
+        kệ ở 35cm — gai nhiễu do bấm giờ echo bằng phần mềm.
+
+        Trả (số đo lúc đứng yên, có khớp với số lúc chạy không).
+        """
+        self.stop_gently(base_speed)
+        # Chờ hàng đợi trung vị của gpiozero xả hết giá trị lúc còn đang chạy.
+        time.sleep(config.ULTRASONIC_QUEUE_LEN * 0.06 + 0.05)
+        that = self.get_distance()
+        if that < 0:
+            return that, True        # đọc lỗi → không bác bỏ được, cứ tin số cũ
+        return that, abs(that - dist_quyet) <= config.ULTRASONIC_VERIFY_TOLERANCE
+
     def advance_to_end(self, base_speed: float = config.ADVANCE_SPEED,
                        timeout: float = config.ADVANCE_TIMEOUT) -> bool:
         """
@@ -632,6 +650,7 @@ class Motion:
         vet_adv = []             # vệt số đo siêu âm, để soi khi hỏng
         thay_muc_tieu = False    # đã từng thấy vật trong APPROACH_DETECT_DISTANCE
         mat_vong = 0             # số nhịp kịch trần LIÊN TIẾP
+        nhieu = 0                # số gai nhiễu đã bỏ qua
         doi_luc = start          # lần cuối siêu âm ĐỔI giá trị
 
         while time.time() - start < timeout:
@@ -696,7 +715,16 @@ class Motion:
             # viết cho nó lại không phân biệt được với nhánh "tới gần mục tiêu" nên
             # không ai biết, và robot lao vào kệ thêm nhiều lần.
             if 0 <= dist <= config.ADVANCE_HARD_STOP_CM:
-                self.stop_gently(base_speed)
+                that, khop = self._do_lai_khi_dung(dist, base_speed)
+                if (not khop) and that > config.ADVANCE_HARD_STOP_CM \
+                        and nhieu < config.ULTRASONIC_MAX_GLITCH:
+                    nhieu += 1
+                    logger.warning(
+                        "Advance: BỎ QUA GAI NHIỄU — lúc chạy báo %.1fcm nhưng đo "
+                        "lại khi ĐỨNG YÊN được %.1fcm. Chạy tiếp (%d/%d).",
+                        dist, that, nhieu, config.ULTRASONIC_MAX_GLITCH)
+                    doi_luc = time.time()
+                    continue
                 logger.warning("Advance: CHẶN CỨNG ở %.1fcm (mốc %.1f). Vệt: %s",
                                dist, config.ADVANCE_HARD_STOP_CM,
                                " ".join(f"{t:.2f}s:{d:.1f}" for t, d in vet_adv[-10:]))
@@ -705,7 +733,17 @@ class Motion:
             if 0 <= dist <= config.APPROACH_SLOW_DISTANCE:
                 near_streak += 1
                 if near_streak >= 2:
-                    self.stop_gently(base_speed)
+                    that, khop = self._do_lai_khi_dung(dist, base_speed)
+                    if (not khop) and that > config.APPROACH_SLOW_DISTANCE \
+                            and nhieu < config.ULTRASONIC_MAX_GLITCH:
+                        nhieu += 1
+                        near_streak = 0
+                        logger.warning(
+                            "Advance: BỎ QUA GAI NHIỄU — lúc chạy báo %.1fcm nhưng "
+                            "đo lại khi ĐỨNG YÊN được %.1fcm. Chạy tiếp (%d/%d).",
+                            dist, that, nhieu, config.ULTRASONIC_MAX_GLITCH)
+                        doi_luc = time.time()
+                        continue
                     logger.info("Advance: đã tới gần mục tiêu (%.1fcm). Vệt: %s", dist,
                                 " ".join(f"{t:.2f}s:{d:.1f}" for t, d in vet_adv[-10:]))
                     return True
@@ -769,6 +807,7 @@ class Motion:
         # Mốc "gần nhất từng tới được" — dùng để phát hiện robot không tiến thêm nữa
         best_dist = float("inf")
         best_at = start
+        nhieu_ap = 0             # số gai nhiễu đã bỏ qua
         # Tốc độ của nhịp GẦN NHẤT — stop_gently() cần biết đang chạy nhanh cỡ nào
         # để giảm dần từ đó. Khởi tạo cho vòng lặp đầu (chưa qua nhánh chọn tốc độ).
         speed = config.APPROACH_FAST_SPEED
@@ -828,6 +867,15 @@ class Motion:
                             " ".join(f"{t:.2f}s:{d:.1f}" for t, d in vet[-18:]))
                 time.sleep(config.ULTRASONIC_QUEUE_LEN * 0.06 + 0.05)
                 that = self.get_distance()
+                if (0 <= that and that - dist > config.ULTRASONIC_VERIFY_TOLERANCE
+                        and nhieu_ap < config.ULTRASONIC_MAX_GLITCH):
+                    # Gai nhiễu: xem config.ULTRASONIC_VERIFY_TOLERANCE.
+                    nhieu_ap += 1
+                    logger.warning(
+                        "Tiếp cận: BỎ QUA GAI NHIỄU — lúc chạy báo %.1fcm nhưng đo "
+                        "lại khi ĐỨNG YÊN được %.1fcm. Tiếp tục tiếp cận (%d/%d).",
+                        dist, that, nhieu_ap, config.ULTRASONIC_MAX_GLITCH)
+                    continue
                 if that >= 0:
                     # Lệch quá 1cm thì WARNING, không phải INFO: dòng ✅ của smoke in
                     # ra bất kể, nên nếu chôn ở INFO thì "robot tiến quá vị trí" trông

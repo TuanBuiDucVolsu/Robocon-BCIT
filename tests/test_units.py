@@ -1290,6 +1290,36 @@ class TestAdvanceToEnd(unittest.TestCase):
         self.assertGreater(m.stop.call_count, 0,
                            "số đo đứng yên trong tầm gần mà vẫn chạy = chạy mù")
 
+    def test_glitch_while_moving_is_rejected_by_the_stationary_re_measure(self):
+        """Gai nhiễu 4.6cm giữa lúc chạy KHÔNG được coi là "đã tới kệ".
+
+        Đo trên robot 03/08: đứng yên 30s cho 997 mẫu, độ lệch chuẩn 0.20cm,
+        0 mẫu lệch quá 2cm. Cùng cảm biến đó lúc ĐANG CHẠY báo 4.6cm khi kệ ở
+        ~35cm. Robot dừng lại ngay tại GIAO LỘ, tưởng đã tới kệ, rồi bước luồn
+        càng tiến lên mù 35cm và HÚC THẲNG VÀO KỆ.
+        Nhịp 1 báo 4.6 (gai); đo lại lúc đứng yên ra 35.0 → phải chạy tiếp.
+        """
+        doc = iter([4.6, 35.0, 25.0, 19.0, 19.0] + [19.0] * 200)
+        m = self._motion([[0, 0, 1, 1, 0, 0]] * 400)
+        m.get_distance = lambda *a, **k: next(doc)
+        with self.assertLogs("control.motion", level="INFO") as nk:
+            self.assertTrue(m.advance_to_end(timeout=3.0))
+        ghi = "\n".join(nk.output)
+        self.assertIn("BỎ QUA GAI NHIỄU", ghi)
+        self.assertNotIn("CHẶN CỨNG", ghi)
+        self.assertIn("đã tới gần mục tiêu", ghi)
+
+    def test_glitch_quota_is_finite_so_it_cannot_loop_forever(self):
+        """Hết quota bỏ qua thì phải TIN số đo và dừng — thà dừng sớm còn hơn kẹt."""
+        doc = iter([4.6, 35.0] * 40 + [4.6] * 200)
+        m = self._motion([[0, 0, 1, 1, 0, 0]] * 900)
+        m.get_distance = lambda *a, **k: next(doc)
+        with self.assertLogs("control.motion", level="WARNING") as nk:
+            self.assertTrue(m.advance_to_end(timeout=6.0))
+        ghi = "\n".join(nk.output)
+        self.assertEqual(ghi.count("BỎ QUA GAI NHIỄU"), config.ULTRASONIC_MAX_GLITCH)
+        self.assertIn("CHẶN CỨNG", ghi)
+
     def test_lost_echo_after_seeing_target_stops_instead_of_ramming(self):
         """Thấy mục tiêu rồi số đo nhảy KỊCH TRẦN = mất tiếng vọng, không phải "xa ra".
 
