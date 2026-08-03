@@ -2053,6 +2053,46 @@ class TestThuTuThaVaNangCang(unittest.TestCase):
         self.assertIn("xúc nó lên lại", "\n".join(nk.output))
 
 
+class TestNangThemKhiLuonCang(unittest.TestCase):
+    """raise_to_insert() nâng THÊM LIFT_INSERT_EXTRA để mũi càng nhỉnh hơn đáy khe.
+
+    ⚠️ Bài này tồn tại vì một lỗi thật: bản đầu gọi self._stop_motors() — một hàm
+    KHÔNG TỒN TẠI — mà cả 4 bộ test vẫn xanh, vì không bài nào chạy qua đường đó.
+    Trên robot thì nó nổ AttributeError giữa lúc càng đang đi lên.
+    """
+
+    def _lift(self):
+        lift = object.__new__(Lift)
+        for ten in ("_left_en", "_left_up", "_left_down", "_right_up", "_right_down"):
+            setattr(lift, ten, MagicMock())
+        lift.go_to_level = MagicMock()
+        lift._stop_all = MagicMock()
+        return lift
+
+    def test_extra_raise_runs_and_stops_the_motors(self):
+        lift = self._lift()
+        with patch.object(config, "LIFT_INSERT_EXTRA", 0.05):
+            lift.raise_to_insert(1)
+        lift.go_to_level.assert_called_once_with(1)
+        lift._left_up.on.assert_called()
+        lift._right_up.on.assert_called()
+        lift._stop_all.assert_called_once()
+
+    def test_zero_extra_keeps_the_old_behaviour(self):
+        lift = self._lift()
+        with patch.object(config, "LIFT_INSERT_EXTRA", 0.0):
+            lift.raise_to_insert(2)
+        lift.go_to_level.assert_called_once_with(2)
+        lift._stop_all.assert_not_called()
+
+    def test_no_extra_raise_at_floor_level(self):
+        """Tầng 0 = sàn; nâng thêm ở đó là đội càng lên khỏi sàn vô cớ."""
+        lift = self._lift()
+        with patch.object(config, "LIFT_INSERT_EXTRA", 0.05):
+            lift.raise_to_insert(0)
+        lift._stop_all.assert_not_called()
+
+
 class TestBuLechTheoTang(unittest.TestCase):
     """Bù lệch 2 càng phải khai báo được RIÊNG cho từng tầng.
 

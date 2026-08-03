@@ -270,8 +270,17 @@ class Lift:
         pallet rồi mới nhấc. Tiến vào lúc càng còn ở sàn thì nâng lên chỉ đi trong
         không khí trước mặt kệ, còn với tầng 2 thì đội thẳng vào mặt tầng 1.
         """
-        logger.info("Nâng càng lên ngang tầng %d để chuẩn bị luồn", shelf_level)
+        them = getattr(config, "LIFT_INSERT_EXTRA", 0.0)
+        logger.info("Nâng càng lên ngang tầng %d để chuẩn bị luồn%s", shelf_level,
+                    f" (+{them:.2f}s cho mũi càng nhỉnh hơn đáy khe)" if them > 0 else "")
         self.go_to_level(shelf_level)
+        if them > 0 and shelf_level > 0:
+            # Phần dôi ra NGOÀI thang tầng, y như lift_off(): `_current_level` giữ
+            # nguyên. Xem config.LIFT_INSERT_EXTRA.
+            self._left_en.on(); self._left_up.on(); self._left_down.off()
+            self._right_up.on(); self._right_down.off()
+            time.sleep(them)
+            self._stop_all()
 
     def lift_off(self) -> None:
         """Nhấc thêm một đoạn ngắn để pallet RỜI mặt kệ, sau khi càng đã luồn vào.

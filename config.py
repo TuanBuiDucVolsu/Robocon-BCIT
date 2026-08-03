@@ -157,6 +157,15 @@ LIFT_RIGHT_EXTRA = 0.050         # Càng PHẢI khi nâng
 # Để {} là dùng hằng số chung như cũ. Chốt bằng test_lift option e, CHỌN TỪNG TẦNG.
 LIFT_LEFT_EXTRA_BY_LEVEL: dict[int, float] = {}
 LIFT_RIGHT_EXTRA_BY_LEVEL: dict[int, float] = {}
+
+# Nâng THÊM bấy nhiêu giây ở bước chuẩn bị LUỒN CÀNG (raise_to_insert), so với độ
+# cao tầng bình thường. Càng nhỉnh hơn đáy khe pallet một chút thì mũi càng không
+# vướng mép dưới của khe khi bò vào.
+# ⚠️ CHỈ áp cho bước luồn. Độ cao dùng ở mọi chỗ khác (thả hàng, home, đi lại)
+# không đổi — nếu cộng vào LIFT_TIME_SHELF_n thì mọi bước đều bị đội lên theo.
+# `_current_level` giữ nguyên là tầng đó, giống hệt cách lift_off() làm: phần dôi
+# ra nằm NGOÀI thang tầng, và home_to_floor() xoá sạch sai lệch tích luỹ.
+LIFT_INSERT_EXTRA = 0.10
 LIFT_LEFT_LOWER_EXTRA = 0.150     # Càng TRÁI khi hạ — ĐÃ ĐO trên robot 03/08
 LIFT_RIGHT_LOWER_EXTRA = 0.150      # Càng PHẢI khi hạ — ĐÃ ĐO trên robot 02/08
 
