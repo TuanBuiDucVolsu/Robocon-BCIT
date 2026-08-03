@@ -170,7 +170,11 @@ def smoke_pickup_cycle(m: Motion, lift: Lift, vision: Vision, tier: int = 1,
             print("       • Càng có thẳng hàng với 2 khe của pallet không?")
             input("     Enter để cho robot TIẾN vào (Ctrl+C để dừng)...")
 
+    # Cờ phải bật TRƯỚC bước lùi ngay sau đây — lùi cũng bị kiện chắn siêu âm.
+    # main.py đặt carried_labels trước _insert_and_lift() nên cũng đúng thứ tự này.
+    m.dang_cong_hang = True
     if not insert_and_lift_once(m, lift, tier, require_both=True, on_step=_buoc):
+        m.dang_cong_hang = False
         print("  ❌ BỐC HÀNG THẤT BẠI (luồn càng hoặc IR không xác nhận)")
         print("     Kiểm: càng có thẳng hàng khe pallet không? APPROACH_DISTANCE "
               "(vị trí chờ) có quá gần/xa không?")
@@ -296,7 +300,7 @@ def smoke_full_lap(m: Motion, lift: Lift, vision: Vision, **_):
     if not ok:
         return False, None
     label_l, label_r = labels
-    m.dang_cong_hang = True          # như main._dat_co_cong_hang()
+    m.dang_cong_hang = True          # như main._dat_co_cong_hang() (đã bật từ pickup)
 
     # --- Chọn thứ tự giao giống _plan_delivery() của main.py ---
     if label_l == label_r:

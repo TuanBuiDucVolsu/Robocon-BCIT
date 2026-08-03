@@ -914,11 +914,17 @@ class Robot:
             approached = self._approach_shelf("TASK2_PICKUP")
             # NV2 chỉ cần 1 IR — nhưng vẫn phải NÂNG-LUỒN-NHẤC như NV1, cơ cấu
             # càng là một, không có đường tắt nào cho hàng rời.
+            # NV2 không dùng carried_labels (không có nhãn để giao — hàng rời luôn
+            # về nhà máy liên hợp), nên cờ cõng hàng phải đặt TAY ở đây. Thiếu nó
+            # thì bước lùi và các chặng advance sau vẫn tin siêu âm trong khi kiện
+            # đang chắn chùm sóng — đúng lỗi vừa sửa cho NV1.
+            self.motion.dang_cong_hang = True
             success = (self._insert_and_lift(tier=1, require_both=False)
                        if approached else False)
             self._retreat_from_shelf("TASK2_PICKUP")
             if success:
                 return State.TASK2_NAVIGATE_TO_JOINT
+            self.motion.dang_cong_hang = False
             logger.warning("Nhiệm vụ 2: lần %d thất bại (%s)", attempt,
                            "không tiếp cận được" if not approached else "IR không thấy pallet")
 
@@ -942,7 +948,11 @@ class Robot:
             logger.info("NHIỆM VỤ 2 HOÀN THÀNH!")
         else:
             logger.error("NHIỆM VỤ 2: drop thất bại — IR vẫn thấy pallet hoặc lỗi cảm biến")
+        # Thả xong (hoặc thả hỏng) thì chặng lùi vẫn nên bỏ siêu âm nếu kiện còn
+        # trên càng; hạ cờ SAU khi lùi để không rơi vào ca "IR báo hỏng nhưng kiện
+        # vẫn nằm đó và tiếp tục chắn chùm sóng".
         self._retreat_from_shelf("TASK2_DROP")
+        self.motion.dang_cong_hang = False
         return State.DONE
 
     # ----------------------------------------------------------

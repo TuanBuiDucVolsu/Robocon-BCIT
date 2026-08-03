@@ -1328,6 +1328,16 @@ class Motion:
             return False
 
         logger.info("Lùi ra khỏi kệ — mục tiêu %.1fcm", target_cm)
+        # ⛔ CÕNG HÀNG THÌ BỎ HẲN SIÊU ÂM ngay từ đầu, không chờ nhánh phát hiện
+        # kẹt. Kiện trên càng chắn chùm sóng và số đo nhảy lung tung (đo 03/08:
+        # 9.4 / 7.8 / 10.2 / 100.0 trong cùng một lượt) — vớ đúng một mẫu ≥ mục
+        # tiêu là báo "đã lùi đủ xa" khi robot còn chưa nhúc nhích. Đó chính là
+        # "lùi có một đoạn ngắn rồi tiến lên xoay, va vào kệ và lệch line".
+        # Nhánh kẹt chỉ bật sau RETREAT_STUCK_TIME = 0.8s nên không kịp cứu.
+        cong_hang = getattr(self, "dang_cong_hang", False)
+        if cong_hang:
+            logger.info("Lùi ra: ĐANG CÕNG HÀNG — bỏ qua siêu âm, lùi theo quãng đã "
+                        "luồn vào (%d xung)", getattr(self, "xung_da_luon", 0))
         self._doc_xung()          # xả bộ đếm trước khi đo quãng lùi
         lui_xung = 0
         start = time.time()
@@ -1346,7 +1356,7 @@ class Motion:
                 continue
             if dau is None:
                 dau = dist
-            if not mu and dist >= target_cm:
+            if (not cong_hang) and (not mu) and dist >= target_cm:
                 self.stop()
                 logger.info("Đã lùi đủ xa — khoảng cách %.1fcm", dist)
                 return True
@@ -1368,7 +1378,7 @@ class Motion:
                     "Lùi ra: sau %.1fs mà khoảng cách chỉ đổi %.1fcm (%.1f→%.1f) — "
                     "siêu âm không dùng được. Chuyển sang lùi theo thời gian %.1fs.",
                     troi, dist - dau, dau, dist, config.RETREAT_BLIND_TIME)
-            if mu:
+            if mu or cong_hang:
                 # Lùi ĐÚNG quãng đã luồn vào (× RETREAT_BACKOUT_MARGIN), đo bằng
                 # encoder. Hằng số THỜI GIAN không dùng được ở đây: cõng 2 kiện thì
                 # 1.5s đi được ít hơn hẳn lúc đi không, robot lùi ngắn quá rồi xoay

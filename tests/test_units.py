@@ -983,6 +983,32 @@ class TestRetreatTheoQuangLuonVao(unittest.TestCase):
         self.assertIn("quãng đã luồn vào", ghi)
         self.assertNotIn("lùi mù", ghi)
 
+    def test_carrying_ignores_a_lucky_sonar_sample_that_says_far_enough(self):
+        """⚠️ HỒI QUY: cõng hàng thì số đo ≥ mục tiêu KHÔNG có nghĩa là đã lùi đủ.
+
+        Số đo lúc bị kiện chắn nhảy lung tung (đo 03/08: 9.4 / 7.8 / 10.2 / 100.0
+        trong cùng một lượt). Vớ đúng một mẫu ≥ 12.9 là retreat báo "đã lùi đủ xa"
+        khi robot còn chưa nhúc nhích — rồi tiến lên xoay thì va vào kệ và lệch line.
+        """
+        m = self._motion(xung_moi_lan=200, xung_da_luon=400)
+        m.get_distance = lambda *a, **k: 99.0     # kịch trần: "quá đủ xa"
+        m.dang_cong_hang = True
+        with self.assertLogs("control.motion", level="INFO") as nk:
+            self.assertTrue(m.retreat_from_shelf())
+        ghi = "\n".join(nk.output)
+        self.assertIn("ĐANG CÕNG HÀNG", ghi)
+        self.assertIn("quãng đã luồn vào", ghi)
+        self.assertNotIn("Đã lùi đủ xa", ghi)
+
+    def test_not_carrying_still_trusts_the_sonar(self):
+        """Không cõng hàng (bốc lỗi) thì siêu âm vẫn dùng bình thường."""
+        m = self._motion(xung_moi_lan=200, xung_da_luon=0)
+        m.get_distance = lambda *a, **k: 99.0
+        m.dang_cong_hang = False
+        with self.assertLogs("control.motion", level="INFO") as nk:
+            self.assertTrue(m.retreat_from_shelf())
+        self.assertIn("Đã lùi đủ xa", "\n".join(nk.output))
+
     def test_falls_back_to_time_when_there_is_no_creep_measurement(self):
         """Không có số xung luồn vào (vd bốc hàng lỗi) → vẫn lùi mù như cũ."""
         m = self._motion(xung_moi_lan=0, xung_da_luon=0)
