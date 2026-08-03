@@ -881,6 +881,26 @@ class TestApproachShelf(unittest.TestCase):
         self.assertGreater(config.APPROACH_STOP_MARGIN, 0,
                            "bù âm = dừng muộn = càng chui vào gầm kệ")
 
+    def test_does_not_drive_on_a_stale_sonar_reading(self):
+        """⚠️ HỒI QUY: siêu âm ĐỨNG SỐ thì phải DỪNG, không chạy mù.
+
+        Đo trên robot 03/08, vệt đo trong một pha tiếp cận:
+            0.00s:15.9  0.02s:16.2  0.09s:16.3  0.79s:5.9
+        Số đo kẹt ở 16.3 suốt 0.7 giây rồi nhảy thẳng xuống 5.9 — robot chạy MÙ hết
+        0.7s đó và vượt điểm dừng ~10cm, lao vào kệ. APPROACH_NO_PROGRESS_TIME =
+        1.2s không bắt được vì đóng băng ngắn hơn thế.
+        """
+        moc = config.APPROACH_DISTANCE + config.APPROACH_STOP_MARGIN + 5.0
+        m = self._motion([moc])          # số đo KHÔNG BAO GIỜ đổi
+        m.stop = MagicMock()
+        m.advance_to_end = None
+        t0 = time.time()
+        m.approach_shelf(config.APPROACH_DISTANCE)
+        self.assertGreater(m.stop.call_count, 0,
+                           "số đo đứng yên mà vẫn chạy tiếp = chạy mù")
+        # phải dừng lái ngay sau ULTRASONIC_STALE_TIME, không đợi hết 1.2s no-progress
+        self.assertLess(config.ULTRASONIC_STALE_TIME, config.APPROACH_NO_PROGRESS_TIME)
+
     def test_stop_trigger_stays_inside_the_slow_phase(self):
         """Điểm dừng phải nằm DƯỚI mốc chuyển tốc, không thì dừng lúc còn chạy nhanh.
 
@@ -1582,34 +1602,54 @@ class TestForwardGuided(unittest.TestCase):
     pallet, IR không báo có hàng → bốc hàng hỏng. Đây là mắt xích ĐẦU của chuỗi đó.
     """
 
-    def _motion(self, values):
+    def _motion(self, adc):
         m = object.__new__(Motion)
         m._line_sensor = MagicMock()
         m._line_sensor.available = True
-        m.read_line_sensor = lambda: values
-        m.follow_line = MagicMock(return_value=(False, values))
+        m._last_error = 0.0
+        m.read_line_sensor_raw = lambda: [v / 1023 for v in adc]
         m.forward = MagicMock()
+        m._steer = MagicMock()
+        m._drive_straight = MagicMock()
+        m.follow_line = MagicMock()
+        m.stop = MagicMock()
         return m
 
     def test_steers_while_line_is_visible(self):
-        m = self._motion([0, 0, 1, 1, 0, 0])
+        m = self._motion([900, 900, 10, 15, 900, 900])
         m._forward_guided(30)
-        m.follow_line.assert_called_once()
+        m._steer.assert_called_once()
         m.forward.assert_not_called()
+        m._drive_straight.assert_not_called()
 
     def test_falls_back_to_straight_when_line_is_gone(self):
         """Line không kéo tới tận kệ thì phải giữ ĐÚNG hành vi cũ, không đứng im."""
-        m = self._motion([0, 0, 0, 0, 0, 0])
+        m = self._motion([900, 910, 905, 900, 908, 900])
         m._forward_guided(30)
         m.forward.assert_called_once_with(30)
-        m.follow_line.assert_not_called()
+        m._steer.assert_not_called()
 
     def test_falls_back_when_sensor_unavailable(self):
-        m = self._motion([0, 0, 1, 1, 0, 0])
+        m = self._motion([900, 900, 10, 15, 900, 900])
         m._line_sensor.available = False
         m._forward_guided(30)
         m.forward.assert_called_once_with(30)
+        m._steer.assert_not_called()
+
+    def test_all_black_goes_straight_and_NEVER_stops(self):
+        """⚠️ HỒI QUY: sát kệ, viền đen của ô kệ làm MỌI mắt đen.
+
+        Bản trước gọi follow_line(), mà follow_line() thấy giao lộ là gọi self.stop()
+        rồi trả về — tức DỪNG MOTOR ngay giữa pha tiếp cận kệ. Đo trên robot: 6 dòng
+        "Phát hiện giao lộ (active=6)" liên tiếp trong một pha tiếp cận.
+        Ở đây chỉ cần phần LÁI. Mọi mắt đen thì sai số line là số rác → đi THẲNG.
+        """
+        m = self._motion([0, 0, 0, 0, 0, 0])
+        m._forward_guided(30)
+        m._drive_straight.assert_called_once_with(30)
+        m.stop.assert_not_called()
         m.follow_line.assert_not_called()
+        m._steer.assert_not_called()
 
 
 class TestBackToIntersection(unittest.TestCase):

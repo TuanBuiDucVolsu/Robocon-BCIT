@@ -487,6 +487,16 @@ ADVANCE_ACQUIRE_TIME = 0.8
 # tới cách chân kệ 1mm (SA_BAN.md mục 3b). Nhánh đó chỉ an toàn ở khu nhà máy, nơi
 # line dừng ở mép khu.
 # An toàn với hàng đang cõng: kiện đọc 72-77cm, xa hơn mốc này rất nhiều.
+# Giây tối đa được phép DI CHUYỂN trên một số đo siêu âm KHÔNG ĐỔI, khi tiếp cận kệ.
+# Quá mức này thì DỪNG và chờ số mới, thay vì chạy mù.
+# Đo trên robot 03/08: số đo đứng yên ở 16.3cm suốt 0.7 giây rồi nhảy thẳng xuống
+# 5.9cm — robot chạy mù hết 0.7s đó và vượt điểm dừng ~10cm, lao vào kệ. Cơ chế
+# APPROACH_NO_PROGRESS_TIME = 1.2s không bắt được vì đóng băng ngắn hơn thế.
+# Gốc rễ: gpiozero bấm giờ xung echo bằng PHẦN MỀM (cảnh báo PWMSoftwareFallback mỗi
+# lần khởi động) nên luồng nền có lúc kẹt. Cách sửa gốc là cài pigpio — xem
+# docs/PHAN_CUNG.md. Hằng số này chỉ đổi "vượt đà" thành "khựng một nhịp".
+ULTRASONIC_STALE_TIME = 0.15
+
 ADVANCE_HARD_STOP_CM = 11.9
 
 ADVANCE_TIMEOUT = 6.0

@@ -715,6 +715,7 @@ class Motion:
         # Tốc độ của nhịp GẦN NHẤT — stop_gently() cần biết đang chạy nhanh cỡ nào
         # để giảm dần từ đó. Khởi tạo cho vòng lặp đầu (chưa qua nhánh chọn tốc độ).
         speed = config.APPROACH_FAST_SPEED
+        doi_luc = start          # lần cuối siêu âm ĐỔI giá trị
         # Vệt đo để soi khi hỏng. Siêu âm chạy chập chờn (gpiozero cảnh báo mỗi lần
         # khởi động: "use the pigpio pin factory for more accurate readings" — bấm
         # giờ xung echo bằng phần mềm nên bị hệ điều hành ngắt quãng). Chỉ nhìn con
@@ -726,8 +727,22 @@ class Motion:
             if self._aborted():
                 return False
             dist = self.get_distance()   # gpiozero đã lấy trung vị sẵn (ULTRASONIC_QUEUE_LEN)
-            if not vet or abs(dist - vet[-1][1]) > 0.05:
+            moi = (not vet) or abs(dist - vet[-1][1]) > 0.05
+            if moi:
                 vet.append((time.time() - start, dist))
+                doi_luc = time.time()
+            # ⚠️ KHÔNG CHẠY KHI SỐ ĐO ĐÃ CŨ. Đo trên robot: số đo ĐỨNG YÊN ở 16.3cm
+            # suốt 0.7 giây rồi nhảy thẳng xuống 5.9 — robot chạy MÙ hết 0.7s đó và
+            # vượt qua điểm dừng ~10cm. Cơ chế "không tiến thêm được" không bắt vì
+            # nó chờ APPROACH_NO_PROGRESS_TIME = 1.2s.
+            # Nguyên nhân gốc là gpiozero bấm giờ xung echo bằng PHẦN MỀM (cảnh báo
+            # PWMSoftwareFallback mỗi lần khởi động) nên luồng nền có lúc kẹt.
+            # Chưa cài được pigpio thì ít nhất ĐỪNG DI CHUYỂN trên dữ liệu cũ:
+            # đứng chờ số mới. Đổi một cú vượt đà thành một nhịp khựng.
+            if time.time() - doi_luc > config.ULTRASONIC_STALE_TIME:
+                self.stop()
+                time.sleep(0.01)
+                continue
             if dist < 0:
                 # Lỗi đọc mẫu này — KHÔNG hiểu nhầm thành "đã tới", thử lại
                 time.sleep(0.02)
@@ -835,12 +850,25 @@ class Motion:
         đúng hành vi cũ. Cờ giao lộ của follow_line() bị BỎ QUA ở đây — sát kệ thì
         nền kệ có thể làm mọi mắt thấy đen, mà ta chỉ cần phần LÁI chứ không đếm.
         """
-        if self._line_sensor.available:
-            values = self.read_line_sensor()
-            if sum(values) > 0:
-                self.follow_line(speed)
-                return
-        self.forward(speed)
+        if not self._line_sensor.available:
+            self.forward(speed)
+            return
+        raw = self.read_line_sensor_raw()
+        values = LineSensor.digital_from_raw(raw)
+        n = sum(values)
+        if n == 0:
+            self.forward(speed)              # hết line → thẳng như cũ
+        elif n >= config.INTERSECTION_THRESHOLD:
+            # ⚠️ KHÔNG gọi follow_line() ở đây. follow_line() thấy giao lộ là gọi
+            # self.stop() rồi trả về — tức DỪNG MOTOR ngay giữa pha tiếp cận kệ.
+            # Sát kệ thì thanh cảm biến nằm trên VIỀN ĐEN của ô kệ in trên sa bàn
+            # (vạch ngang rộng 240mm, SA_BAN.md 3b) nên mọi mắt đều đen — đo trên
+            # robot: 6 dòng "Phát hiện giao lộ (active=6)" liên tiếp trong một pha
+            # tiếp cận. Ở đây ta chỉ cần phần LÁI, không cần đếm giao lộ.
+            # Mọi mắt đen thì sai số line là số rác → đi THẲNG, không lái, không dừng.
+            self._drive_straight(speed)
+        else:
+            self._steer(raw, speed)
 
     def creep_until(self, check, speed: float = config.INSERT_SPEED,
                     timeout: float = config.INSERT_TIMEOUT,
