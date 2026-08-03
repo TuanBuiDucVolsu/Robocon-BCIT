@@ -784,6 +784,21 @@ RETREAT_BACKOUT_MARGIN = 1.15
 # giao lộ thì cách một đoạn. Để nhỏ thôi — sau retreat_from_shelf robot đã lùi
 # sẵn ~20cm nên phần còn lại tới giao lộ không nhiều.
 BACK_MIN_TRAVEL_CM = 5.0
+
+# Quãng TIẾN tối thiểu trước khi tin một tín hiệu giao lộ (đo bằng encoder).
+# Cùng lý do như BACK_MIN_TRAVEL_CM, nhưng cho chiều TIẾN — và ca gây lỗi ở đây là
+# TẤM IN KHU NHÀ MÁY, không phải chân kệ.
+# Đo trên robot 03/08, robot vừa thả hàng ở Samsung và đang đi tiếp tới Hana:
+#     ADC [ 56, 139,  73, 197, 171, 208]   ngưỡng 200
+#     ADC [141, 119,  53, 148, 101, 131]   ← 6 mắt dưới 153, BỊ ĐẾM THÀNH GIAO LỘ
+# Mọi mắt đọc 50-250: không mắt nào thấy nền trắng (~900), cũng không mắt nào đen
+# sâu (~0). Đó là cả thanh nằm trên TẤM IN. Robot đếm nhầm nó thành giao lộ, dừng
+# sớm, rồi thả sai nhà máy.
+# KHÔNG ngưỡng nào tách được: tấm in có mắt đọc 53 (đen như vạch thật), còn ngã tư
+# thật thì cả 6 mắt đọc 0 nên "phải có mắt sáng" cũng sai nốt.
+# Quãng đường thì tách được: các hàng R0..R4 cách nhau ~40cm trên sa bàn, còn tấm
+# in nằm ngay dưới chân robot lúc khởi hành. 10cm an toàn cho cả hai phía.
+FORWARD_MIN_TRAVEL_CM = 10.0
 # Giây tiến bù TRƯỚC KHI XOAY, khi vừa TIẾN tới giao lộ (chặng "forward" ngay trước
 # lệnh xoay). TÁCH RIÊNG khỏi REVERSE_RECENTER_TIME để chỉnh/tắt được độc lập —
 # hai chiều dừng ở hai mép khác nhau của vạch nên quãng bù có thể không bằng nhau.

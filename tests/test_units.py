@@ -2175,7 +2175,47 @@ class TestDemGiaoLoDoiDenDam(unittest.TestCase):
         m._recover_line = MagicMock(return_value=False)
         m.follow_line = MagicMock(return_value=(luon_bao, [0, 1, 1, 1, 1, 0]))
         m.read_line_sensor_raw = lambda: [v / 1023 for v in raw_adc]
+        # Mặc định coi như ĐÃ đi đủ xa, để mấy bài kiểm bộ lọc ĐEN ĐẬM không bị
+        # cổng quãng đường chặn trước. Bài nào kiểm cổng thì tự đặt lại encoder.
+        can = int(config.FORWARD_MIN_TRAVEL_CM * config.ENCODER_PULSES_PER_CM) + 10
+        m._encoder_left = _EncoderGia(can)
+        m._encoder_right = _EncoderGia(0)
+        m.read_line_sensor_adc = lambda: list(raw_adc)
         return m
+
+    def test_factory_print_right_under_the_robot_is_NOT_counted(self):
+        """⚠️ HỒI QUY: rời khu nhà máy thì TẤM IN dưới chân bị đếm thành giao lộ.
+
+        Đo trên robot 03/08, vừa thả ở Samsung và đang đi tiếp tới Hana:
+            ADC [ 56, 139,  73, 197, 171, 208]   ngưỡng 200
+            ADC [141, 119,  53, 148, 101, 131]   ← 6 mắt dưới 153, BỊ ĐẾM
+        Mọi mắt đọc 50-250: không mắt nào thấy nền trắng (~900), cũng không mắt nào
+        đen sâu (~0). Robot đếm nhầm tấm in thành giao lộ, dừng sớm, thả sai nhà máy.
+        KHÔNG ngưỡng nào tách được — tấm in có mắt đọc 53, đen như vạch thật, còn
+        ngã tư thật thì cả 6 mắt đọc 0 nên "phải có mắt sáng" cũng sai. Chỉ QUÃNG
+        ĐƯỜNG tách được: hai hàng giao lộ cách nhau ~40cm.
+        """
+        m = self._motion((141, 119, 53, 148, 101, 131))
+        m._encoder_left = _EncoderGia(0)          # không nhúc nhích
+        m._encoder_right = _EncoderGia(0)
+        m.read_line_sensor_adc = lambda: [141, 119, 53, 148, 101, 131]
+        with self.assertLogs("control.motion", level="INFO") as nk:
+            self.assertFalse(m.follow_line_until_intersection(timeout=0.5))
+        self.assertIn("mới đi", "\n".join(nk.output))
+
+    def test_junction_after_enough_travel_is_counted(self):
+        m = self._motion((917, 914, 0, 0, 0, 0))
+        can = int(config.FORWARD_MIN_TRAVEL_CM * config.ENCODER_PULSES_PER_CM) + 10
+        m._encoder_left = _EncoderGia(can)
+        m._encoder_right = _EncoderGia(0)
+        self.assertTrue(m.follow_line_until_intersection(timeout=1.0))
+
+    def test_no_encoder_still_counts_instead_of_never_arriving(self):
+        """Thiếu encoder mà vẫn áp cổng thì di_cm luôn = 0 → không bao giờ tới nơi."""
+        m = self._motion((917, 914, 0, 0, 0, 0))
+        m._encoder_left = _EncoderGia(0, available=False)
+        m._encoder_right = _EncoderGia(0, available=False)
+        self.assertTrue(m.follow_line_until_intersection(timeout=1.0))
 
     def test_plain_line_inflated_by_the_threshold_is_NOT_counted(self):
         m = self._motion((834, 270, 0, 0, 0, 930))      # 3 mắt đen đậm

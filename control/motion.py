@@ -1814,11 +1814,31 @@ class Motion:
                                        timeout: float = 15.0) -> bool:
         start = time.time()
         lost_since = None
+        # Cổng quãng đường — chỉ dùng được khi có encoder VÀ đã calibrate. Thiếu
+        # một trong hai mà vẫn áp thì di_cm luôn = 0 và MỌI giao lộ bị bác.
+        do_duoc = (config.ENCODER_PULSES_PER_CM > 0
+                   and getattr(getattr(self, "_encoder_left", None), "available", False)
+                   and getattr(getattr(self, "_encoder_right", None), "available", False))
+        self._doc_xung()
+        di_xung = 0
 
         while time.time() - start < timeout:
             if self._aborted():
                 return False
+            di_xung += self._doc_xung()
+            di_cm = di_xung / config.ENCODER_PULSES_PER_CM if do_duoc else None
             at_intersection, values = self.follow_line(base_speed)
+            if at_intersection and di_cm is not None \
+                    and di_cm < config.FORWARD_MIN_TRAVEL_CM:
+                logger.info(
+                    "Bỏ qua tín hiệu giao lộ ở %.2fs — mới đi %.1fcm (cần %.1f). "
+                    "Tấm in khu nhà máy nằm ngay dưới chân robot; hai hàng giao lộ "
+                    "cách nhau ~40cm. ADC %s",
+                    time.time() - start, di_cm, config.FORWARD_MIN_TRAVEL_CM,
+                    self.read_line_sensor_adc())
+                self.forward(base_speed)
+                time.sleep(0.01)
+                continue
             if at_intersection:
                 # ĐẾM MẮT ĐEN ĐẬM — chỗ ĐẾM GIAO LỘ cuối cùng còn thiếu bộ lọc này.
                 # Ngưỡng thích nghi co theo dải sáng-tối của từng lần đọc, nên một
