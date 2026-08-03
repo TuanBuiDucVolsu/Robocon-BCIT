@@ -790,7 +790,26 @@ TURN_RECENTER_TIME = 1.3
 # ============================================================
 ROUTE_TURN_COST = 2          # Giá 1 lần xoay 90°
 ADVANCE_COST = 2             # Giá lệnh ("advance",)
-EDGE_COST_START_GAP = 3      # Phụ phí đoạn ngang R0 (trôi qua khoảng đứt ô xuất phát)
+EDGE_COST_START_GAP = 20     # Phụ phí đoạn ngang R0 — TRÁNH HẲN khoảng đứt ô xuất phát
+# ⚠️ 3 → 20 ngày 03/08 vì tuyến qua đó KHÔNG CHẠY ĐƯỢC. Đo trên robot: đi giao
+# foxconn (cùng hàng R0 với ô xuất phát), robot quay 180° tại kệ rồi đi thẳng qua ô
+# xuất phát — nơi vạch line ĐỨT 245mm và còn in hình mascot đen. Cảm biến ra ngoài
+# line, robot đi lung tung. Lạc ở đó thì rủi ro ra khỏi sa bàn = reset (−10đ).
+#
+# Giá phải trả, tính bằng route_cost tổng cho cả 4 nhà máy (đi + về):
+#       phạt  3  →  107
+#       phạt 20  →  131        tức +22% quãng đường
+# Đắt, nhưng tuyến rẻ hơn thì không chạy được nên không phải là lựa chọn.
+#
+# Ở mức 20 bộ tìm đường tránh hẳn cạnh này; mức 10 vẫn còn chọn nó. Đặt lại về 3
+# CHỈ SAU KHI navigate_intersections() vượt được khoảng đứt một cách tin cậy —
+# hướng đúng là trôi theo QUÃNG ĐƯỜNG đo bằng encoder (~25-30cm) thay vì theo thời
+# gian như LINE_GAP_COAST_TIME hiện nay, cùng cách đã chữa mọi hằng số thời gian
+# khác trong ngày. Làm được thì lấy lại toàn bộ 22% đó.
+#
+# Lợi phụ: ở mức 20, tuyến tới foxconn mở đầu bằng "LÙI 1 giao lộ" thay vì "xoay
+# phải hai lần" — bỏ luôn cú quay đầu 180° ngay trước mặt kệ khi đang cõng 2 kiện,
+# vốn cũng chưa từng chạy thử.
 
 # ============================================================
 # CAMERA & NHẬN DIỆN KIỆN HÀNG

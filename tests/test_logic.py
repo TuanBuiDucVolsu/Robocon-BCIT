@@ -183,14 +183,25 @@ class TestRouteReachesDestination(unittest.TestCase):
         # ra khỏi điểm cuối (1) + đi 1 giao lộ dọc cột kệ (1)
         self.assertEqual(sum(hops), 2, nav.route_to_text(route))
 
-    def test_route_leaving_terminal_starts_with_uturn(self):
-        """Rời kệ để đi TIẾP THEO HƯỚNG CŨ thì vẫn phải quay đầu 180°.
+    def test_uturn_is_two_turns_in_the_SAME_direction(self):
+        """Quay đầu 180° = hai lần xoay CÙNG CHIỀU, không phải trái rồi phải.
 
-        (Đi vuông góc thì rẻ hơn nếu LÙI ra — xem TestReverseExit.)
+        ⚠️ Bài này TRƯỚC ĐÂY dùng tuyến Kệ 3 → Foxconn làm ví dụ, vì hồi đó tuyến
+        rẻ nhất tới Foxconn là quay đầu rồi đi thẳng qua ô xuất phát. Đo trên robot
+        03/08: tuyến đó KHÔNG CHẠY ĐƯỢC — vạch line đứt 245mm ở ô xuất phát, robot
+        ra ngoài line và đi lung tung. EDGE_COST_START_GAP đã nâng 3 → 20 để tránh
+        hẳn, nên Kệ 3 → Foxconn giờ mở đầu bằng LÙI.
+        Tính chất "quay đầu = 2 lần xoay cùng chiều" thì vẫn đúng, nên bài kiểm
+        thẳng vào apply() thay vì mượn một tuyến cụ thể — tuyến thì đổi theo chi
+        phí, tính chất thì không.
         """
-        route, _ = nav.plan(nav.pose_at("SHELF0"), "F_foxconn")
-        self.assertEqual(route[0][0], route[1][0])
-        self.assertIn(route[0][0], ("left", "right"))
+        pose = nav.pose_at("SHELF0")
+        for chieu in ("left", "right"):
+            sau = nav.apply(pose, [(chieu,), (chieu,)])
+            self.assertEqual(sau[0], pose[0], "quay đầu tại chỗ, KHÔNG đổi vị trí")
+            self.assertNotEqual(sau[1], pose[1], "hướng phải đổi")
+            self.assertEqual(nav.apply(sau, [(chieu,), (chieu,)])[1], pose[1],
+                             "quay đầu hai lần thì về hướng cũ")
 
 
 class TestMirroredHalf(unittest.TestCase):
@@ -684,10 +695,26 @@ class TestReverseExit(unittest.TestCase):
         route, _ = nav.plan(nav.pose_at("SHELF1"), "F_samsung")
         self.assertEqual(route[0], ("back", 1), nav.route_to_text(route))
 
-    def test_straight_leg_still_turns_around(self):
-        """Kệ 3 → Foxconn: rời kệ rồi đi THẲNG tiếp — quay đầu vẫn rẻ hơn."""
+    def test_start_gap_is_avoided_even_when_it_is_the_short_way(self):
+        """⚠️ Kệ 3 → Foxconn KHÔNG được đi xuyên ô xuất phát, dù đó là đường ngắn nhất.
+
+        Foxconn cùng hàng R0 với ô xuất phát nên cạnh C0R0↔C1R0 là đường ngắn nhất
+        tới nó. Nhưng vạch line ở đó ĐỨT 245mm và còn in hình mascot đen. Đo trên
+        robot 03/08: robot quay 180° tại kệ, đi thẳng qua ô xuất phát, cảm biến ra
+        ngoài line và đi lung tung — lạc ở đó thì rủi ro ra khỏi sa bàn (reset −10đ).
+        EDGE_COST_START_GAP = 20 (mức 10 vẫn còn chọn cạnh này).
+        Giá: route_cost tổng cho 4 nhà máy đi+về tăng 107 → 131, tức +22%.
+        """
         route, _ = nav.plan(nav.pose_at("SHELF0"), "F_foxconn")
-        self.assertNotIn("back", [c[0] for c in route], nav.route_to_text(route))
+        nut = [nav.TERMINALS["SHELF0"][0]]
+        pose = nav.pose_at("SHELF0")
+        for lenh in route:
+            pose = nav.apply(pose, [lenh])
+            nut.append(pose[0])
+        cap = set(zip(nut, nut[1:])) | set(zip(nut[1:], nut))
+        self.assertNotIn(("C0R0", "C1R0"), cap,
+                         f"tuyến đi xuyên khoảng đứt ô xuất phát: "
+                         f"{nav.route_to_text(route)}")
 
     def test_reverse_keeps_heading_and_reaches_the_node(self):
         pose = nav.pose_at("SHELF1")                    # (SHELF1, hướng vào kệ)
