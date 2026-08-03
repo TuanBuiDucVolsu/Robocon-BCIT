@@ -1567,10 +1567,10 @@ class TestAdvanceToEnd(unittest.TestCase):
             return False, v
 
         m.follow_line = follow
-        # Chữ ký giao lộ THẬT: 4 mắt đen ĐẬM (ADC bão hoà), đo trên robot 03/08.
-        # advance_to_end() đếm mắt đen đậm để bác vạch thường bị ngưỡng thích nghi
-        # thổi lên, nên mọi bài kiểm nhánh "gặp giao lộ" phải cấp chữ ký thật.
-        m.read_line_sensor_raw = lambda: [v / 1023 for v in (917, 914, 0, 0, 0, 0)]
+        # Chữ ký giao lộ THẬT cho advance: cần ADVANCE_INTERSECTION_DAM = 5 mắt đen
+        # ĐẬM (cao hơn INTERSECTION_THRESHOLD có chủ ý — xem config). Ngã tư thật
+        # cho 6 mắt nên thừa sức đạt.
+        m.read_line_sensor_raw = lambda: [v / 1023 for v in (917, 0, 0, 0, 0, 0)]
         return m
 
     def test_end_of_line_after_seeing_it_is_success(self):
@@ -1673,7 +1673,10 @@ class TestAdvanceToEnd(unittest.TestCase):
         không khớp" — robot đứng chết ở giao lộ trước khu Samsung.
         """
         m = self._motion([[0, 0, 1, 1, 0, 0]] * 30 + [[0] * 6])
-        m.read_line_sensor_raw = lambda: [v / 1023 for v in (834, 270, 0, 0, 0, 930)]
+        # Mắt 2 nằm ĐÚNG MÉP vạch: cùng vạch đó nó đọc 270 rồi 98 rồi 169... Ở đây
+        # lấy ca 98 — ĐEN ĐẬM thật, tức đủ 4 mắt và lọt qua ngưỡng cũ. Chỉ mức 5
+        # mới bác được.
+        m.read_line_sensor_raw = lambda: [v / 1023 for v in (502, 98, 0, 0, 0, 916)]
         m.follow_line = lambda speed: (True, [0, 1, 1, 1, 1, 0])
         m.get_distance = lambda *a, **k: 100.0
         m.dang_cong_hang = True          # bỏ siêu âm, chỉ còn line quyết định

@@ -899,12 +899,13 @@ class Motion:
                 # lộ: mắt 2 đọc 207-270, không đen, chỉ lọt dưới ngưỡng ~278. Hai
                 # tín hiệu giả này làm advance thoát giao lộ oan hai lần rồi lạc.
                 raw_gl = self.read_line_sensor_raw()
-                if LineSensor.dem_den_dam(raw_gl) < config.INTERSECTION_THRESHOLD:
+                dam_gl = LineSensor.dem_den_dam(raw_gl)
+                if dam_gl < config.ADVANCE_INTERSECTION_DAM:
                     logger.info(
                         "Advance: bỏ qua tín hiệu giao lộ ở %.2fs — chỉ %d/%d mắt đen "
                         "ĐẬM, ADC %s. Vạch thường bị ngưỡng thích nghi thổi lên.",
-                        time.time() - start, LineSensor.dem_den_dam(raw_gl),
-                        config.INTERSECTION_THRESHOLD,
+                        time.time() - start, dam_gl,
+                        config.ADVANCE_INTERSECTION_DAM,
                         [int(round(v * 1023)) for v in raw_gl])
                     # follow_line() vừa gọi stop() — phải ra lệnh chạy lại, không thì
                     # vòng sau nó lại thấy, lại phanh, robot đứng im vĩnh viễn.

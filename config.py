@@ -597,6 +597,22 @@ ADVANCE_LOST_ECHO_COUNT = 3   # Số nhịp kịch trần LIÊN TIẾP, SAU KHI 
 # thoát. Phần đi thêm khi đó nằm dưới BÁM LINE (có lái), không phải chạy mù.
 ADVANCE_START_GRACE = 0.6   # giây kể từ sau escape
 
+# Số mắt đen ĐẬM tối thiểu để advance_to_end() coi là GIAO LỘ THẬT (và báo "bản đồ
+# không khớp"). CAO HƠN INTERSECTION_THRESHOLD có chủ ý.
+#
+# Đo trên robot 03/08, chặng tới khu Samsung — CÙNG một vạch line, cách nhau vài
+# chục mili-giây, mắt 2 đọc lần lượt:
+#       270, 194, 183, 169, 154, 129, 119, 98, 76
+# Nó nằm ĐÚNG MÉP vạch nên nhấp nháy qua mọi ngưỡng: lúc 4 mắt đen đậm, lúc 3.
+# Không ngưỡng nào trên mức 4 mắt phân biệt được vạch thường với giao lộ ở đây.
+#
+# Nhưng trong advance_to_end, "gặp giao lộ" là điều kiện LỖI chứ không phải điều
+# kiện dừng bình thường — điểm dừng là HẾT LINE (hoặc siêu âm khi không cõng hàng).
+# Nên đòi bằng chứng mạnh hơn ở đây chỉ làm nó ít báo lỗi oan; bỏ sót một giao lộ
+# thật thì robot chạy tới hết line, đúng thứ nó phải làm. Ngã tư thật cho 6 mắt,
+# ngã ba C0R0 cho 4 — nhưng advance không được phép gặp C0R0 ngoài cửa sổ ân hạn.
+ADVANCE_INTERSECTION_DAM = 5
+
 
 # --- XÁC NHẬN LẠI KHI ĐỨNG YÊN -------------------------------------------
 # Đo trên robot 03/08 (tools.check_sonar_jitter, 30 giây): robot ĐỨNG YÊN cho
