@@ -1036,14 +1036,14 @@ class TestSmokePickupKhongHaCang(unittest.TestCase):
         import inspect
         from tests import test_smoke
         src = inspect.getsource(test_smoke.smoke_full_lap)
-        self.assertIn("ha_cang_cuoi=False", src,
+        self.assertIn("doc_lap=False", src,
                       "option 5 phải yêu cầu GIỮ càng, không thì thả kiện giữa chừng")
 
     def test_standalone_default_is_to_lower(self):
         import inspect
         from tests import test_smoke
         sig = inspect.signature(test_smoke.smoke_pickup_cycle)
-        self.assertTrue(sig.parameters["ha_cang_cuoi"].default,
+        self.assertTrue(sig.parameters["doc_lap"].default,
                         "chạy riêng option 2 thì mặc định PHẢI hạ càng")
 
 
