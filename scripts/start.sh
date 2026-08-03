@@ -3,7 +3,10 @@
 # Khởi chạy robot — được gọi bởi systemd service
 # =============================================
 
-PROJECT_DIR="/home/mbw12345/Robocon-BCIT"
+# Suy từ vị trí CHÍNH FILE NÀY, không viết cứng: trước đây ghi
+# /home/mbw12345/Robocon-BCIT (máy dev) nên trên phantom (/home/bcit/...) service
+# thi đấu KHÔNG chạy được. practice.sh đã dính đúng lỗi này.
+PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 LOG_FILE="$PROJECT_DIR/robot_log.txt"
 
 cd "$PROJECT_DIR"

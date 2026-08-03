@@ -1,3 +1,8 @@
+# ⚠️ ĐÂY LÀ BẢN MẪU. __USER__ và __DIR__ được scripts/install.sh thay bằng user và
+# đường dẫn THẬT lúc cài. Đừng chạy `cp` file này thẳng vào /etc/systemd/system.
+# Trước đây file này viết cứng /home/mbw12345/Robocon-BCIT (máy dev) nên trên
+# phantom (/home/bcit/...) service thi đấu không chạy được.
+
 [Unit]
 Description=Robot Tự Động Bảng O2 — Robocon 2026
 After=multi-user.target
@@ -7,13 +12,13 @@ StartLimitIntervalSec=0
 
 [Service]
 Type=simple
-User=mbw12345
-WorkingDirectory=/home/mbw12345/Robocon-BCIT
-ExecStart=/bin/bash /home/mbw12345/Robocon-BCIT/scripts/start.sh
+User=__USER__
+WorkingDirectory=__DIR__
+ExecStart=/bin/bash __DIR__/scripts/start.sh
 Restart=on-failure
 RestartSec=2
-StandardOutput=append:/home/mbw12345/Robocon-BCIT/robot_log.txt
-StandardError=append:/home/mbw12345/Robocon-BCIT/robot_log.txt
+StandardOutput=append:__DIR__/robot_log.txt
+StandardError=append:__DIR__/robot_log.txt
 
 [Install]
 WantedBy=multi-user.target

@@ -479,3 +479,45 @@ class TestSoNghiemThu(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+class TestScriptKhongVietCungDuongDan(unittest.TestCase):
+    """⚠️ Script trong scripts/ KHÔNG được viết cứng đường dẫn HOME của máy dev.
+
+    Đã dính HAI LẦN, và lần thứ hai là lần nguy hiểm:
+      • practice.sh   ghi cứng /home/mbw12345/... → trên robot thoát ngay ở dòng cd
+      • robot.service ghi cứng cả đường dẫn LẪN User=mbw12345 → service THI ĐẤU
+        không chạy được, mà lỗi đó chỉ lộ ra lúc bật Pi ở sân thi
+    Đường dẫn phải suy từ vị trí chính file đó ($(dirname "$0")/..), còn unit file
+    systemd thì dùng bản mẫu __DIR__/__USER__ cho install.sh thay lúc cài.
+    """
+
+    THU_MUC = pathlib.Path(__file__).resolve().parent.parent / "scripts"
+
+    def _dong_lenh(self, path):
+        """Bỏ dòng trống và dòng chú thích — chỉ soi lệnh thật sự chạy."""
+        for i, dong in enumerate(path.read_text().splitlines(), 1):
+            bo = dong.strip()
+            if bo and not bo.startswith("#"):
+                yield i, dong
+
+    def test_no_shell_script_hardcodes_a_home_path(self):
+        for f in sorted(self.THU_MUC.glob("*.sh")):
+            for i, dong in self._dong_lenh(f):
+                self.assertNotIn("/home/", dong,
+                                 f"{f.name}:{i} viết cứng đường dẫn: {dong.strip()}")
+
+    def test_systemd_unit_uses_placeholders_not_a_real_path(self):
+        f = self.THU_MUC / "robot.service"
+        noi_dung = f.read_text()
+        for i, dong in self._dong_lenh(f):
+            self.assertNotIn("/home/", dong,
+                             f"{f.name}:{i} viết cứng đường dẫn: {dong.strip()}")
+        self.assertIn("__DIR__", noi_dung, "thiếu chỗ cho install.sh thay đường dẫn")
+        self.assertIn("__USER__", noi_dung, "thiếu chỗ cho install.sh thay user")
+
+    def test_install_script_substitutes_both_placeholders(self):
+        noi_dung = (self.THU_MUC / "install.sh").read_text()
+        self.assertIn("__USER__", noi_dung)
+        self.assertIn("__DIR__", noi_dung)
+        self.assertIn("sed", noi_dung, "phải THAY bản mẫu, không phải cp thẳng")
+
