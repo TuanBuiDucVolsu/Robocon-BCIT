@@ -918,11 +918,12 @@ TURN_TIME = 0.90             # 0.5 (số của motor CŨ) chỉ quay được 45
 # Cần ĐÚNG MỘT số đo nữa: WHEEL_TRACK_CM = khoảng cách giữa hai ĐIỂM TIẾP ĐẤT của
 # 2 bánh dẫn động (đo bằng thước, tâm bánh tới tâm bánh). Để 0 = TẮT, dùng
 # TURN_TIME như cũ. Đo xong đặt số vào đây rồi xác nhận bằng test_motion option 10.
-WHEEL_TRACK_CM = 13.33       # ⚠️ ĐÂY LÀ SỐ HIỆU CHỈNH, KHÔNG PHẢI SỐ ĐO BẰNG THƯỚC.
+WHEEL_TRACK_CM = 12.63       # ⚠️ ĐÂY LÀ SỐ HIỆU CHỈNH, KHÔNG PHẢI SỐ ĐO BẰNG THƯỚC.
 # Thước đo được 20.0cm (tâm bánh → tâm bánh) nhưng chạy test_motion option 10 với
 # số đó thì robot xoay 135°, tức QUÁ 45°. Robot quay NHIỀU hơn mô hình cung lăn dự
 # đoán → bán kính quay thực nhỏ hơn nửa vệt bánh đo được. Hiệu chỉnh theo tỉ lệ:
-#       20.0 × 90/135 = 13.33
+#       20.0 × 90/135 = 13.33   → chạy lại ra 95°, chỉnh tiếp:
+#       13.33 × 90/95 = 12.63   (1129 → 753 → 713 xung)
 # ĐỪNG "sửa lại cho đúng thước" — 20.0 đã được thử và SAI. Số này là hằng số hiệu
 # chỉnh của cả cụm (bánh + caster + mặt sàn), không phải một kích thước hình học.
 #
