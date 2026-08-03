@@ -795,7 +795,15 @@ REVERSE_RECENTER_TIME = 1.3
 ENCODER_PULSES_PER_CM = 35.940  # ĐÃ CHỐT trên robot 03/08 — 3 lần nhất quán
                                 # (tools/calibrate_encoder_cm.py). 0 = chưa calibrate
 RECENTER_CM = 12.0            # cm — ĐO BẰNG THƯỚC trên robot, không phải số đoán
-RECENTER_MAX_TIME = 3.0       # Giây chặn trên: encoder hỏng thì không chạy vô hạn
+RECENTER_MAX_TIME = 5.0       # Giây chặn trên: encoder hỏng thì không chạy vô hạn
+# ⚠️ 3.0 → 5.0 ngày 03/08. Số 3.0 đặt hồi robot đi 12cm trong 1.2s. Về cuối buổi
+# nó chậm dần — cùng 12cm mất 1.8-2.2s, và có lượt CHỈ ĐI ĐƯỢC 287/431 rồi 207/431
+# xung trước khi chạm trần:
+#     Tiến bù 12.0cm: 287/431 xung trong 3.01s — HẾT CHẶN TRÊN
+# Tức robot mới đi 6-8cm thay vì 12 → tâm xoay sai → mọi bước sau lệch theo.
+# Chặn này chỉ để phòng encoder chết, không phải để giới hạn quãng đường, nên nới
+# rộng là đúng. NHƯNG robot chậm dần như vậy thường là PIN YẾU — kiểm pin trước
+# khi tin vào bất kỳ số đo thời gian nào.
 
 # Lùi ra khỏi kệ = lùi ĐÚNG quãng đã luồn vào, nhân hệ số dư này. creep_until()
 # đếm sẵn quãng luồn vào bằng encoder nên không phải đoán thêm hằng số nào. Hệ số

@@ -2138,7 +2138,7 @@ class TestDuCaoNgoaiThangTang(unittest.TestCase):
         lift._lower_right = MagicMock()
         lift._verify_released = MagicMock(return_value=True)
         lift._current_level = 1
-        lift._du_cao = 0.0
+        lift._du_cao_ben = {"left": 0.0, "right": 0.0}
         lift.pallet = MagicMock()
         return lift
 
@@ -2147,12 +2147,32 @@ class TestDuCaoNgoaiThangTang(unittest.TestCase):
         with patch.object(config, "LIFT_INSERT_EXTRA", 0.20):
             lift.raise_to_insert(1)
             lift.lift_off()
-            du = lift._du_cao
+            du = lift._du_cao("left")
             lift.dropoff_left()
         moc = lift._move_duration("left", 1, 0, raising=False)
         self.assertAlmostEqual(du, 0.20 + config.LIFT_PICKUP_RAISE_TIME, places=3)
         self.assertAlmostEqual(lift._lower_left.call_args[0][0], moc + du, places=3,
                                msg="hạ thiếu đúng bằng phần dôi → kiện không rời càng")
+
+    def test_second_drop_still_gets_its_own_surplus(self):
+        """⚠️ HỒI QUY: xoá phần dôi CHUNG thì kiện thứ hai không được bù.
+
+        Thả càng trái xong, kiện bên PHẢI vẫn đang treo ở độ cao dôi. Bản đầu xoá
+        _du_cao chung nên lần thả thứ hai hạ THIẾU 0.5s và kiện không rời càng — đo
+        trên robot 03/08, CẢ HAI lần thả đều báo "Cảm biến vẫn thấy pallet".
+        """
+        lift = self._lift()
+        with patch.object(config, "LIFT_INSERT_EXTRA", 0.20):
+            lift.raise_to_insert(1)
+            lift.lift_off()
+            du = lift._du_cao("right")
+            lift.dropoff_left()                     # thả bên TRÁI trước
+            self.assertEqual(lift._du_cao("left"), 0.0, "bên trái phải được xoá")
+            self.assertAlmostEqual(lift._du_cao("right"), du, places=3,
+                                   msg="bên phải bị xoá oan → thả lần 2 hạ thiếu")
+            lift.dropoff_right()
+        moc = lift._move_duration("right", 1, 0, raising=False)
+        self.assertAlmostEqual(lift._lower_right.call_args[0][0], moc + du, places=3)
 
     def test_surplus_is_cleared_once_on_the_floor(self):
         """Không xoá thì lần thả sau cộng dồn và càng đâm xuống sàn."""
@@ -2161,7 +2181,7 @@ class TestDuCaoNgoaiThangTang(unittest.TestCase):
             lift.raise_to_insert(1)
             lift.lift_off()
             lift.dropoff_right()
-        self.assertEqual(lift._du_cao, 0.0)
+        self.assertEqual(lift._du_cao("right"), 0.0)
 
 
 class TestNangThemKhiLuonCang(unittest.TestCase):

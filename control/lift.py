@@ -162,7 +162,30 @@ class Lift:
     # Nhưng lúc HẠ VỀ SÀN thì phải trả lại đúng bấy nhiêu, không thì càng dừng lơ
     # lửng và KIỆN KHÔNG RỜI CÀNG (IR báo "vẫn thấy pallet", drop_side trả ❌).
     # Đo trên robot 03/08: 0.20 + 0.30 = 0.50s dôi ra, thừa sức giữ kiện trên càng.
-    _du_cao: float = 0.0
+    # ⚠️ RIÊNG TỪNG CÀNG. Thả càng trái thì phần dôi của TRÁI được tiêu thụ, nhưng
+    # kiện bên PHẢI vẫn đang treo ở độ cao dôi — xoá chung là lần thả thứ hai không
+    # được bù và kiện đó không rời càng. Đo trên robot 03/08: cả hai lần thả đều báo
+    # "Cảm biến vẫn thấy pallet".
+    _du_cao_ben: dict[str, float] | None = None
+
+    def _du_cao(self, side: str) -> float:
+        """Phần càng `side` đang cao HƠN mốc tầng, tính bằng giây chạy motor."""
+        if self._du_cao_ben is None:
+            self._du_cao_ben = {"left": 0.0, "right": 0.0}
+        return self._du_cao_ben.get(side, 0.0)
+
+    def _cong_du_cao(self, secs: float) -> None:
+        """Cộng cho CẢ HAI càng — hai bước sinh ra nó (nâng chuẩn bị luồn, nhấc
+        bổng) đều chạy đồng thời hai bên."""
+        if self._du_cao_ben is None:
+            self._du_cao_ben = {"left": 0.0, "right": 0.0}
+        for b in ("left", "right"):
+            self._du_cao_ben[b] += secs
+
+    def _xoa_du_cao(self, side: str) -> None:
+        if self._du_cao_ben is None:
+            self._du_cao_ben = {"left": 0.0, "right": 0.0}
+        self._du_cao_ben[side] = 0.0
 
     def _level_time(self, level: int, side: str, raising: bool) -> float:
         """Thời gian để càng `side` đi từ SÀN lên `level` (mốc TUYỆT ĐỐI, đã bù).
@@ -296,7 +319,7 @@ class Lift:
             # đó, nhưng càng đang cao hơn mốc tầng `them` giây — và lúc HẠ XUỐNG
             # SÀN phải trả lại đúng bấy nhiêu, không thì càng dừng lơ lửng và kiện
             # KHÔNG RỜI CÀNG. Xem Lift._du_cao.
-            self._du_cao += them
+            self._cong_du_cao(them)
 
     def lift_off(self) -> None:
         """Nhấc thêm một đoạn ngắn để pallet RỜI mặt kệ, sau khi càng đã luồn vào.
@@ -308,7 +331,7 @@ class Lift:
         secs = config.LIFT_PICKUP_RAISE_TIME
         if secs <= 0:
             return
-        self._du_cao += secs
+        self._cong_du_cao(secs)
         logger.info("Nhấc bổng pallet khỏi mặt kệ (%.2fs)", secs)
         self._left_en.on(); self._left_up.on(); self._left_down.off()
         self._right_up.on(); self._right_down.off()
@@ -372,9 +395,10 @@ class Lift:
     def dropoff(self) -> bool:
         """Hạ CẢ 2 pallet xuống (đồng bộ)."""
         logger.info("Đặt hàng — cả 2 càng")
-        self._move_both(self._current_level, 0, them=self._du_cao)
+        self._move_both(self._current_level, 0, them=max(self._du_cao("left"),
+                                                        self._du_cao("right")))
         self._current_level = 0
-        self._du_cao = 0.0          # đã chạm sàn, không còn phần dôi
+        self._xoa_du_cao("left"); self._xoa_du_cao("right")
         time.sleep(0.3)
         return self._verify_released()
 
@@ -389,9 +413,9 @@ class Lift:
         # thì càng dừng lơ lửng trên sàn đúng bấy nhiêu và KIỆN KHÔNG RỜI CÀNG —
         # IR báo "vẫn thấy pallet", drop_side trả ❌. Xem Lift._du_cao.
         duration = (self._move_duration("left", self._current_level, 0, raising=False)
-                    + self._du_cao)
+                    + self._du_cao("left"))
         self._lower_left(duration)
-        self._du_cao = 0.0          # đã chạm sàn, không còn phần dôi
+        self._xoa_du_cao("left")   # bên này đã chạm sàn; bên kia GIỮ NGUYÊN
         time.sleep(0.2)
         return self._verify_released("left")
 
@@ -402,9 +426,9 @@ class Lift:
         # thì càng dừng lơ lửng trên sàn đúng bấy nhiêu và KIỆN KHÔNG RỜI CÀNG —
         # IR báo "vẫn thấy pallet", drop_side trả ❌. Xem Lift._du_cao.
         duration = (self._move_duration("right", self._current_level, 0, raising=False)
-                    + self._du_cao)
+                    + self._du_cao("right"))
         self._lower_right(duration)
-        self._du_cao = 0.0          # đã chạm sàn, không còn phần dôi
+        self._xoa_du_cao("right")   # bên này đã chạm sàn; bên kia GIỮ NGUYÊN
         time.sleep(0.2)
         return self._verify_released("right")
 
@@ -489,7 +513,7 @@ class Lift:
         time.sleep(duration)
         self._stop_all()
         self._current_level = 0
-        self._du_cao = 0.0          # ép chạm đáy → không còn phần dôi nào
+        self._xoa_du_cao("left"); self._xoa_du_cao("right")   # ép chạm đáy
         logger.info("Home xong — đã khai báo lại vị trí = SÀN")
 
     def reset(self):
