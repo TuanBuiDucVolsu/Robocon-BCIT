@@ -683,6 +683,64 @@ class TestDetectSide(unittest.TestCase):
         self.assertFalse(self.robot._side_detected)
 
 
+class TestSoGiaoTheoNhaMay(unittest.TestCase):
+    """Robot nhớ mỗi nhà máy đã nhận mấy kiện — nền cho việc tránh kiện đã thả.
+
+    12 kiện chia 4 nhà máy = MỖI NHÀ MÁY 3 KIỆN. Khu nhà máy sâu 25cm, kiện sâu
+    9cm → 3 kiện nối đuôi là 27cm, KHÔNG LỌT. Kiện thứ 2 và 3 phải tránh kiện đã
+    nằm sẵn, mà muốn tránh thì trước hết phải BIẾT có bao nhiêu kiện ở đó.
+    """
+
+    def _robot(self):
+        from unittest.mock import MagicMock
+        import main
+        r = object.__new__(main.Robot)
+        r._retreat_from_shelf = MagicMock()
+        return r
+
+    def test_counts_per_factory_not_just_a_total(self):
+        r = self._robot()
+        r._ghi_nhan_giao("samsung")
+        r._ghi_nhan_giao("hana_micron")
+        r._ghi_nhan_giao("samsung")
+        self.assertEqual(r._so_kien_da_giao("samsung"), 2)
+        self.assertEqual(r._so_kien_da_giao("hana_micron"), 1)
+        self.assertEqual(r._so_kien_da_giao("amkor"), 0)
+
+    def test_drop_both_counts_two(self):
+        r = self._robot()
+        r._ghi_nhan_giao("amkor", 2)
+        self.assertEqual(r._so_kien_da_giao("amkor"), 2)
+
+    def test_ledger_is_lazily_created(self):
+        """Test và dry_run dựng Robot bằng object.__new__ — không được nổ."""
+        r = self._robot()
+        self.assertEqual(r._so_kien_da_giao("foxconn"), 0)
+
+    def test_backoff_is_OFF_by_default(self):
+        """Chưa đo tools.check_sees_dropped_package thì KHÔNG được tự lùi."""
+        self.assertEqual(config.FACTORY_STACK_BACKOFF_CM, 0.0)
+        r = self._robot()
+        r._ghi_nhan_giao("samsung")
+        r._lui_tranh_kien_cu("samsung")
+        r._retreat_from_shelf.assert_not_called()
+
+    def test_backoff_scales_with_how_many_are_already_there(self):
+        from unittest.mock import patch
+        r = self._robot()
+        with patch.object(config, "FACTORY_STACK_BACKOFF_CM", 9.0):
+            r._lui_tranh_kien_cu("samsung")          # chưa có kiện nào
+            r._retreat_from_shelf.assert_not_called()
+            r._ghi_nhan_giao("samsung")
+            r._lui_tranh_kien_cu("samsung")          # đã có 1 kiện → lùi 9cm
+            self.assertAlmostEqual(
+                r._retreat_from_shelf.call_args.kwargs["quang_cm"], 9.0)
+            r._ghi_nhan_giao("samsung")
+            r._lui_tranh_kien_cu("samsung")          # đã có 2 kiện → lùi 18cm
+            self.assertAlmostEqual(
+                r._retreat_from_shelf.call_args.kwargs["quang_cm"], 18.0)
+
+
 class TestKiemDaToiKeTruocKhiBoc(unittest.TestCase):
     """⚠️ Trước khi bốc phải KIỂM đã tới kệ thật chưa — chặng về là chặng dễ lệch nhất.
 

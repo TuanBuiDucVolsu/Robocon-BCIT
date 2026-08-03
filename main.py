@@ -107,6 +107,10 @@ class Robot:
 
         # 2 kiện đang mang trên càng
         self.carried_labels: list[str | None] = [None, None]
+        # Đã giao mấy kiện cho TỪNG nhà máy. Mỗi nhà máy nhận 3 kiện trong trận,
+        # nên kiện thứ 2 và 3 phải tránh kiện đã nằm sẵn ở đó.
+        # Xem config.FACTORY_STACK_BACKOFF_CM.
+        self.da_giao_theo_nha_may: dict[str, int] = {}
         # Thứ tự giao: [label_giao_trước, label_giao_sau] (tối ưu theo khoảng cách)
         self.delivery_queue: list[str] = []
         # Label cuối cùng đã giao thực tế (dùng để chọn route quay về)
@@ -719,6 +723,42 @@ class Robot:
         logger.error("Label %s không khớp càng %s", label, self.carried_labels)
         return None
 
+    def _so_kien_da_giao(self, label: str) -> int:
+        """Nhà máy `label` đã nhận mấy kiện. Tự khởi tạo sổ nếu chưa có.
+
+        Khởi tạo lười vì test và tools/dry_run dựng Robot bằng object.__new__()
+        (không chạy __init__) — bắt chúng nhớ đặt tay từng thuộc tính mới là sớm
+        muộn sót một cái rồi nổ AttributeError giữa trận.
+        """
+        if getattr(self, "da_giao_theo_nha_may", None) is None:
+            self.da_giao_theo_nha_may = {}
+        return self.da_giao_theo_nha_may.get(label, 0)
+
+    def _ghi_nhan_giao(self, label: str, so_kien: int = 1) -> None:
+        """Ghi nhớ nhà máy `label` vừa nhận thêm `so_kien` kiện."""
+        truoc = self._so_kien_da_giao(label)
+        self.da_giao_theo_nha_may[label] = truoc + so_kien
+        logger.info("Nhà máy %s: đã nhận %d kiện (tổng đã giao: %s)",
+                    label.upper(), truoc + so_kien,
+                    ", ".join(f"{k}={v}" for k, v in
+                              sorted(self.da_giao_theo_nha_may.items())))
+
+    def _lui_tranh_kien_cu(self, label: str) -> None:
+        """Lùi bớt trước khi thả, để kiện mới không chồng lên kiện đã có.
+
+        TẮT khi FACTORY_STACK_BACKOFF_CM = 0 (mặc định) — xem chú thích ở config:
+        chưa ai chạy tools.check_sees_dropped_package nên chưa biết siêu âm có tự
+        thấy kiện cũ hay không.
+        """
+        bu = getattr(config, "FACTORY_STACK_BACKOFF_CM", 0.0)
+        da_co = self._so_kien_da_giao(label)
+        if bu <= 0 or da_co <= 0:
+            return
+        lui = bu * da_co
+        logger.info("Nhà máy %s đã có %d kiện — lùi thêm %.1fcm trước khi thả để "
+                    "không chồng lên chúng", label.upper(), da_co, lui)
+        self._retreat_from_shelf(f"tránh kiện cũ ở {label}", quang_cm=lui)
+
     def _da_tha_xong(self, side: str | None = None) -> None:
         """Xoá nhãn kiện ĐÃ RỜI CÀNG, rồi đồng bộ lại cờ cõng hàng.
 
@@ -786,10 +826,12 @@ class Robot:
                      label, "cả 2 càng" if same_factory else self._get_drop_side(label))
 
         approach_ok = self._approach_for_drop(f"DROP_FIRST {label}")
+        self._lui_tranh_kien_cu(label)
         trusted = self._delivery_is_trustworthy(approach_ok, f"DROP_FIRST {label}")
 
         if same_factory:
             if drop_both(self.lift):
+                self._ghi_nhan_giao(label, 2)
                 if trusted:
                     self.packages_delivered += 2
             else:
@@ -800,6 +842,7 @@ class Robot:
             if side is None:
                 logger.error("DROP_FIRST — bỏ qua drop, không xác định được càng")
             elif self._drop_single_side(side):
+                self._ghi_nhan_giao(label)
                 if trusted:
                     self.packages_delivered += 1
             else:
@@ -867,6 +910,7 @@ class Robot:
             logger.error("DROP_SECOND — bỏ qua drop, không xác định được càng")
         else:
             approach_ok = self._approach_for_drop(f"DROP_SECOND {label}")
+            self._lui_tranh_kien_cu(label)
             trusted = self._delivery_is_trustworthy(approach_ok, f"DROP_SECOND {label}")
 
             # Chuỗi thả ở control/handling.py — gập càng chạy LUÔN, kể cả khi IR
@@ -876,6 +920,8 @@ class Robot:
                 lui=lambda: self._retreat_from_shelf(f"sau khi thả {label}",
                                         quang_cm=config.RETREAT_AFTER_DROP_CM))
             self._da_tha_xong(side)
+            if dropped:
+                self._ghi_nhan_giao(label)
             if dropped and trusted:
                 self.packages_delivered += 1
             else:

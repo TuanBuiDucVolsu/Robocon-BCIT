@@ -835,6 +835,25 @@ RETREAT_BACKOUT_MARGIN = 1.15
 # 9cm, nên 10cm là vừa, và vẫn còn cách giao lộ một đoạn để lệnh LÙI làm việc.
 RETREAT_AFTER_DROP_CM = 10.0
 
+# --- XẾP CHỒNG KIỆN Ở NHÀ MÁY -------------------------------------------------
+# 12 kiện chia 4 nhà máy = MỖI NHÀ MÁY 3 KIỆN. Kiện thứ 2 và thứ 3 phải tránh
+# kiện đã thả trước, nếu không robot đâm vào chúng hoặc thả chồng lên.
+# Khu nhà máy sâu 25cm, kiện sâu 9cm → 3 kiện nối đuôi = 27cm, KHÔNG LỌT. Nhưng
+# hai càng cách nhau 12cm nên kiện nằm được ở HAI CỘT trái/phải → 2 cột × 2 hàng
+# đủ chỗ cho 3 kiện. Càng nào thả thì do nhãn quyết định, không chọn được.
+#
+# Cơ chế: sau khi advance báo đã vào khu nhà máy, LÙI thêm
+#     FACTORY_STACK_BACKOFF_CM × (số kiện nhà máy đó ĐÃ nhận)
+# rồi mới thả — kiện sau nằm nông hơn kiện trước.
+#
+# ⚠️ ĐỂ 0 = TẮT, giữ nguyên hành vi hiện tại. Bật lên khi đã ĐO:
+#     python3 -m tools.check_sees_dropped_package
+# Bài đo đó (A/B: có kiện / bỏ kiện ra) trả lời câu quyết định — siêu âm có THẤY
+# kiện đã thả không. Thấy thì robot tự dừng trước nó và không cần lùi; không thấy
+# thì bắt buộc phải đếm và lùi như trên. CHƯA AI CHẠY bài đó.
+# Nếu bật: 9.0 là bề sâu một kiện; đo lại trên sa bàn rồi chỉnh.
+FACTORY_STACK_BACKOFF_CM = 0.0
+
 # Quãng LÙI tối thiểu trước khi tin một tín hiệu giao lộ (đo bằng encoder).
 # Vì sao không lọc bằng HÌNH DẠNG tín hiệu: đo trên robot 03/08 cho thấy chữ ký
 # GIẢ ở chân kệ và chữ ký THẬT ở giao lộ có cùng một dạng —
