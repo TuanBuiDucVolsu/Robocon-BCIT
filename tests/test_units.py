@@ -2085,6 +2085,11 @@ class TestBackMinTravelCm(unittest.TestCase):
         with self.assertLogs("control.motion", level="INFO") as nk:
             self.assertFalse(m.back_to_intersection(1, timeout=0.6))
         self.assertIn("mới lùi", "\n".join(nk.output))
+        self.assertGreater(m.backward.call_count, 1,
+                           "⚠️ HỒI QUY: follow_line() tự stop() khi thấy giao lộ. Bác "
+                           "tín hiệu mà không ra lệnh chạy lại thì vòng sau nó lại "
+                           "thấy, lại phanh — robot đứng im vĩnh viễn. Đo trên robot "
+                           "03/08: kẹt ở 4.7cm suốt 8 giây rồi timeout.")
 
     def test_intersection_after_enough_travel_is_accepted(self):
         can = int(config.BACK_MIN_TRAVEL_CM * config.ENCODER_PULSES_PER_CM) + 10

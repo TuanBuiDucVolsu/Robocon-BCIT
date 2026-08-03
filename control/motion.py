@@ -1639,15 +1639,8 @@ class Motion:
                                 "line thường lần nào, robot có thể còn trên mảng đen "
                                 "của điểm cuối. Cảm biến %s", time.time() - start, values)
                     at_intersection = False
-                # ĐÒI BẰNG CHỨNG LIỀN NHAU, y như bước căn giữa của
-                # exit_start_zone(). Đo trên robot 03/08, chính chặng lùi này:
-                #     cảm biến [0,1,1,0,1,1]  ADC [504, 0, 106, 454, 0, 0]
-                # Bốn mắt "đen" nhưng ĐỨT QUÃNG — mắt 4 sáng kẹp giữa hai cụm.
-                # Vạch line là dải LIỀN nên đó là hình in / mảng đen chân kệ, không
-                # phải giao lộ. Robot dừng ở đó, còn cách C0R0 khá xa và vẫn gần kệ,
-                # rồi tiến bù 12cm VỀ PHÍA KỆ và xoay → chạm kệ.
-                # Ngưỡng thích nghi lúc đó tụt còn 151 nên 504/454 mới thành "sáng"
-                # và 106 thành "đen"; ngưỡng đen ĐẬM tuyệt đối không bị kéo theo.
+                    # Cùng lý do như hai nhánh dưới: follow_line() vừa phanh.
+                    self.backward(base_speed)
                 lui_cm = (lui_xung_gl / config.ENCODER_PULSES_PER_CM
                           if do_duoc_quang else None)
                 # ĐẾM MẮT ĐEN ĐẬM (ngưỡng tuyệt đối), KHÔNG đòi liền nhau.
@@ -1672,6 +1665,12 @@ class Motion:
                             time.time() - start, dam, config.INTERSECTION_THRESHOLD,
                             [int(round(v * 1023)) for v in raw_gl])
                         at_intersection = False
+                        # ⚠️ PHẢI RA LỆNH CHẠY LẠI. follow_line() tự gọi stop() khi
+                        # nó thấy giao lộ (đúng như _forward_guided đã phải né).
+                        # Bác tín hiệu mà không lái tiếp thì vòng sau follow_line
+                        # lại thấy, lại phanh — robot đứng im vĩnh viễn. Đo trên
+                        # robot 03/08: kẹt ở 4.7cm suốt 8 giây rồi timeout.
+                        self.backward(base_speed)
 
                 if at_intersection and lui_cm is not None \
                         and lui_cm < config.BACK_MIN_TRAVEL_CM:
@@ -1681,6 +1680,8 @@ class Motion:
                         "lộ thì cách một đoạn. Cảm biến %s",
                         time.time() - start, lui_cm, config.BACK_MIN_TRAVEL_CM, values)
                     at_intersection = False
+                    # Cùng lý do như trên: follow_line() vừa phanh, phải chạy lại.
+                    self.backward(base_speed)
 
                 if at_intersection:
                     reached = True
