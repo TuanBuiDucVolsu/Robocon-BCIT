@@ -146,7 +146,7 @@ LIFT_HOME_DURATION = 3.7   # min_home_duration() = LIFT_TIME_SHELF_2 + LOWER_EXT
 # 0→1→2, và càng lẻ dùng chung hệ số với khi chạy cả 2 càng.
 LIFT_LEFT_EXTRA = -0.050          # Càng TRÁI khi nâng
 LIFT_RIGHT_EXTRA = 0.000         # Càng PHẢI khi nâng
-LIFT_LEFT_LOWER_EXTRA = 0.100     # Càng TRÁI khi hạ (tăng nếu bên đó khó hạ)
+LIFT_LEFT_LOWER_EXTRA = 0.150     # Càng TRÁI khi hạ — ĐÃ ĐO trên robot 03/08
 LIFT_RIGHT_LOWER_EXTRA = 0.150      # Càng PHẢI khi hạ — ĐÃ ĐO trên robot 02/08
 
 # Home RÚT GỌN khi đã biết chắc đang ở tầng nào (Lift.home_from). Hạ từ tầng 1 chỉ
