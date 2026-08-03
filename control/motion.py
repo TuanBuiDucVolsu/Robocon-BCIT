@@ -1121,6 +1121,17 @@ class Motion:
         else:
             self._steer(raw, speed)
 
+    def _doc_xung(self) -> int:
+        """Tổng xung encoder 2 bánh kể từ lần gọi trước (đọc xong là RESET).
+
+        Không cần biết bao nhiêu xung/cm — chỉ cần biết bánh CÓ QUAY không. Dùng
+        làm chặn kẹt khi luồn càng, thay cho siêu âm (xem config.INSERT_STALL_TIME).
+        """
+        t = getattr(self, "_encoder_left", None)
+        p = getattr(self, "_encoder_right", None)
+        return ((t.read_and_reset() if t is not None else 0)
+                + (p.read_and_reset() if p is not None else 0))
+
     def creep_until(self, check, speed: float = config.INSERT_SPEED,
                     timeout: float = config.INSERT_TIMEOUT,
                     min_distance: float = config.INSERT_MIN_DISTANCE) -> bool:
@@ -1137,9 +1148,18 @@ class Motion:
 
         Trả False khi hết `timeout` hoặc chạm `min_distance` mà `check` vẫn False.
         """
-        logger.info("Luồn càng: tiến %d%% tối đa %.1fs (chặn ở %.1fcm)",
-                    speed, timeout, min_distance)
+        co_encoder = (getattr(getattr(self, "_encoder_left", None), "available", False)
+                      and getattr(getattr(self, "_encoder_right", None), "available", False))
+        logger.info("Luồn càng: tiến %d%% tối đa %.1fs (chặn kẹt bằng %s)",
+                    speed, timeout,
+                    "ENCODER" if co_encoder else "TIMEOUT — encoder không khả dụng!")
+        if not co_encoder:
+            logger.warning("Luồn càng: KHÔNG có encoder — mất chặn cứng chống tì kệ. "
+                           "Chỉ còn timeout %.1fs giữ.", timeout)
         start = time.time()
+        self._doc_xung()          # xả bộ đếm, không tính xung của chặng trước
+        xung_cua_so = 0
+        moc_cua_so = start
         try:
             if check():
                 logger.info("Luồn càng: đã đạt điều kiện ngay từ đầu")
@@ -1152,31 +1172,44 @@ class Motion:
             if self._aborted():
                 return False
 
-            # Chặn cứng: dù IR chưa báo cũng KHÔNG được tiến sát hơn mức này, không
-            # thì robot đẩy đổ cả giá kệ khi càng luồn trượt ra ngoài pallet.
-            dist = self.get_distance()
-            if 0 <= dist <= min_distance:
-                self.stop()
-                logger.error("Luồn càng: đã tới %.1fcm (chặn %.1fcm) mà IR chưa báo "
-                             "— DỪNG. Nhiều khả năng càng trượt ra ngoài khe pallet.",
-                             dist, min_distance)
-                return False
+            # ⛔ CHẶN CỨNG BẰNG ENCODER, không phải siêu âm.
+            # Lý do + số đo: config.INSERT_STALL_TIME. Tóm tắt: đặt robot cách kệ
+            # ĐÚNG 12cm (thước), siêu âm báo 35.7cm — mặt trước giá kệ HỞ nên chùm
+            # sóng lọt qua. Chặn cứng dựa vào nó vừa không bắt được lúc cần, vừa
+            # bắn nhầm khi có gai nhiễu ngắn. Encoder không cần calibrate cm: càng
+            # chạm kệ là bánh kẹt, xung im ngay.
+            xung_cua_so += self._doc_xung()
+            if time.time() - moc_cua_so >= config.INSERT_STALL_TIME:
+                if (time.time() - start >= config.INSERT_STALL_GRACE
+                        and co_encoder and xung_cua_so < config.INSERT_STALL_PULSES):
+                    self.stop()
+                    logger.error(
+                        "Luồn càng: BÁNH KHÔNG QUAY (%d xung trong %.1fs) mà IR chưa "
+                        "báo — DỪNG. Càng đang tì vào kệ, hoặc trượt ra ngoài khe "
+                        "pallet. Đi được %.2fs trước khi kẹt.",
+                        xung_cua_so, config.INSERT_STALL_TIME, time.time() - start)
+                    return False
+                xung_cua_so = 0
+                moc_cua_so = time.time()
 
             self._forward_guided(speed)
             time.sleep(0.02)
 
+            # CHỈ bọc try quanh check() — đó là thứ duy nhất có thể lỗi đọc
+            # (SPI/ADC). Bọc cả stop_gently() thì một lỗi PHANH sẽ bị báo nhầm
+            # thành "lỗi đọc IR" và người sửa đi tìm sai chỗ.
             try:
-                if check():
-                    # Càng ĐANG NẰM TRONG khe pallet — phanh gấp ở đây là giật cả
-                    # pallet, có thể làm nó tụt khỏi càng trước khi kịp nhấc.
-                    self.stop_gently(speed)
-                    logger.info("Luồn càng: điều kiện đạt sau %.2fs",
-                                time.time() - start)
-                    return True
+                xong = check()
             except Exception as e:
                 self.stop()
                 logger.error("Luồn càng: lỗi đọc điều kiện dừng (%s) — dừng", e)
                 return False
+            if xong:
+                # Càng ĐANG NẰM TRONG khe pallet — phanh gấp ở đây là giật cả
+                # pallet, có thể làm nó tụt khỏi càng trước khi kịp nhấc.
+                self.stop_gently(speed)
+                logger.info("Luồn càng: điều kiện đạt sau %.2fs", time.time() - start)
+                return True
 
         self.stop()
         con = self.get_distance()

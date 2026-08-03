@@ -585,8 +585,11 @@ class Robot:
             logger.warning("Sắp hết giờ! Dừng lại.")
             return State.DONE
 
-        if not self._approach_shelf("PICKUP_PAIR"):
-            return self._retry_or_skip_tier("approach")
+        # KHÔNG tiếp cận thêm nữa. advance_to_end() đã dừng robot ở ~20cm bằng số
+        # đo mà siêu âm CÒN đọc được; dưới mức đó nó không nhìn thấy kệ (đo 03/08:
+        # thước 12cm, cảm biến 35.7cm — mặt trước giá kệ hở, sóng lọt qua). Đoạn
+        # còn lại do IR trên mặt càng dẫn trong creep_until, đúng cảm biến cho việc
+        # đó. Bỏ luôn một bước là bớt một chỗ hỏng và bớt ~2-3 giây mỗi lượt.
 
         label_left, label_right = None, None
         for attempt in range(1, config.MAX_PAIR_SCAN_ATTEMPTS + 1):

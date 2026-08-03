@@ -839,6 +839,71 @@ class TestFollowLineReverse(unittest.TestCase):
         self.assertTrue(at_intersection, "lùi vẫn phải nhận ra giao lộ")
 
 
+class _EncoderGia:
+    def __init__(self, xung: int, available: bool = True):
+        self.xung = xung
+        self.available = available
+
+    def read_and_reset(self) -> int:
+        return self.xung
+
+
+class TestCreepStallGuard(unittest.TestCase):
+    """Chặn cứng khi luồn càng phải dùng ENCODER, không phải siêu âm.
+
+    ⚠️ Đo trên robot 03/08: đặt robot cách kệ ĐÚNG 12cm (bằng thước), siêu âm báo
+    35.7cm với σ = 3.24cm và 10.7% mẫu lệch > 2cm. Mặt trước giá kệ in 3D HỞ nên
+    chùm sóng lọt qua và dội về từ vật cách ~36cm phía sau. Cùng cảm biến đó ở chỗ
+    trống đọc σ = 0.20cm trên 997 mẫu — nó KHÔNG hỏng, nó chỉ không thấy cái kệ.
+    Chặn cứng dựa vào số đo đó vừa không bắt được lúc cần, vừa bắn nhầm khi gặp
+    gai nhiễu ngắn (đã thấy 4.6cm giả). Encoder không cần calibrate cm: càng tì
+    vào kệ là bánh kẹt, xung im ngay.
+    """
+
+    def _motion(self, xung: int, co_encoder: bool = True, check=None):
+        m = object.__new__(Motion)
+        m._aborted = lambda: False
+        m.stop = MagicMock()
+        m.stop_gently = MagicMock()
+        m._forward_guided = MagicMock()
+        m.get_distance = lambda: 100.0
+        m._encoder_left = _EncoderGia(xung, co_encoder)
+        m._encoder_right = _EncoderGia(xung, co_encoder)
+        return m
+
+    def test_wheels_not_turning_stops_instead_of_pushing_into_the_shelf(self):
+        m = self._motion(xung=0)
+        with self.assertLogs("control.motion", level="ERROR") as nk:
+            self.assertFalse(m.creep_until(lambda: False, timeout=3.0))
+        self.assertIn("BÁNH KHÔNG QUAY", "\n".join(nk.output))
+        m.stop.assert_called()
+
+    def test_healthy_pulses_do_not_trip_the_guard(self):
+        """Bánh quay bình thường thì phải bò tiếp tới khi IR báo."""
+        m = self._motion(xung=50)
+        moc = time.time()
+        # IR báo sau khi đã qua cửa sổ xét kẹt — chứng minh guard không cắt ngang.
+        ok = m.creep_until(
+            lambda: time.time() - moc > config.INSERT_STALL_TIME + 0.2, timeout=3.0)
+        self.assertTrue(ok, "guard đã cắt oan dù bánh vẫn quay")
+
+    def test_grace_window_covers_motor_spin_up(self):
+        """Nhịp đầu bánh chưa quay là bình thường — không được bắt kẹt ngay."""
+        m = self._motion(xung=0)
+        moc = time.time()
+        m.creep_until(lambda: False, timeout=3.0)
+        self.assertGreaterEqual(time.time() - moc, config.INSERT_STALL_GRACE,
+                                "bắt kẹt trước khi motor kịp khởi động")
+
+    def test_missing_encoder_does_not_false_trip(self):
+        """Không có encoder thì KHÔNG được coi là kẹt — chỉ còn timeout giữ."""
+        m = self._motion(xung=0, co_encoder=False)
+        t0 = time.time()
+        self.assertFalse(m.creep_until(lambda: False, timeout=1.0))
+        self.assertGreaterEqual(time.time() - t0, 0.9,
+                                "phải chạy hết timeout, không cắt sớm vì tưởng kẹt")
+
+
 class TestApproachShelf(unittest.TestCase):
     """Dừng trước kệ phải lệch về phía SỚM, và phải THỰC SỰ chạy được.
 

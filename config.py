@@ -304,7 +304,24 @@ INSERT_SPEED = 40            # % — bò khi luồn càng, đủ trên vùng ch�
 # Nâng 4.0 → 6.0. Điểm dừng của approach TẢN từ 9.8 đến 14.6cm (đo 02/08) nên quãng
 # phải bò cũng tản theo. Thà thừa thời gian còn hơn timeout oan ở lần dừng xa —
 # chặn cứng INSERT_MIN_DISTANCE mới là cơ chế chống húc kệ, không phải timeout.
-INSERT_TIMEOUT = 6.0         # Giây, IR không báo thì dừng
+INSERT_TIMEOUT = 8.0         # Giây, IR không báo thì dừng. NÂNG 6.0 → 8.0 vì bỏ
+                             # bước tiếp cận: càng phải bò từ ~20cm thay vì ~9cm.
+                             # Chặn cứng thật giờ là ENCODER (xem INSERT_STALL_*),
+                             # không phải timeout này.
+
+# --- CHẶN KẸT BẰNG ENCODER khi luồn càng ---------------------------------
+# INSERT_MIN_DISTANCE dựa vào siêu âm, và ĐO NGÀY 03/08 CHO THẤY NÓ VÔ DỤNG ở đây:
+# đặt robot cách kệ ĐÚNG 12cm (đo bằng thước), cảm biến báo 35.7cm với σ = 3.24cm.
+# Giá kệ in 3D có mặt trước HỞ nên chùm siêu âm lọt qua và dội về từ vật cách ~36cm
+# phía sau. Nó chỉ THỈNH THOẢNG quét trúng cạnh khung — nên lúc đúng lúc sai, đúng
+# kiểu "lúc dừng đúng, lúc chui vào gầm kệ" đuổi suốt hai ngày.
+# Cùng cảm biến đó ngoài chỗ trống đọc σ = 0.20cm trên 997 mẫu, nên KHÔNG phải nó hỏng.
+#
+# Encoder thì không cần calibrate cm cho việc này — chỉ cần biết bánh CÓ QUAY không.
+# Càng chạm kệ là bánh kẹt, xung im ngay. Đó là chặn cứng đúng bản chất hơn hẳn.
+INSERT_STALL_TIME = 0.5      # Giây cửa sổ xét kẹt
+INSERT_STALL_PULSES = 3      # Tổng xung 2 bánh trong cửa sổ, dưới mức này = KẸT
+INSERT_STALL_GRACE = 0.5     # Giây đầu bỏ qua — motor còn đang khởi động
 
 # ============================================================
 # TIẾP CẬN — 2 pha nhanh/chậm tới VỊ TRÍ CHỜ ①

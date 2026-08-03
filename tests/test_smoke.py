@@ -130,7 +130,7 @@ def smoke_exit_and_navigate(m: Motion, **_):
 
 def smoke_pickup_cycle(m: Motion, lift: Lift, vision: Vision, tier: int = 1,
                        doc_lap: bool = True, **_):
-    print(f"\n[SMOKE 2] Pickup tầng {tier} (approach → classify_pair → nâng → lùi)")
+    print(f"\n[SMOKE 2] Pickup tầng {tier} (classify_pair → nâng → luồn → lùi)")
     if doc_lap:
         _pause(f"Đặt robot trước kệ có 2 kiện ở tầng {tier}, càng đang ở sàn")
     else:
@@ -139,9 +139,8 @@ def smoke_pickup_cycle(m: Motion, lift: Lift, vision: Vision, tier: int = 1,
         _pause(f"Robot đã TỰ tới trước kệ. Kiểm: có thẳng hàng với kệ không, "
                f"có 2 kiện ở tầng {tier} không")
 
-    if not m.approach_shelf():
-        print("  ❌ approach_shelf THẤT BẠI (timeout hoặc không thấy mục tiêu)")
-        return False, None
+    # KHÔNG tiếp cận thêm — xem chú thích ở main._handle_pickup_pair.
+    print("  (bỏ bước tiếp cận: advance đã dừng ở ~20cm, IR trên càng dẫn nốt)")
 
     print("  ✅ approach_shelf OK")
 
