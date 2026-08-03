@@ -479,6 +479,23 @@ INTERSECTION_THRESHOLD = 4   # Số mắt (/6) thấy line cùng lúc để nh�
 # 0.15 × 1023 ≈ ADC 153: dưới mức đó là mặt in đen thật, không phải mép vạch.
 LINE_STRICT_BLACK = 0.15
 
+# ĐEN SÂU — phải có ÍT NHẤT MỘT mắt đọc dưới mức này thì mới là VẠCH LINE THẬT.
+# Vạch line in đen tuyền nên mắt nằm trên nó đọc ~0. Mảng IN trên sa bàn (vòng
+# tròn ROBOCON, tấm ảnh nhà máy, hình mascot) thì xam xám — tối nhất cũng chỉ ~53.
+# Số đo trên robot 03/08, tất cả đều là "≥4 mắt đen đậm" nên bộ lọc cũ cho qua hết:
+#
+#   GIAO LỘ THẬT   ADC [917, 914,   0,   0,   0,   0]   tối nhất   0
+#                  ADC [265, 246,   0,   0,   0,   0]   tối nhất   0
+#                  ADC [396, 420,  74,   0,   0,   0]   tối nhất   0
+#   MẢNG IN        ADC [120, 154,  69, 142, 111, 127]   tối nhất  69  ← vòng tròn ROBOCON
+#                  ADC [141, 119,  53, 148, 101, 131]   tối nhất  53  ← tấm in nhà máy
+#                  ADC [ 56, 139,  73, 197, 171, 208]   tối nhất  56
+#
+# Đây là dấu hiệu tách được hai loại, khác với ĐỘ SÁNG (đã thử và loại: ngã tư
+# thật cho cả 6 mắt đọc 0 nên "phải có mắt sáng" là sai).
+# 0.04 × 1023 ≈ ADC 41 — nằm giữa 0 và 53, cách xa cả hai phía.
+LINE_DEEP_BLACK = 0.04
+
 # Đo lại khi ĐỨNG YÊN mà GẦN hơn mục tiêu quá mức này → approach_shelf THẤT BẠI,
 # không trả True nữa. Đứng gần hơn mục tiêu nhiều nghĩa là có gì đó ở TRƯỚC đã sai
 # (pose lệch một giao lộ, route đi lố), và bước kế tiếp — luồn càng — sẽ tiến MÙ

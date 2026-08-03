@@ -2204,6 +2204,42 @@ class TestExecuteRouteGoiThatChuoiHam(unittest.TestCase):
         self.assertTrue(m.execute_route([("left",), ("right",)]))
 
 
+class TestMangInKhongPhaiGiaoLo(unittest.TestCase):
+    """⚠️ MẢNG IN trên sa bàn không được đếm thành giao lộ — quét cả 8 ca đã đo.
+
+    Đo trên robot 03/08. TẤT CẢ đều có ≥4 mắt "đen đậm" nên bộ lọc cũ cho qua hết;
+    thứ tách được là MẮT TỐI NHẤT. Vạch line in đen tuyền nên luôn có mắt đọc ~0,
+    còn mảng in xam xám thì tối nhất cũng chỉ ~53.
+    Hậu quả khi không tách được: robot đếm vòng tròn ROBOCON thành giao lộ, rẽ phải
+    ở C0R2 thay vì C0R4, rồi thả hàng ngay giữa logo ROBOCON (có ảnh).
+    """
+
+    CA = [
+        ("giao lộ C0R0",      (917, 914,   0,   0,   0,   0), True),
+        ("giao lộ",           (265, 246,   0,   0,   0,   0), True),
+        ("giao lộ",           (396, 420,  74,   0,   0,   0), True),
+        ("ngã tư đủ 6 mắt",   (  0,   0,   0,   0,   0,   0), True),
+        ("vòng tròn ROBOCON", (120, 154,  69, 142, 111, 127), False),
+        ("tấm in nhà máy",    (141, 119,  53, 148, 101, 131), False),
+        ("tấm in nhà máy",    ( 56, 139,  73, 197, 171, 208), False),
+        ("vạch line thường",  (834, 270,   0,   0,   0, 930), False),
+    ]
+
+    def test_all_measured_cases_are_classified_correctly(self):
+        for ten, adc, mong_doi in self.CA:
+            raw = [v / 1023 for v in adc]
+            self.assertEqual(LineSensor.la_giao_lo_that(raw), mong_doi,
+                             f"{ten}: ADC {list(adc)}, tối nhất {min(adc)}")
+
+    def test_deep_black_threshold_sits_between_the_two_groups(self):
+        """Ngưỡng phải nằm GIỮA hai nhóm, không sát mép — để còn dư địa."""
+        that = [min(a) for _, a, ok in self.CA if ok]
+        in_hinh = [min(a) for _, a, ok in self.CA if not ok and min(a) > 0]
+        nguong = config.LINE_DEEP_BLACK * 1023
+        self.assertLess(max(that), nguong, "giao lộ thật phải nằm DƯỚI ngưỡng")
+        self.assertGreater(min(in_hinh), nguong, "mảng in phải nằm TRÊN ngưỡng")
+
+
 class TestDemGiaoLoDoiDenDam(unittest.TestCase):
     """⚠️ Đếm giao lộ phải đòi mắt ĐEN ĐẬM — đếm thừa là GIAO NHẦM NHÀ MÁY.
 
@@ -2944,14 +2980,20 @@ class TestContinuousIntersections(unittest.TestCase):
         self.m.abort_check = None
 
     def _feed(self, pattern):
-        """pattern: list số mắt thấy line cho từng nhịp đọc."""
+        """pattern: list số mắt thấy line cho từng nhịp đọc.
+
+        Mắt trên line trả 0.0, KHÔNG phải một giá trị xam xám. Vạch line in đen
+        tuyền nên mắt nằm trên nó đọc ~0 — đo trên robot thấy đúng vậy ở mọi giao
+        lộ thật. Giá trị giả xam xám (trước đây dùng LINE_THRESHOLD × 0.5 ≈ ADC 100)
+        chính là chữ ký của MẢNG IN, thứ mà la_giao_lo_that() phải bác. Xem
+        config.LINE_DEEP_BLACK.
+        """
         n = config.LINE_SENSOR_COUNT
-        thr = config.LINE_THRESHOLD / 1023.0
         seq = iter(pattern)
 
         def fake_raw():
             active = next(seq, 0)
-            return [thr * 0.5] * active + [1.0] * (n - active)
+            return [0.0] * active + [1.0] * (n - active)
         self.m.read_line_sensor_raw = fake_raw
 
     def test_counts_each_mark_once_with_hysteresis(self):

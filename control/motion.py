@@ -155,6 +155,24 @@ class LineSensor:
                 dai = 0
         return tot
 
+    @staticmethod
+    def la_giao_lo_that(raw: list[float]) -> bool:
+        """Có phải GIAO LỘ THẬT không — hay chỉ là một mảng IN trên sa bàn.
+
+        Hai điều kiện, và cả hai đều cần:
+          1. đủ INTERSECTION_THRESHOLD mắt đen ĐẬM  (loại vạch thường bị ngưỡng
+             thích nghi thổi lên)
+          2. có ÍT NHẤT MỘT mắt ĐEN SÂU             (loại mảng in xam xám)
+
+        Điều kiện 2 là thứ phân biệt được vòng tròn ROBOCON / tấm in nhà máy với
+        giao lộ: vạch line in đen tuyền nên luôn có mắt đọc ~0, còn mảng in thì tối
+        nhất cũng chỉ ~53. Số đo đầy đủ ở config.LINE_DEEP_BLACK.
+        """
+        if not raw:
+            return False
+        return (LineSensor.dem_den_dam(raw) >= config.INTERSECTION_THRESHOLD
+                and min(raw) <= config.LINE_DEEP_BLACK)
+
     def read(self) -> list[int]:
         """Đọc digital (0/1) sau ngưỡng — tương thích API cũ."""
         return self.digital_from_raw(self.read_raw())
@@ -957,7 +975,8 @@ class Motion:
                         [int(round(v * 1023)) for v in raw_gl])
                     return True
 
-                if dam_gl < config.ADVANCE_INTERSECTION_DAM:
+                if (dam_gl < config.ADVANCE_INTERSECTION_DAM
+                        or min(raw_gl) > config.LINE_DEEP_BLACK):
                     logger.info(
                         "Advance: bỏ qua tín hiệu giao lộ ở %.2fs — chỉ %d/%d mắt đen "
                         "ĐẬM, ADC %s. Vạch thường bị ngưỡng thích nghi thổi lên.",
@@ -1752,7 +1771,7 @@ class Motion:
                 if at_intersection:
                     raw_gl = self.read_line_sensor_raw()
                     dam = LineSensor.dem_den_dam(raw_gl)
-                    if dam < config.INTERSECTION_THRESHOLD:
+                    if not LineSensor.la_giao_lo_that(raw_gl):
                         logger.info(
                             "Lùi: bỏ qua tín hiệu giao lộ ở %.2fs — chỉ %d/%d mắt đen "
                             "ĐẬM, ADC %s. Vạch thường bị ngưỡng thích nghi thổi lên, "
@@ -1877,13 +1896,14 @@ class Motion:
                 # rồi kiện sau lệch tiếp sang samsung. IR vẫn xác nhận đã thả,
                 # packages_delivered vẫn cộng — MẤT SẠCH ĐIỂM MÀ KHÔNG BÁO LỖI.
                 raw_gl = self.read_line_sensor_raw()
-                dam = LineSensor.dem_den_dam(raw_gl)
-                if dam >= config.INTERSECTION_THRESHOLD:
+                if LineSensor.la_giao_lo_that(raw_gl):
                     return True
                 logger.info(
-                    "Bỏ qua tín hiệu giao lộ ở %.2fs — chỉ %d/%d mắt đen ĐẬM, ADC %s. "
-                    "Vạch thường bị ngưỡng thích nghi thổi lên, KHÔNG đếm.",
-                    time.time() - start, dam, config.INTERSECTION_THRESHOLD,
+                    "Bỏ qua tín hiệu giao lộ ở %.2fs — %d/%d mắt đen ĐẬM, tối nhất "
+                    "%d (cần ≤%d). ADC %s. Vạch thường hoặc MẢNG IN, KHÔNG đếm.",
+                    time.time() - start, LineSensor.dem_den_dam(raw_gl),
+                    config.INTERSECTION_THRESHOLD, int(round(min(raw_gl) * 1023)),
+                    int(round(config.LINE_DEEP_BLACK * 1023)),
                     [int(round(v * 1023)) for v in raw_gl])
                 # follow_line() vừa gọi stop() khi thấy giao lộ — phải ra lệnh chạy
                 # lại, không thì vòng sau nó lại thấy, lại phanh, robot đứng im.
@@ -2068,7 +2088,7 @@ class Motion:
             # sớm một hàng rồi giao nhầm nhà máy. Chế độ này đang TẮT
             # (CONTINUOUS_INTERSECTIONS) nhưng bật lên là dính y hệt.
             if (active >= config.INTERSECTION_THRESHOLD
-                    and LineSensor.dem_den_dam(raw) >= config.INTERSECTION_THRESHOLD):
+                    and LineSensor.la_giao_lo_that(raw)):
                 if not on_mark:
                     on_mark = True
                     seen += 1
