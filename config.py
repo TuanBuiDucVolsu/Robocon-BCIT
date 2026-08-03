@@ -918,7 +918,14 @@ TURN_TIME = 0.90             # 0.5 (số của motor CŨ) chỉ quay được 45
 # Cần ĐÚNG MỘT số đo nữa: WHEEL_TRACK_CM = khoảng cách giữa hai ĐIỂM TIẾP ĐẤT của
 # 2 bánh dẫn động (đo bằng thước, tâm bánh tới tâm bánh). Để 0 = TẮT, dùng
 # TURN_TIME như cũ. Đo xong đặt số vào đây rồi xác nhận bằng test_motion option 10.
-WHEEL_TRACK_CM = 0.0
+WHEEL_TRACK_CM = 20.0        # ĐO BẰNG THƯỚC trên robot 03/08 (tâm bánh → tâm bánh)
+# ⚠️ CÁCH CHỈNH KHI XOAY CHƯA ĐÚNG 90°: số này vào công thức như một HỆ SỐ TỈ LỆ
+# thuần (xung cần = 2 × π × vệt/4 × xung_mỗi_cm), nên nhân thẳng theo góc đo được:
+#       vệt mới = vệt cũ × 90 / góc_thực_tế
+# Xoay được 80° → 20.0 × 90/80 = 22.5. Xoay quá thành 100° → 20.0 × 0.9 = 18.0.
+# Dự kiến phải NÂNG so với số thước: công thức giả định bánh lăn KHÔNG TRƯỢT, mà
+# xoay tại chỗ thì hai bánh cạ ngang mặt sàn và 2 bánh caster còn ghì lại — robot
+# quay được ÍT hơn phần bánh đã lăn. Số thước là điểm khởi đầu, không phải đích.
                              # → nhân đôi, trừ hao phần tăng tốc đầu mỗi lượt xoay
                              # (kéo dài gấp đôi cho HƠN gấp đôi góc).
                              # ⚠️ Mới xác nhận xoay TRÁI đạt 90° (test_motion op.10);
