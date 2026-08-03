@@ -1232,7 +1232,7 @@ class TestExitStartZone(unittest.TestCase):
         """
         m = self._motion([1, 1, 1, 0, 0, 0])
         m.follow_line = MagicMock(return_value=(True, [1, 1, 0, 0, 1, 0]))
-        m.read_line_sensor_raw = lambda: [v / 1023 for v in (224, 232, 0, 0, 263, 826)]
+        m.read_line_sensor_raw = lambda: [v / 1023 for v in (21, 515, 0, 0, 5, 917)]
         with patch.object(config, "EXIT_START_BLIND_TIME", 0.0):
             with patch.object(config, "EXIT_START_ALIGN_TIME", 0.1):
                 self.assertTrue(m.exit_start_zone(timeout=3.0))
@@ -1388,6 +1388,42 @@ class TestAdvanceToEnd(unittest.TestCase):
         self.assertEqual(ghi.count("BỎ QUA GAI NHIỄU"), config.ULTRASONIC_MAX_GLITCH)
         self.assertIn("CHẶN CỨNG", ghi)
 
+    def test_self_corrects_when_the_C0R0_flag_was_wrong_by_one_intersection(self):
+        """Cờ bật nhầm → gặp giao lộ → TỰ SỬA và đi tiếp, không dừng hẳn.
+
+        ⚠️ HỒI QUY (option 8, 03/08): cờ bật nhầm vì hình in mascot cho 4 mắt đen
+        ĐỨT QUÃNG. Route bỏ mất lệnh forward, advance gặp ngay C0R0 thật và báo
+        "Bản đồ hoặc vị trí không khớp" — robot dừng hẳn giữa đường.
+        Cờ đó dựa trên MỘT lần đọc giữa lúc robot còn xiên nên không thể chắc 100%;
+        nhưng gặp giao lộ TRONG LÚC cờ đang bật thì suy ra được ngay là niềm tin
+        sai đúng một giao lộ.
+        """
+        m = self._motion([[0, 0, 1, 1, 0, 0]] * 400)
+        m.tren_giao_lo_dau = True
+        m._escape_intersection = MagicMock(return_value=True)
+        lan = {"n": 0}
+
+        def fl(speed):
+            lan["n"] += 1
+            return (lan["n"] == 1, [0, 0, 1, 1, 1, 1])
+
+        m.follow_line = fl
+        m.get_distance = lambda *a, **k: 19.0
+        with self.assertLogs("control.motion", level="WARNING") as nk:
+            self.assertTrue(m.advance_to_end(timeout=3.0),
+                            "cờ sai một giao lộ thì phải tự sửa, không dừng hẳn")
+        self.assertIn("Tự sửa", "\n".join(nk.output))
+        self.assertFalse(m.tren_giao_lo_dau, "cờ phải bị tiêu thụ")
+
+    def test_meeting_an_intersection_without_the_flag_is_still_a_failure(self):
+        """Không có cờ thì gặp giao lộ vẫn là LỖI — không được nới lỏng kiểm tra."""
+        m = self._motion([[0, 0, 1, 1, 0, 0]] * 400)
+        m.tren_giao_lo_dau = False
+        m.follow_line = lambda speed: (True, [0, 0, 1, 1, 1, 1])
+        m.read_line_sensor_adc = lambda: [917, 914, 0, 0, 0, 0]
+        m.get_distance = lambda *a, **k: 100.0
+        self.assertFalse(m.advance_to_end(timeout=3.0))
+
     def test_lost_echo_after_seeing_target_stops_instead_of_ramming(self):
         """Thấy mục tiêu rồi số đo nhảy KỊCH TRẦN = mất tiếng vọng, không phải "xa ra".
 
@@ -1444,6 +1480,24 @@ class TestNgUongDenDam(unittest.TestCase):
     def test_real_C0R0_signature_counts_as_strong_evidence(self):
         raw = [v / 1023 for v in (921, 921, 0, 0, 0, 0)]
         self.assertGreaterEqual(LineSensor.dem_den_dam(raw),
+                                config.INTERSECTION_THRESHOLD)
+
+    def test_mascot_print_has_enough_black_eyes_but_they_are_NOT_CONTIGUOUS(self):
+        """⚠️ HỒI QUY: đếm TỔNG số mắt đen là chưa đủ.
+
+        Đo trên robot 03/08, hai lần đọc cùng cho 4 mắt đen đậm — bộ lọc chỉ đếm
+        tổng cho cả hai lọt qua, robot chốt nhầm pose = C0R0 khi còn cách ~20cm,
+        route bỏ mất lệnh forward, advance đâm ngay vào C0R0 thật và dừng hẳn.
+        """
+        in_hinh = [v / 1023 for v in (21, 515, 0, 0, 5, 917)]
+        that = [v / 1023 for v in (917, 914, 0, 0, 0, 0)]
+        self.assertEqual(LineSensor.dem_den_dam(in_hinh),
+                         LineSensor.dem_den_dam(that),
+                         "tiền đề: đếm TỔNG không phân biệt được hai cái")
+        self.assertLess(LineSensor.day_den_dam_dai_nhat(in_hinh),
+                        config.INTERSECTION_THRESHOLD,
+                        "mắt sáng kẹp giữa = hình in, vạch line là dải LIỀN")
+        self.assertGreaterEqual(LineSensor.day_den_dam_dai_nhat(that),
                                 config.INTERSECTION_THRESHOLD)
 
     def test_alignment_false_positive_does_not(self):

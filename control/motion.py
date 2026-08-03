@@ -118,6 +118,31 @@ class LineSensor:
             return 0
         return sum(1 for v in raw if v <= config.LINE_STRICT_BLACK)
 
+    @staticmethod
+    def day_den_dam_dai_nhat(raw: list[float]) -> int:
+        """Dãy mắt đen ĐẬM LIỀN NHAU dài nhất.
+
+        Đếm tổng số mắt đen thôi thì chưa đủ. Đo trên robot 03/08, hai lần đọc cùng
+        cho 4 mắt đen đậm nhưng chỉ một cái là giao lộ:
+
+            hình in mascot   ADC [ 21, 515,   0,   0,   5, 917]   đen ở 1,_,3,4,5,_
+            giao lộ C0R0     ADC [917, 914,   0,   0,   0,   0]   đen ở _,_,3,4,5,6
+
+        Vạch line là một DẢI LIỀN, không thể có mắt sáng kẹp giữa hai mắt đen. Đứt
+        quãng giữa thanh cảm biến là hình in, không phải vạch. Bộ lọc chỉ đếm tổng
+        đã cho cái trên lọt qua và robot chốt nhầm pose = C0R0 khi còn cách ~20cm.
+        """
+        if not raw:
+            return 0
+        dai = tot = 0
+        for v in raw:
+            if v <= config.LINE_STRICT_BLACK:
+                dai += 1
+                tot = max(tot, dai)
+            else:
+                dai = 0
+        return tot
+
     def read(self) -> list[int]:
         """Đọc digital (0/1) sau ngưỡng — tương thích API cũ."""
         return self.digital_from_raw(self.read_raw())
@@ -448,12 +473,12 @@ class Motion:
                 # giao lộ ở đây rất hay là mép mờ của chính vạch R0.
                 # Số đo phân biệt hai ca: config.LINE_STRICT_BLACK.
                 raw_gl = self.read_line_sensor_raw()
-                dam = LineSensor.dem_den_dam(raw_gl)
+                dam = LineSensor.day_den_dam_dai_nhat(raw_gl)
                 if dam < config.INTERSECTION_THRESHOLD:
                     logger.info(
-                        "Căn line: tín hiệu giao lộ NHẠT (%d/%d mắt đen đậm, ADC %s) "
-                        "— nhiều khả năng là mép vạch khi robot còn xiên, KHÔNG phải "
-                        "C0R0. Bỏ qua, căn tiếp.",
+                        "Căn line: tín hiệu giao lộ KHÔNG ĐỦ CHẮC (dãy đen đậm LIỀN "
+                        "NHAU dài nhất %d/%d, ADC %s) — mép vạch khi robot còn xiên "
+                        "hoặc hình in mascot, KHÔNG phải C0R0. Bỏ qua, căn tiếp.",
                         dam, config.INTERSECTION_THRESHOLD,
                         [int(round(v * 1023)) for v in raw_gl])
                     time.sleep(0.01)
@@ -462,7 +487,7 @@ class Motion:
                 # giao lộ robot đang đứng lên (navigate_intersections mở đầu bằng
                 # _escape_intersection). Lý do đầy đủ: navigation.pose_sau_xuat_phat.
                 self.tren_giao_lo_dau = True
-                logger.info("Chạm giao lộ khi căn line (%d/%d mắt đen ĐẬM) — robot "
+                logger.info("Chạm giao lộ khi căn line (dãy %d/%d mắt đen ĐẬM LIỀN NHAU) — robot "
                             "ĐANG ĐỨNG TRÊN C0R0. Caller lấy pose bằng "
                             "navigation.pose_sau_xuat_phat(motion.tren_giao_lo_dau).",
                             dam, config.INTERSECTION_THRESHOLD)
@@ -790,6 +815,25 @@ class Motion:
 
             at_intersection, values = self.follow_line(base_speed)
             if at_intersection:
+                # TỰ SỬA khi niềm tin "đang đứng trên C0R0" sai đúng một giao lộ.
+                # Cờ đó do bước căn giữa của exit_start_zone() đặt, dựa trên MỘT
+                # lần đọc cảm biến giữa lúc robot còn xiên — không có cách nào chắc
+                # 100%. Nhưng nếu cờ đang bật mà advance lại GẶP một giao lộ, thì
+                # suy ra được ngay: cái vừa gặp MỚI là C0R0, robot khi đó còn chưa
+                # tới nơi. Đo trên robot 03/08: cờ bật nhầm vì hình in mascot cho 4
+                # mắt đen (nhưng ĐỨT QUÃNG), robot dừng hẳn ở C0R0 thật.
+                # Chỉ tự sửa MỘT lần — cờ bị tiêu thụ, lần sau vẫn báo lỗi như cũ.
+                if getattr(self, "tren_giao_lo_dau", False):
+                    self.tren_giao_lo_dau = False
+                    logger.warning(
+                        "Advance: gặp giao lộ sau %.2fs, nhưng cờ 'đang đứng trên "
+                        "C0R0' ĐANG BẬT — niềm tin đó sai đúng một giao lộ, cái vừa "
+                        "gặp MỚI là C0R0. Tự sửa: thoát nó rồi đi tiếp. Cảm biến %s",
+                        time.time() - start, values)
+                    acquired = True
+                    lost_since = None
+                    self._escape_intersection(base_speed)
+                    continue
                 self.stop()
                 logger.warning("Advance: gặp giao lộ sau %.2fs — cảm biến %s, ADC %s. "
                                "Bản đồ hoặc vị trí không khớp",
