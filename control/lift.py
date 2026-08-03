@@ -168,7 +168,14 @@ class Lift:
         if base <= 0:
             return 0.0
         if raising:
-            extra = config.LIFT_LEFT_EXTRA if side == "left" else config.LIFT_RIGHT_EXTRA
+            # Bù riêng theo TỪNG TẦNG nếu có khai báo — độ lệch 2 càng không tỉ lệ
+            # với độ cao (dây curoa mỗi bên căng khác nhau, trượt tăng theo quãng
+            # chạy). Xem config.LIFT_LEFT_EXTRA_BY_LEVEL.
+            theo_tang = (getattr(config, "LIFT_LEFT_EXTRA_BY_LEVEL", None)
+                         if side == "left"
+                         else getattr(config, "LIFT_RIGHT_EXTRA_BY_LEVEL", None))
+            chung = config.LIFT_LEFT_EXTRA if side == "left" else config.LIFT_RIGHT_EXTRA
+            extra = (theo_tang or {}).get(level, chung)
         else:
             extra = (config.LIFT_LEFT_LOWER_EXTRA if side == "left"
                      else config.LIFT_RIGHT_LOWER_EXTRA)

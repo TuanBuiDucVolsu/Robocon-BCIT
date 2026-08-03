@@ -146,6 +146,17 @@ LIFT_HOME_DURATION = 4.1   # min_home_duration() = LIFT_TIME_SHELF_2 + LOWER_EXT
 # 0→1→2, và càng lẻ dùng chung hệ số với khi chạy cả 2 càng.
 LIFT_LEFT_EXTRA = 0.000          # Càng TRÁI khi nâng
 LIFT_RIGHT_EXTRA = 0.050         # Càng PHẢI khi nâng
+
+# Bù RIÊNG THEO TỪNG TẦNG khi nâng — GHI ĐÈ hai hằng số trên cho tầng có mặt ở đây.
+# Vì sao cần: LIFT_*_EXTRA áp cho MỌI tầng, nhưng độ lệch 2 càng KHÔNG tỉ lệ với độ
+# cao. Đo trên robot 03/08: tầng 1 hai càng khớp, tầng 2 CÀNG PHẢI NÂNG THIẾU nên
+# luồn vào không tới khe pallet — lùi ra chỉ càng trái bốc được kiện.
+# Dây curoa mỗi bên căng khác nhau, và độ trượt tăng theo quãng chạy, nên sai lệch
+# ở tầng 2 (3.9s) lớn hơn hẳn tầng 1 (0.8s). Một hằng số cho cả hai tầng không tả
+# được chuyện đó.
+# Để {} là dùng hằng số chung như cũ. Chốt bằng test_lift option e, CHỌN TỪNG TẦNG.
+LIFT_LEFT_EXTRA_BY_LEVEL: dict[int, float] = {}
+LIFT_RIGHT_EXTRA_BY_LEVEL: dict[int, float] = {}
 LIFT_LEFT_LOWER_EXTRA = 0.150     # Càng TRÁI khi hạ — ĐÃ ĐO trên robot 03/08
 LIFT_RIGHT_LOWER_EXTRA = 0.150      # Càng PHẢI khi hạ — ĐÃ ĐO trên robot 02/08
 

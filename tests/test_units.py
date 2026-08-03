@@ -2053,6 +2053,46 @@ class TestThuTuThaVaNangCang(unittest.TestCase):
         self.assertIn("xúc nó lên lại", "\n".join(nk.output))
 
 
+class TestBuLechTheoTang(unittest.TestCase):
+    """Bù lệch 2 càng phải khai báo được RIÊNG cho từng tầng.
+
+    ⚠️ Đo trên robot 03/08: tầng 1 hai càng khớp, tầng 2 CÀNG PHẢI NÂNG THIẾU nên
+    luồn vào không tới khe pallet — lùi ra chỉ càng trái bốc được kiện. Một hằng số
+    LIFT_*_EXTRA cho MỌI tầng không tả được chuyện đó: dây curoa mỗi bên căng khác
+    nhau và độ trượt tăng theo quãng chạy, nên sai lệch ở tầng 2 (3.9s) lớn hơn hẳn
+    tầng 1 (0.8s).
+    """
+
+    def _lift(self):
+        return object.__new__(Lift)
+
+    def test_per_level_override_beats_the_shared_constant(self):
+        lift = self._lift()
+        with patch.object(config, "LIFT_RIGHT_EXTRA", 0.050):
+            with patch.object(config, "LIFT_RIGHT_EXTRA_BY_LEVEL", {2: 0.300}):
+                t1 = lift._level_time(1, "right", raising=True)
+                t2 = lift._level_time(2, "right", raising=True)
+        self.assertAlmostEqual(t1, config.LIFT_TIME_SHELF_1 + 0.050, places=3,
+                               msg="tầng KHÔNG khai báo phải dùng hằng số chung")
+        self.assertAlmostEqual(t2, config.LIFT_TIME_SHELF_2 + 0.300, places=3,
+                               msg="tầng có khai báo phải dùng số riêng")
+
+    def test_empty_dict_keeps_the_old_behaviour(self):
+        lift = self._lift()
+        with patch.object(config, "LIFT_LEFT_EXTRA", -0.040):
+            with patch.object(config, "LIFT_LEFT_EXTRA_BY_LEVEL", {}):
+                t = lift._level_time(2, "left", raising=True)
+        self.assertAlmostEqual(t, config.LIFT_TIME_SHELF_2 - 0.040, places=3)
+
+    def test_lowering_is_untouched(self):
+        """Bù khi HẠ vẫn dùng hằng số riêng của nó — đừng đụng vào."""
+        lift = self._lift()
+        with patch.object(config, "LIFT_RIGHT_EXTRA_BY_LEVEL", {2: 9.9}):
+            t = lift._level_time(2, "right", raising=False)
+        self.assertAlmostEqual(t, config.LIFT_TIME_SHELF_2
+                               + config.LIFT_RIGHT_LOWER_EXTRA, places=3)
+
+
 class TestPoseSauXuatPhat(unittest.TestCase):
     """Căn giữa chạy tới C0R0 thì pose PHẢI là C0R0, không phải START.
 
