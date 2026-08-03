@@ -82,7 +82,19 @@ Chỉ vẽ line THẬT SỰ có trên bản in (đã đo bằng quét pixel — 
   đặt trong ô 400x400mm. `EXIT_START_BLIND_TIME = 1.5` chỉ là **chặn trên**, dùng
   khi robot đặt ở chỗ không có hình in nào dưới cảm biến — an toàn tới 34cm/s.
   **cm/s thật CHƯA ĐO trên robot.**
-- Sau đó `navigation.plan(START_POSE, "SHELF0")` = tiến 1 giao lộ + advance → Kệ 3
+- ⚠️ **Bước căn giữa CÓ THỂ chạy tới tận C0R0** — tuỳ robot đặt lệch bao nhiêu trong
+  ô 400x400mm, nên nó LÚC CHẠM LÚC KHÔNG. Khi chạm, robot **đang đứng trên C0R0**,
+  và route "tiến 1 giao lộ" sẽ **đi lố**: `navigate_intersections()` mở đầu mỗi chặng
+  bằng `_escape_intersection()` nên KHÔNG đếm được giao lộ đang đứng lên. Nó rời
+  C0R0, chạy tiếp 35cm và bắt **mảng đen chân kệ** làm giao lộ (cảm biến
+  `[1,1,1,1,1,1]` — C0R0 là ngã ba, chỉ cho 4/6). `advance` khởi hành khi đã cách kệ
+  3.3cm, log ghi "✅ tới Kệ 3", rồi bước luồn càng **húc thẳng vào kệ**.
+  → Lấy pose bằng **`navigation.pose_sau_xuat_phat(motion.tren_giao_lo_dau)`**, đừng
+  dùng thẳng `START_POSE`. Đứng trên C0R0 thì route tới Kệ 3 chỉ còn `[("advance",)]`.
+  Tính bất định của bước căn giữa chính là **"lúc dừng đúng, lúc lao vào kệ"** — mất
+  hai ngày đuổi nhầm sang cảm biến siêu âm, trong khi số siêu âm luôn ĐÚNG.
+- Sau đó `navigation.plan(pose, "SHELF0")`: từ START = tiến 1 giao lộ + advance;
+  từ C0R0 = chỉ advance
 - Thứ tự lấy kệ: Kệ 3 (R0, gần nhất) → Kệ 2 (R2) → Kệ 1 (R4)
 - 4 nhà máy xếp DỌC cạnh phải: Samsung(R4) → Hana(R3) → Amkor(R1) → Foxconn(R0)
 - Nhà máy liên hợp: giữa sân (R2), chung 2 đội
