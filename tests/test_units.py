@@ -2156,6 +2156,54 @@ class TestBuLechTheoTang(unittest.TestCase):
                                + config.LIFT_RIGHT_LOWER_EXTRA, places=3)
 
 
+class TestExecuteRouteGoiThatChuoiHam(unittest.TestCase):
+    """execute_route gọi ĐƯỢC chuỗi hàm thật — bắt lỗi sai chữ ký / sai tên hàm.
+
+    ⚠️ HỒI QUY: hai lần trong cùng một buổi, tôi thêm tham số cho hàm được gọi mà
+    quên sửa CHỮ KÝ của chính nó, và CẢ 4 BỘ TEST VẪN XANH — vì mọi bài đều mock
+    navigate_intersections / follow_line_until_intersection thay vì gọi thật. Lỗi
+    chỉ nổ trên robot, giữa lượt chạy:
+        TypeError: navigate_intersections() got an unexpected keyword argument
+    Cùng loại với lift._stop_motors() không tồn tại. Bài này gọi XUYÊN chuỗi thật,
+    chỉ giả lập ở tầng CẢM BIẾN và MOTOR.
+    """
+
+    def _motion(self, frames):
+        m = object.__new__(Motion)
+        m._aborted = lambda: False
+        m._last_error = 0.0
+        for ten in ("forward", "backward", "stop", "stop_gently", "turn_left",
+                    "turn_right", "_forward_guided", "_drive_straight"):
+            setattr(m, ten, MagicMock())
+        m._escape_intersection = MagicMock(return_value=True)
+        m._recover_line = MagicMock(return_value=False)
+        m.last_route_progress = []
+        m.tren_giao_lo_dau = False
+        m.dang_cong_hang = False
+        seq = list(frames)
+        m.read_line_sensor_raw = lambda: (seq.pop(0) if len(seq) > 1 else seq[0])
+        m.read_line_sensor_adc = lambda: [int(round(v * 1023))
+                                          for v in m.read_line_sensor_raw()]
+        m.follow_line = lambda speed, reverse=False: (
+            sum(LineSensor.digital_from_raw(m.read_line_sensor_raw()))
+            >= config.INTERSECTION_THRESHOLD,
+            LineSensor.digital_from_raw(m.read_line_sensor_raw()))
+        m._encoder_left = _EncoderGia(400)
+        m._encoder_right = _EncoderGia(0)
+        m.get_distance = lambda *a, **k: 100.0
+        return m
+
+    def test_forward_step_runs_through_the_real_call_chain(self):
+        giao_lo = [v / 1023 for v in (917, 914, 0, 0, 0, 0)]
+        m = self._motion([giao_lo])
+        self.assertTrue(m.execute_route([("forward", 1)]))
+
+    def test_turn_steps_run_too(self):
+        vach = [v / 1023 for v in (900, 900, 0, 0, 900, 900)]
+        m = self._motion([vach])
+        self.assertTrue(m.execute_route([("left",), ("right",)]))
+
+
 class TestDemGiaoLoDoiDenDam(unittest.TestCase):
     """⚠️ Đếm giao lộ phải đòi mắt ĐEN ĐẬM — đếm thừa là GIAO NHẦM NHÀ MÁY.
 

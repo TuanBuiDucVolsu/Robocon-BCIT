@@ -1994,7 +1994,8 @@ class Motion:
 
     def navigate_intersections(self, count: int,
                                base_speed: float = config.SPEED_DEFAULT,
-                               on_reached=None) -> bool:
+                               on_reached=None,
+                               roi_diem_cuoi: bool = False) -> bool:
         """Bám line qua `count` giao lộ.
 
         on_reached: gọi sau MỖI giao lộ đếm được — caller dùng để ghi tiến độ mà
