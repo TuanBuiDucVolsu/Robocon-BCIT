@@ -1708,6 +1708,29 @@ class TestAdvanceToEnd(unittest.TestCase):
                           and max(raw) <= config.ADVANCE_FACTORY_MAX_BRIGHT)
             self.assertEqual(la_nha_may, mong_doi, f"{ten}: ADC {adc}")
 
+    def test_foxconn_zone_right_next_to_the_junction_is_still_recognised(self):
+        """⚠️ HỒI QUY: ô FOXCONN nằm SÁT giao lộ — mốc quãng đường không được chặn nó.
+
+        Đo trên robot 03/08: advance chạm tấm in Foxconn khi mới đi ~8cm (Samsung và
+        Hana thì xa hơn). Với ADVANCE_FACTORY_DARK_MIN_CM = 10 thì tín hiệu "đã tới"
+        bị chặn, rơi xuống nhánh kiểm giao lộ và báo "bản đồ không khớp" — robot
+        dừng ĐÚNG CHỖ ĐẸP trên ô mà vẫn bị coi là thất bại.
+        """
+        m = self._motion([[1] * 6] * 400)
+        m.dang_cong_hang = True
+        m.read_line_sensor_raw = lambda: [v / 1023 for v in (559, 149, 0, 0, 0, 0)]
+        m.follow_line = lambda speed: (True, [0, 1, 1, 1, 1, 1])
+        m.get_distance = lambda *a, **k: 100.0
+        # ~5cm: qua khỏi vạch giao lộ (20mm) nhưng còn xa dưới mốc cũ 10cm.
+        xung = int(5.0 * config.ENCODER_PULSES_PER_CM)
+        m._encoder_left = _EncoderGia(xung)
+        m._encoder_right = _EncoderGia(0)
+        with self.assertLogs("control.motion", level="INFO") as nk:
+            self.assertTrue(m.advance_to_end(timeout=3.0))
+        ghi = "\n".join(nk.output)
+        self.assertIn("ĐÃ VÀO KHU NHÀ MÁY", ghi)
+        self.assertNotIn("Bản đồ hoặc vị trí không khớp", ghi)
+
     def test_dark_patch_too_early_is_still_not_the_factory(self):
         """Chưa đi đủ xa thì mảng tối là giao lộ vừa thoát, không phải nhà máy."""
         m = self._motion([[1] * 6] * 400)

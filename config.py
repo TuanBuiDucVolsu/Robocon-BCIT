@@ -646,7 +646,21 @@ ADVANCE_INTERSECTION_DAM = 5
 # đang cõng hàng, mảng tối đậm chính là điểm dừng.
 # Đòi thêm quãng đường tối thiểu để mảng đen của CHÍNH giao lộ vừa thoát không bị
 # tính nhầm (cửa sổ ân hạn lo phần đầu, số này lo phần sau).
-ADVANCE_FACTORY_DARK_MIN_CM = 10.0
+ADVANCE_FACTORY_DARK_MIN_CM = 4.0
+# ⚠️ 10.0 → 4.0 ngày 03/08. Ô FOXCONN nằm SÁT NGAY giao lộ (không như Samsung/Hana
+# ở xa hơn), nên advance chạm tấm in khi mới đi ~8cm. Với mốc 10 thì tín hiệu "đã
+# tới" bị chặn, rơi xuống nhánh kiểm giao lộ và báo "bản đồ không khớp" — robot
+# dừng đúng chỗ đẹp trên ô mà vẫn coi là thất bại. Số đo lúc đó:
+#     0.78s  ADC [756, 332, 0, 0, 0, 0]   4 mắt đen, sáng nhất 756
+#     0.82s  ADC [559, 149, 0, 0, 0, 0]   5 mắt đen, sáng nhất 559
+# Cả hai đều THOẢ tiêu chí tấm in, chỉ thiếu quãng đường.
+#
+# KHÔNG hạ được về 0. Điều kiện "cả vùng đều tối" KHÔNG phân biệt được tấm in với
+# một GIAO LỘ ĐỦ 6 MẮT — ở giao lộ mọi mắt đọc 0 nên mắt sáng nhất cũng bằng 0,
+# thoả luôn ngưỡng độ sáng. Quãng đường mới là thứ tách hai ca đó.
+# 4.0 an toàn vì _escape_intersection() chạy TRƯỚC vòng lặp advance và đã đưa robot
+# ra khỏi vạch giao lộ (rộng 20mm) — log xác nhận "Rời giao lộ sau 0.42s, cảm biến
+# [0,0,0,0,0,0]" tức đã trắng hẳn trước khi advance bắt đầu đếm.
 # Số mắt đen ĐẬM tối thiểu để coi là đã vào khu nhà máy. THẤP hơn
 # ADVANCE_INTERSECTION_DAM: tấm in Hana chỉ cho 4 mắt (ADC [0, 0, 15, 123, 509, 446])
 # nên đòi 5 là bỏ sót, robot đi quá khỏi ô nhà máy — đo trên robot 03/08.
