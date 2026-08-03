@@ -135,11 +135,11 @@ PWM_COMPENSATION_LEFT_REV = 0.952  # Bù bánh TRÁI khi lùi
 # CƠ CẤU NÂNG (giây)
 # ============================================================
 LIFT_TIME_FLOOR = 0.0
-LIFT_TIME_SHELF_1 = 0.650
-LIFT_TIME_SHELF_2 = 3.85  # ĐO trên robot 03/08
+LIFT_TIME_SHELF_1 = 0.660
+LIFT_TIME_SHELF_2 = 4.20  # ĐO trên robot 03/08
 
 # Không có limit switch — home_to_floor() hạ liên tục bấy nhiêu giây để ép chạm đáy.
-LIFT_HOME_DURATION = 4.2   # min_home_duration() = LIFT_TIME_SHELF_2 + LOWER_EXTRA lớn
+LIFT_HOME_DURATION = 4.6   # min_home_duration() = LIFT_TIME_SHELF_2 + LOWER_EXTRA lớn
 
 # Bù lệch 2 càng theo VỊ TRÍ TUYỆT ĐỐI: thời gian từ SÀN lên tầng n = LIFT_TIME_SHELF_n
 # + bù. Thời gian mỗi lần chạy = hiệu 2 mốc (Lift._level_time) → không cộng dồn khi đi
