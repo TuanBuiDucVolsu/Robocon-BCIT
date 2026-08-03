@@ -1663,6 +1663,44 @@ class TestAdvanceToEnd(unittest.TestCase):
         self.assertEqual(ghi.count("BỎ QUA GAI NHIỄU"), config.ULTRASONIC_MAX_GLITCH)
         self.assertIn("CHẶN CỨNG", ghi)
 
+    def test_factory_print_is_ARRIVAL_not_a_map_error_when_carrying(self):
+        """⚠️ Mảng in khu nhà máy = ĐÃ TỚI, không phải "bản đồ không khớp".
+
+        Đo trên robot 03/08, chặng tới khu Samsung — CẢ THANH tối dần đều trong
+        0.14s, không phải một vạch cắt ngang:
+            mắt 6:  913 → 878 → 820 → 749 → 666 → 499
+            mắt 1:  633 → 434 → 358 → 311 → 138
+        Robot đi vào mảng in của khu nhà máy (ảnh nền tối). Nó ĐÃ TỚI NƠI, nhưng
+        advance đọc ra giao lộ và báo lỗi — robot đứng chết trước khu Samsung,
+        không thả hàng. Ở khu nhà máy KHÔNG có giao lộ nào để gặp.
+        """
+        m = self._motion([[1] * 6] * 400)
+        m.dang_cong_hang = True
+        m.read_line_sensor_raw = lambda: [v / 1023 for v in (138, 0, 0, 0, 0, 100)]
+        m.follow_line = lambda speed: (True, [1, 1, 1, 1, 1, 1])
+        m.get_distance = lambda *a, **k: 100.0
+        m._encoder_left = _EncoderGia(500)
+        m._encoder_right = _EncoderGia(500)
+        with self.assertLogs("control.motion", level="INFO") as nk:
+            self.assertTrue(m.advance_to_end(timeout=3.0))
+        ghi = "\n".join(nk.output)
+        self.assertIn("ĐÃ VÀO KHU NHÀ MÁY", ghi)
+        self.assertNotIn("Bản đồ hoặc vị trí không khớp", ghi)
+
+    def test_dark_patch_too_early_is_still_not_the_factory(self):
+        """Chưa đi đủ xa thì mảng tối là giao lộ vừa thoát, không phải nhà máy."""
+        m = self._motion([[1] * 6] * 400)
+        m.dang_cong_hang = True
+        m.read_line_sensor_raw = lambda: [v / 1023 for v in (138, 0, 0, 0, 0, 100)]
+        m.follow_line = lambda speed: (True, [1, 1, 1, 1, 1, 1])
+        m.get_distance = lambda *a, **k: 100.0
+        m._encoder_left = _EncoderGia(0)      # không nhúc nhích
+        m._encoder_right = _EncoderGia(0)
+        m.read_line_sensor_adc = lambda: [138, 0, 0, 0, 0, 100]
+        with self.assertLogs("control.motion", level="WARNING") as nk:
+            m.advance_to_end(timeout=2.0)
+        self.assertNotIn("ĐÃ VÀO KHU NHÀ MÁY", "\n".join(nk.output))
+
     def test_plain_line_inflated_by_adaptive_threshold_is_not_an_intersection(self):
         """⚠️ HỒI QUY: advance cũng phải đếm mắt đen ĐẬM, không tin ngưỡng thích nghi.
 

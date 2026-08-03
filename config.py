@@ -613,6 +613,21 @@ ADVANCE_START_GRACE = 0.6   # giây kể từ sau escape
 # ngã ba C0R0 cho 4 — nhưng advance không được phép gặp C0R0 ngoài cửa sổ ân hạn.
 ADVANCE_INTERSECTION_DAM = 5
 
+# --- Vào khu nhà máy: MẢNG IN ĐẬM là tín hiệu ĐÃ TỚI, không phải giao lộ -----
+# Đo trên robot 03/08, chặng tới khu Samsung — cả thanh cảm biến TỐI DẦN ĐỀU trong
+# 0.14 giây, không phải một vạch cắt ngang:
+#     mắt 6:  913 → 901 → 878 → 852 → 820 → 789 → 749 → 706 → 666 → 531 → 499
+#     mắt 1:  633 → 504 → 434 → 401 → 358 → 321 → 311 → 138
+#     ngưỡng: 274 → 268 → 261 → 257 → 237 → 212 → 150
+# Đó là robot đi vào MẢNG IN của khu nhà máy (ảnh nhà máy nền tối, viền màu). Tức
+# nó ĐÃ TỚI NƠI, nhưng advance đọc ra "giao lộ" và báo lỗi bản đồ.
+#
+# Ở khu nhà máy KHÔNG có giao lộ nào để gặp — line kết thúc vào mảng in. Nên khi
+# đang cõng hàng, mảng tối đậm chính là điểm dừng.
+# Đòi thêm quãng đường tối thiểu để mảng đen của CHÍNH giao lộ vừa thoát không bị
+# tính nhầm (cửa sổ ân hạn lo phần đầu, số này lo phần sau).
+ADVANCE_FACTORY_DARK_MIN_CM = 10.0
+
 
 # --- XÁC NHẬN LẠI KHI ĐỨNG YÊN -------------------------------------------
 # Đo trên robot 03/08 (tools.check_sonar_jitter, 30 giây): robot ĐỨNG YÊN cho

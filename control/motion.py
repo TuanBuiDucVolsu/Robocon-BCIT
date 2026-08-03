@@ -786,6 +786,11 @@ class Motion:
         mat_vong = 0             # số nhịp kịch trần LIÊN TIẾP
         nhieu = 0                # số gai nhiễu đã bỏ qua
         bo_qua_dau = False       # đã dùng cửa sổ ân hạn đầu chưa
+        # Quãng advance đã đi, để phân biệt mảng in khu nhà máy với mảng đen của
+        # chính giao lộ vừa thoát.
+        self._doc_xung()
+        xung_adv = 0
+        quang_adv = 0.0
         doi_luc = start          # lần cuối siêu âm ĐỔI giá trị
 
         while time.time() - start < timeout:
@@ -889,6 +894,9 @@ class Motion:
             else:
                 near_streak = 0
 
+            xung_adv += self._doc_xung()
+            if config.ENCODER_PULSES_PER_CM > 0:
+                quang_adv = xung_adv / config.ENCODER_PULSES_PER_CM
             at_intersection, values = self.follow_line(base_speed)
             if at_intersection:
                 # ĐẾM MẮT ĐEN ĐẬM trước đã — y như back_to_intersection.
@@ -900,6 +908,21 @@ class Motion:
                 # tín hiệu giả này làm advance thoát giao lộ oan hai lần rồi lạc.
                 raw_gl = self.read_line_sensor_raw()
                 dam_gl = LineSensor.dem_den_dam(raw_gl)
+
+                # ĐANG CÕNG HÀNG = đang tới KHU NHÀ MÁY, nơi KHÔNG có giao lộ nào
+                # để gặp. Line kết thúc vào MẢNG IN (ảnh nhà máy nền tối), nên mảng
+                # tối đậm ở đây nghĩa là ĐÃ TỚI, không phải lỗi bản đồ.
+                # Lý do + vệt ADC thật: config.ADVANCE_FACTORY_DARK_MIN_CM.
+                if (cong_hang and dam_gl >= config.ADVANCE_INTERSECTION_DAM
+                        and quang_adv >= config.ADVANCE_FACTORY_DARK_MIN_CM):
+                    self.stop_gently(base_speed)
+                    logger.info(
+                        "Advance: ĐÃ VÀO KHU NHÀ MÁY — %d/%d mắt đen ĐẬM sau khi đi "
+                        "%.1fcm, ADC %s. Line kết thúc vào mảng in, đây là điểm thả.",
+                        dam_gl, config.ADVANCE_INTERSECTION_DAM, quang_adv,
+                        [int(round(v * 1023)) for v in raw_gl])
+                    return True
+
                 if dam_gl < config.ADVANCE_INTERSECTION_DAM:
                     logger.info(
                         "Advance: bỏ qua tín hiệu giao lộ ở %.2fs — chỉ %d/%d mắt đen "
