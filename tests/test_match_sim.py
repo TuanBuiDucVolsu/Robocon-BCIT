@@ -132,6 +132,9 @@ def run_match(seed: int, hw_fail_rate: float = 0.0, line_loss_rate: float = 0.0,
     robot.motion.execute_route.side_effect = execute_route
     robot.motion.exit_start_zone.return_value = True
     robot.motion.tren_giao_lo_dau = False
+    # Motion thật không đặt sẵn cờ này (advance_to_end đọc bằng getattr mặc định
+    # False). MagicMock thì trả về một Mock TRUTHY, nên phải đặt tay cho khớp.
+    robot.motion.dang_cong_hang = False
     # Dò nhánh line tại giao lộ Kệ 3: THẤY line ⟺ đang ở nửa chuẩn
     if probe_result == "auto":
         robot.motion.probe_side_branch.side_effect = lambda *a, **k: not nav.MIRRORED
@@ -162,6 +165,40 @@ def run_match(seed: int, hw_fail_rate: float = 0.0, line_loss_rate: float = 0.0,
             break
         state_before = robot.state
         handler = getattr(robot, main_mod.Robot.STATE_HANDLERS[robot.state])
+
+        # ⚠️ CỜ CÕNG HÀNG phải khớp với việc robot có đang giữ kiện hay không.
+        # Đo trên robot 03/08: cờ KẸT BẬT sau khi giao xong (carried_labels không
+        # bao giờ được xoá), nên chặng QUAY VỀ KỆ bỏ qua siêu âm rồi coi mảng tối
+        # đầu tiên là "đã vào khu nhà máy" — robot dừng bừa giữa đường. Tất cả các
+        # lượt quay về hôm đó đều hỏng.
+        # Kiểm ở ĐÂY, trong vòng lặp trọn trận, để mọi kịch bản (4 nửa sân, reset
+        # giữa trận, lỗi phần cứng, NV2) đều phải thoả.
+        # NV2 KHÔNG dùng carried_labels (hàng rời luôn về nhà máy liên hợp, không có
+        # nhãn để giao) nên nó đặt cờ bằng tay — bất biến này chỉ áp cho NV1.
+        cong = getattr(robot.motion, "dang_cong_hang", False)
+        dang_giu = any(x is not None for x in robot.carried_labels)
+        if not state_before.value.startswith("TASK2") and cong is not dang_giu:
+            errors.append(
+                f"CỜ CÕNG HÀNG SAI ở {state_before.value}: cờ={cong} nhưng "
+                f"carried_labels={robot.carried_labels}.")
+
+        # ⚠️ KIỂM THEO SỰ THẬT CỦA TRẠNG THÁI, không so cờ với carried_labels —
+        # lỗi hôm 03/08 là carried_labels KHÔNG BAO GIỜ được xoá sau khi giao, nên
+        # cờ và nhãn SAI KHỚP NHAU và phép so trên không phát hiện được gì.
+        # Tới RETURN_TO_WAREHOUSE là đã giao xong theo định nghĩa của state machine:
+        # còn cõng gì ở đây nghĩa là bước thả không dọn trạng thái.
+        if state_before is main_mod.State.RETURN_TO_WAREHOUSE:
+            if cong:
+                errors.append(
+                    "CÒN CÕNG HÀNG ở RETURN_TO_WAREHOUSE — chặng VỀ KỆ sẽ bỏ qua "
+                    "siêu âm và coi mảng tối đầu tiên là 'đã vào khu nhà máy', "
+                    "robot dừng bừa giữa đường. Đây là lỗi thật ngày 03/08.")
+            if dang_giu:
+                errors.append(
+                    f"carried_labels chưa dọn ở RETURN_TO_WAREHOUSE: "
+                    f"{robot.carried_labels} — nhãn cũ sẽ làm _plan_delivery lượt "
+                    f"sau tính sai, và cờ cõng hàng kẹt bật.")
+
         next_state = handler()
 
         # Mô phỏng trọng tài cho reset: bấm nút + đặt tay robot về ô xuất phát
