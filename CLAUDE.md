@@ -717,6 +717,13 @@ Hai nhóm ràng buộc hay bị bỏ sót:
   `LIFT_*_LOWER_EXTRA` lớn hơn trong 2 bên (hiện 4.2s). So với `LIFT_TIME_SHELF_2`
   suông là SAI ngưỡng — thấy "đạt" mà càng vẫn còn hở. `home_to_floor()` tự kẹp lên
   ngưỡng thật + ghi WARNING, nên không còn hạ thiếu âm thầm được
+- **Diễn tập GIỚI HẠN**: `ROBOT_MAX_PICKUPS=n` → chạy ĐÚNG state machine thi đấu
+  nhưng dừng sau `n` lượt bốc. `bash scripts/dien_tap_1_ke.sh [n]` (mặc định 1).
+  Lấp khoảng trống giữa `test_smoke` option 5 (đúng các bước nhưng **KHÔNG** chạy
+  state machine) và `practice.sh` (trọn trận, quá dài để lặp). Chỉ bài này phủ được
+  **nút bấm, công tắc nửa sân, đồng hồ 240s, retry/bỏ tầng, luồng reset 2-lần-bấm**.
+  Đọc từ BIẾN MÔI TRƯỜNG chứ không phải config — để không ai lỡ commit rồi mang vào
+  trận thật.
 - **3 chế độ chạy** (`main()`):
   - `ROBOT_LOOP=1` (`scripts/practice.sh`) → **luyện tập lặp**: `run_practice_loop()` chạy
     state machine → `_reset_for_new_run()` → chờ nút → lặp; KHÔNG dọn phần cứng giữa lượt;

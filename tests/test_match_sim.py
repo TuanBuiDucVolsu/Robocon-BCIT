@@ -339,6 +339,39 @@ class TestMidMatchReset(unittest.TestCase):
         self.assertLessEqual(robot.pickup_count, config.PICKUPS_TASK1 + 2)
 
 
+class TestGioiHanLuotBoc(unittest.TestCase):
+    """ROBOT_MAX_PICKUPS — diễn tập giới hạn, dừng sau n lượt bốc.
+
+    Lấp khoảng trống giữa test_smoke option 5 (đúng các bước nhưng KHÔNG chạy state
+    machine của main.py) và practice.sh (trọn trận, quá dài để lặp). Bài diễn tập
+    này chạy THẬT state machine nên phủ được nút bấm, công tắc nửa sân, đồng hồ
+    240s, retry/bỏ tầng và luồng reset.
+    """
+
+    def test_stops_after_the_configured_number_of_pickups(self):
+        import os
+        with patch.dict(os.environ, {"ROBOT_MAX_PICKUPS": "1"}):
+            robot, errors = run_match(0)
+        self.assertEqual(errors, [])
+        self.assertEqual(robot.pickup_count, 1,
+                         "phải dừng đúng sau 1 lượt bốc, không chạy tiếp")
+        self.assertLess(robot.packages_delivered, config.TOTAL_PACKAGES_TASK1)
+
+    def test_no_limit_runs_the_whole_match(self):
+        import os
+        moi_truong = {k: v for k, v in os.environ.items() if k != "ROBOT_MAX_PICKUPS"}
+        with patch.dict(os.environ, moi_truong, clear=True):
+            robot, errors = run_match(0)
+        self.assertEqual(errors, [])
+        self.assertEqual(robot.packages_delivered, config.TOTAL_PACKAGES_TASK1,
+                         "không đặt giới hạn thì phải chạy trọn trận như cũ")
+
+    def test_limit_comes_from_env_not_config(self):
+        """Đặt trong config thì có ngày lỡ commit rồi mang vào trận thật."""
+        self.assertFalse(hasattr(config, "ROBOT_MAX_PICKUPS"))
+        self.assertFalse(hasattr(config, "MAX_PICKUPS"))
+
+
 class TestAutoDetectSide(unittest.TestCase):
     """Robot tự dò nửa sân đầu trận: cấu hình sai vẫn phải chạy đúng.
 

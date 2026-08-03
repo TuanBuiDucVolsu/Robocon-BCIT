@@ -810,6 +810,22 @@ class Robot:
 
     def _handle_return_to_warehouse(self) -> State:
         """Quay về kho đúng kệ pickup tiếp theo, rồi chuyển tầng/kệ."""
+        # ROBOT_MAX_PICKUPS=n — DIỄN TẬP GIỚI HẠN: chạy ĐÚNG state machine thi đấu
+        # (nút bấm, công tắc nửa sân, đồng hồ 240s, retry/bỏ tầng, reset) nhưng dừng
+        # sau n lượt bốc thay vì cả 6. Lấp khoảng trống giữa test_smoke option 5
+        # (đúng các bước nhưng KHÔNG chạy state machine) và practice.sh (trọn trận,
+        # quá dài để lặp). Chỉ đọc từ biến môi trường, không phải hằng số config —
+        # để không ai lỡ commit rồi mang vào trận thật.
+        gioi_han = os.environ.get("ROBOT_MAX_PICKUPS")
+        if gioi_han and gioi_han.isdigit() and self.pickup_count >= int(gioi_han):
+            logger.warning("=" * 60)
+            logger.warning("  DIỄN TẬP GIỚI HẠN: đã xong %d/%s lượt bốc — DỪNG.",
+                           self.pickup_count, gioi_han)
+            logger.warning("  Đã giao %d kiện. Bỏ ROBOT_MAX_PICKUPS để chạy trọn trận.",
+                           self.packages_delivered)
+            logger.warning("=" * 60)
+            return State.DONE
+
         target_shelf = self._next_pickup_shelf()
         goal = navigation.SHELF_TERMINAL.get(target_shelf)
         if goal is None:
