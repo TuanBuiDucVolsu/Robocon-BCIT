@@ -1650,6 +1650,29 @@ class Motion:
                 # và 106 thành "đen"; ngưỡng đen ĐẬM tuyệt đối không bị kéo theo.
                 lui_cm = (lui_xung_gl / config.ENCODER_PULSES_PER_CM
                           if do_duoc_quang else None)
+                # ĐẾM MẮT ĐEN ĐẬM (ngưỡng tuyệt đối), KHÔNG đòi liền nhau.
+                # Ba chữ ký thu được trên robot 03/08, cùng chặng lùi này:
+                #   vạch thường  ADC [228, 481,   0,   0,   0, 925]  → 3 đen đậm
+                #   giao lộ thật ADC [  0, 703,   0,   0,   0, 926]  → 4 đen đậm
+                #   chân kệ      ADC [504,   0, 106, 454,   0,   0]  → 4 đen đậm
+                # Ca đầu là vạch line THƯỜNG bị NGƯỠNG THÍCH NGHI thổi thành giao
+                # lộ: line thật chỉ ở mắt 3,4,5 còn mắt 1 đọc 228 — không đen, chỉ
+                # lọt dưới ngưỡng 277. Đếm đen đậm bác được nó.
+                # Ca ba (chân kệ) đen đậm thật nên đếm không bác được — đó là việc
+                # của cổng quãng đường bên dưới. Hai bộ lọc bù cho nhau, và ĐÒI DÃY
+                # LIỀN NHAU thì bác luôn cả ca hai (đã thử, robot lùi mất 3.2s).
+                if at_intersection:
+                    raw_gl = self.read_line_sensor_raw()
+                    dam = LineSensor.dem_den_dam(raw_gl)
+                    if dam < config.INTERSECTION_THRESHOLD:
+                        logger.info(
+                            "Lùi: bỏ qua tín hiệu giao lộ ở %.2fs — chỉ %d/%d mắt đen "
+                            "ĐẬM, ADC %s. Vạch thường bị ngưỡng thích nghi thổi lên, "
+                            "không phải giao lộ.",
+                            time.time() - start, dam, config.INTERSECTION_THRESHOLD,
+                            [int(round(v * 1023)) for v in raw_gl])
+                        at_intersection = False
+
                 if at_intersection and lui_cm is not None \
                         and lui_cm < config.BACK_MIN_TRAVEL_CM:
                     logger.info(

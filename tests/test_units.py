@@ -2055,6 +2055,30 @@ class TestBackMinTravelCm(unittest.TestCase):
         m._encoder_right = _EncoderGia(0, co_encoder)
         return m
 
+    def test_plain_line_inflated_by_the_adaptive_threshold_is_rejected(self):
+        """⚠️ HỒI QUY: vạch THƯỜNG bị ngưỡng thích nghi thổi thành "giao lộ".
+
+        Đo trên robot 03/08, chặng lùi: ADC [228, 481, 0, 0, 0, 925] ngưỡng 277.
+        Line thật chỉ ở mắt 3,4,5 (ADC 0); mắt 1 đọc 228 — KHÔNG đen, chỉ lọt dưới
+        ngưỡng thích nghi. back_to_intersection nhận nhầm, dừng khi mới lùi 5cm,
+        rồi tiến bù 12cm VỀ PHÍA KỆ và xoay → va vào kệ.
+        """
+        raw = [v / 1023 for v in (228, 481, 0, 0, 0, 925)]
+        self.assertGreaterEqual(sum(LineSensor.digital_from_raw(raw)),
+                                config.INTERSECTION_THRESHOLD,
+                                "tiền đề: ngưỡng thích nghi ĐANG gọi đây là giao lộ")
+        self.assertLess(LineSensor.dem_den_dam(raw), config.INTERSECTION_THRESHOLD,
+                        "đếm mắt đen ĐẬM phải bác nó")
+
+    def test_real_junction_survives_the_strict_count(self):
+        """Giao lộ thật (4 mắt đen đậm, một mắt hở) vẫn phải được nhận."""
+        raw = [v / 1023 for v in (0, 703, 0, 0, 0, 926)]
+        self.assertGreaterEqual(LineSensor.dem_den_dam(raw),
+                                config.INTERSECTION_THRESHOLD)
+        self.assertLess(LineSensor.day_den_dam_dai_nhat(raw),
+                        config.INTERSECTION_THRESHOLD,
+                        "đòi LIỀN NHAU sẽ bác nhầm nó — đã thử, robot lùi mất 3.2s")
+
     def test_intersection_within_the_first_few_cm_is_ignored(self):
         """Chưa lùi đủ xa thì tín hiệu giao lộ là mảng đen chân kệ, không phải C0R0."""
         m = self._motion(xung_moi_lan=0)          # không nhúc nhích
