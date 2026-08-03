@@ -100,6 +100,25 @@ từng kiện một** — 3 lần thả riêng, tức **3 hàng** nối đuôi n
 Cách thứ hai gọn hơn nhưng cần `main.py` chọn càng theo **số kiện đã có ở nhà máy
 đó**, chứ không theo càng nào đang giữ nhãn. Chưa làm.
 
+**Phải đo trước khi chọn cách nào** — 3 phút:
+
+```bash
+python3 -m tools.check_sees_dropped_package
+```
+
+Đặt 1 kiện đầy đủ dưới sàn trước mũi robot ~15cm, phía sau nó trống ≥60cm. Công cụ
+đọc **có kiện**, rồi bảo bạn **bỏ kiện ra** và đọc lại cùng chỗ. **Chênh lệch giữa
+hai lần** mới là bằng chứng — đọc một lần không phân biệt được "thấy kiện" với "thấy
+thứ gì đó phía sau kiện".
+
+| Kết quả | Hệ quả |
+|---|---|
+| **CÓ thấy** | Robot tự dừng trước kiện cũ, không cần đếm — nhưng khoảng hở mặc định ~14cm quá lớn cho khu 25cm, phải siết riêng cho lúc thả |
+| **KHÔNG thấy** | Robot đâm vào kiện cũ. Bắt buộc đếm kiện từng nhà máy; siêu âm vô dụng ở việc này |
+
+Nghi trước khi đo: pallet cao 26mm + khối 40mm = ~66mm, có thể **thấp hơn chùm
+sóng**; và mút xốp **hút âm**, phản xạ rất kém. Nhưng đó là suy luận, không phải số.
+
 ## Trước khi chạy — 3 việc bắt buộc
 
 1. **Gạt công tắc nửa sân đúng.** Bảng trên không phụ thuộc nửa sân (mọi cặp đều có
