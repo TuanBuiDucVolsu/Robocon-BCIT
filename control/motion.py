@@ -447,6 +447,11 @@ class Motion:
         blind = getattr(config, "EXIT_START_BLIND_TIME", 0.0)
         # Bước căn giữa có thể chạy tới tận C0R0 — caller cần biết để lấy đúng pose.
         self.tren_giao_lo_dau = False
+        # Cờ CHẮC CHẮN, không suy từ cảm biến: robot vừa rời ô xuất phát nên nó
+        # KHÔNG đứng trên giao lộ nào. Chỉ ở đây mới biết chắc điều đó — mọi phép
+        # thử bằng cảm biến đều sai ngay sau một cú xoay (ngã tư nhìn dọc nhánh
+        # mới đọc ra y hệt vạch thẳng).
+        self.vua_roi_o_xuat_phat = True
         logger.info("Thoát ô start — mù %.2fs (qua vùng in mascot) rồi tìm line R0 "
                     "(speed=%d%%)", blind, speed)
         start = time.time()
@@ -675,6 +680,8 @@ class Motion:
         # Samsung, cơ chế "tự sửa C0R0" của advance kích hoạt CÁCH C0R0 CẢ SÂN.
         # Xoá ở CUỐI route đầu tiên, để chặng START (nơi cờ có nghĩa) vẫn dùng được.
         xoa_co_sau_route = getattr(self, "tren_giao_lo_dau", False)
+        # Chỉ chặng forward ĐẦU TIÊN của route ĐẦU TIÊN sau exit_start_zone.
+        vua_xuat_phat = getattr(self, "vua_roi_o_xuat_phat", False)
 
         # Route khởi hành TỪ ĐIỂM CUỐI (kệ / khu nhà máy) luôn mở đầu bằng LÙI —
         # bộ tìm đường không có cách nào khác để rút khỏi điểm cuối. Chặng `forward`
@@ -722,9 +729,11 @@ class Motion:
                     if count and not self.navigate_intersections(
                             count,
                             on_reached=lambda: self.last_route_progress.append(("forward", 1)),
-                            roi_diem_cuoi=tu_diem_cuoi):
+                            roi_diem_cuoi=tu_diem_cuoi,
+                            bo_escape_dau=vua_xuat_phat):
                         return False
                     tu_diem_cuoi = False        # chỉ chặng forward ĐẦU TIÊN
+                    vua_xuat_phat = False
                 elif action == "back":
                     # Rút khỏi kệ/nhà máy mà không xoay 180° — cũng đi từng giao lộ một
                     # để biết chính xác dừng ở đâu khi hỏng giữa chừng.
@@ -753,6 +762,7 @@ class Motion:
             # chừng) đều xoá — bỏ sót một lối là cờ sống tiếp cả trận.
             if xoa_co_sau_route:
                 self.tren_giao_lo_dau = False
+            self.vua_roi_o_xuat_phat = False
 
     def _do_lai_khi_dung(self, dist_quyet: float,
                          base_speed: float) -> tuple[float, bool]:
@@ -2226,7 +2236,8 @@ class Motion:
     def navigate_intersections(self, count: int,
                                base_speed: float = config.SPEED_DEFAULT,
                                on_reached=None,
-                               roi_diem_cuoi: bool = False) -> bool:
+                               roi_diem_cuoi: bool = False,
+                               bo_escape_dau: bool = False) -> bool:
         """Bám line qua `count` giao lộ.
 
         on_reached: gọi sau MỖI giao lộ đếm được — caller dùng để ghi tiến độ mà
@@ -2242,7 +2253,16 @@ class Motion:
             if self._aborted():
                 return False
             logger.info("Đi đến giao lộ %d/%d", i + 1, count)
-            self._escape_intersection(base_speed)
+            if bo_escape_dau and i == 0:
+                # Vừa rời ô XUẤT PHÁT: robot chắc chắn KHÔNG đứng trên giao lộ, và
+                # C0R0 chỉ cách vài cm. escape ở đây là một cú chạy thừa đủ để bước
+                # QUA LUÔN C0R0 — sau đó chẳng còn gì để đếm nên robot chạy thẳng
+                # tới KỆ. Đo 04/08: bánh dừng cách C0R0 25cm, thanh cảm biến chui
+                # vào gầm kệ và đọc ADC [0,0,0,0,0,0] thành "giao lộ".
+                logger.info("Bỏ bước thoát giao lộ: vừa rời ô xuất phát, robot "
+                            "không đứng trên giao lộ nào và C0R0 chỉ cách vài cm")
+            else:
+                self._escape_intersection(base_speed)
             # ⛔ CỔNG QUÃNG ĐƯỜNG áp cho MỌI chặng, TRỪ chặng ĐẦU của route không
             # khởi hành từ điểm cuối.
             #   i > 0  → luôn bật. Hai giao lộ thật cách nhau ~40cm, mà

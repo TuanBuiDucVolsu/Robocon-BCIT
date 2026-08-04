@@ -3392,5 +3392,58 @@ class TestContinuousIntersections(unittest.TestCase):
         self.assertEqual(called, [])
 
 
+
+class TestBoEscapeSauKhiRoiOXuatPhat(unittest.TestCase):
+    """⚠️ HỒI QUY 04/08: chặng đầu sau ô XUẤT PHÁT không được thoát giao lộ.
+
+    Robot vừa rời ô xuất phát thì KHÔNG đứng trên giao lộ nào, và C0R0 chỉ cách
+    vài cm. _escape_intersection ở đó là một cú chạy thừa đủ để bước QUA LUÔN
+    C0R0 — sau đó chẳng còn gì để đếm nên robot chạy thẳng tới KỆ, thanh cảm biến
+    chui vào gầm kệ và đọc ADC [0,0,0,0,0,0] thành "giao lộ". Thước: bánh dừng
+    cách C0R0 25cm.
+
+    Cờ này do exit_start_zone dựng, KHÔNG suy từ cảm biến — mọi phép thử bằng cảm
+    biến đều sai ngay sau một cú xoay, vì ngã tư nhìn dọc nhánh mới đọc ra y hệt
+    một vạch thẳng ([0,0,0,1,1,0]). Bản vá dùng cảm biến đã làm robot bỏ escape ở
+    MỌI chặng sau khi xoay và quay đầu ở chỗ logo.
+    """
+
+    def _motion(self):
+        m = object.__new__(Motion)
+        m._aborted = lambda: False
+        m.stop = MagicMock()
+        m.forward = MagicMock()
+        m._escape_intersection = MagicMock(return_value=True)
+        m.follow_line_until_intersection = MagicMock(return_value=True)
+        m.last_route_progress = []
+        return m
+
+    def test_chang_dau_sau_o_xuat_phat_KHONG_thoat_giao_lo(self):
+        m = self._motion()
+        m.vua_roi_o_xuat_phat = True
+        self.assertTrue(m.execute_route([("forward", 1)]))
+        m._escape_intersection.assert_not_called()
+
+    def test_chang_thu_hai_van_thoat_binh_thuong(self):
+        """Chỉ giao lộ ĐẦU TIÊN — cái thứ hai robot đứng trên giao lộ thật."""
+        m = self._motion()
+        m.vua_roi_o_xuat_phat = True
+        self.assertTrue(m.execute_route([("forward", 3)]))
+        self.assertEqual(m._escape_intersection.call_count, 2,
+                         "giao lộ 2 và 3 vẫn phải thoát")
+
+    def test_route_sau_do_thoat_binh_thuong(self):
+        """Cờ bị TIÊU THỤ hết route đầu — route sau không được hưởng."""
+        m = self._motion()
+        m.vua_roi_o_xuat_phat = True
+        m.execute_route([("forward", 1)])
+        m.execute_route([("forward", 1)])
+        m._escape_intersection.assert_called_once()
+
+    def test_khong_co_co_thi_thoat_nhu_cu(self):
+        m = self._motion()
+        self.assertTrue(m.execute_route([("forward", 1)]))
+        m._escape_intersection.assert_called_once()
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
