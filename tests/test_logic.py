@@ -717,11 +717,22 @@ class TestSoGiaoTheoNhaMay(unittest.TestCase):
         r = self._robot()
         self.assertEqual(r._so_kien_da_giao("foxconn"), 0)
 
-    def test_backoff_is_OFF_by_default(self):
-        """Chưa đo tools.check_sees_dropped_package thì KHÔNG được tự lùi."""
-        self.assertEqual(config.FACTORY_STACK_BACKOFF_CM, 0.0)
+    def test_backoff_is_ON_because_the_sonar_cannot_help_while_carrying(self):
+        """⚠️ Phải ĐẾM kiện, không trông vào siêu âm.
+
+        Đo 04/08 (tools.check_sees_dropped_package): siêu âm nhìn kiện dưới sàn RẤT
+        tốt — có kiện 24.9cm (tản 0.1), bỏ ra 73.6cm, chênh +48.7cm.
+        NHƯNG phép đo đó làm với càng Ở SÀN, KHÔNG mang gì. Lúc giao hàng robot
+        đang CÕNG KIỆN và chính kiện đó chắn chùm sóng (đo 03/08: cõng hàng đọc
+        8-10cm suốt, thả xong cùng cảm biến đọc 100cm). Siêu âm "thấy" được kiện cũ
+        nhưng KHÔNG thấy vào đúng lúc cần → bắt buộc đếm.
+        """
+        self.assertGreater(config.FACTORY_STACK_BACKOFF_CM, 0.0,
+                           "tắt thì kiện thứ 2 chồng lên kiện thứ 1")
+
+    def test_first_package_at_a_factory_is_NOT_backed_off(self):
+        """Nhà máy còn trống thì thả đúng chỗ, không lùi vô cớ."""
         r = self._robot()
-        r._ghi_nhan_giao("samsung")
         r._lui_tranh_kien_cu("samsung")
         r._retreat_from_shelf.assert_not_called()
 

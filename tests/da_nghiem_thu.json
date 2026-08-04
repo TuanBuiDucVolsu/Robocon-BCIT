@@ -126,6 +126,15 @@
         "INSERT_TIMEOUT": 8.0
       },
       "ghi_chu": "Tầng 2 là NỬA SỐ KIỆN của trận và trước đó chưa từng được kiểm. Trước khi chỉnh, càng phải nâng thiếu nên luồn không tới khe pallet — lùi ra chỉ càng trái bốc được kiện."
+    },
+    {
+      "ten": "check_sees_dropped_package — siêu âm CÓ thấy kiện dưới sàn",
+      "ngay": "2026-08-04",
+      "ket_qua": "ĐO XONG — có kiện 24.9cm (tản 0.1), bỏ ra 73.6cm (tản 0.5), chênh +48.7cm. Siêu âm nhìn kiện dưới sàn rất tốt.",
+      "gia_tri": {
+        "ULTRASONIC_QUEUE_LEN": 3
+      },
+      "ghi_chu": "⚠️ KHÔNG dùng được để tự tránh kiện cũ: phép đo làm với càng Ở SÀN, không mang gì. Lúc giao hàng robot đang CÕNG KIỆN và chính kiện đó chắn chùm sóng (đo 03/08: cõng hàng đọc 8-10cm, thả xong đọc 100cm). Vì vậy FACTORY_STACK_BACKOFF_CM được BẬT = 9.0 và robot đếm kiện từng nhà máy."
     }
   ]
 }

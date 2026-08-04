@@ -83,11 +83,16 @@ def main() -> int:
     print(f"  Chênh lệch: {chenh:+.1f} cm")
     if chenh >= CHENH_TOI_THIEU:
         print(f"\n  ✅ CÓ THẤY. Bỏ kiện đi thì số đo nhảy xa thêm {chenh:.1f}cm.")
-        print(f"     → Robot sẽ TỰ dừng trước kiện đã thả, ở khoảng "
-              f"{config.APPROACH_DISTANCE + config.APPROACH_STOP_MARGIN:.1f}cm.")
-        print("     → KHÔNG cần đếm kiện. Nhưng khoảng hở đó quá lớn cho khu sâu 25cm:")
-        print("       3 kiện × (9cm + hở) sẽ tràn ra ngoài. Phải siết khoảng dừng")
-        print("       RIÊNG cho lúc thả (tách khỏi APPROACH_DISTANCE dùng cho kệ).")
+        print("     Siêu âm nhìn kiện dưới sàn rất tốt — tốt hơn hẳn nhìn giá kệ.")
+        print("")
+        print("  ⚠️ NHƯNG VẪN PHẢI ĐẾM KIỆN. Phép đo này làm với càng Ở SÀN, KHÔNG")
+        print("     mang gì. Lúc giao hàng robot ĐANG CÕNG KIỆN, và chính kiện đó")
+        print("     chắn chùm sóng — đo 03/08: cõng hàng đọc 8-10cm suốt, thả xong")
+        print("     cùng cảm biến đọc 100cm. Nên siêu âm 'thấy' được kiện cũ nhưng")
+        print("     KHÔNG thấy vào đúng lúc cần.")
+        print(f"     → Bật config.FACTORY_STACK_BACKOFF_CM (hiện "
+              f"{config.FACTORY_STACK_BACKOFF_CM}) để robot lùi bớt theo số kiện")
+        print("       đã có ở nhà máy đó.")
     else:
         print(f"\n  🔴 KHÔNG THẤY. Bỏ kiện đi mà số đo gần như không đổi "
               f"({chenh:+.1f}cm)")

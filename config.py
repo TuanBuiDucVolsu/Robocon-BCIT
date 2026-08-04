@@ -846,13 +846,22 @@ RETREAT_AFTER_DROP_CM = 10.0
 #     FACTORY_STACK_BACKOFF_CM × (số kiện nhà máy đó ĐÃ nhận)
 # rồi mới thả — kiện sau nằm nông hơn kiện trước.
 #
-# ⚠️ ĐỂ 0 = TẮT, giữ nguyên hành vi hiện tại. Bật lên khi đã ĐO:
-#     python3 -m tools.check_sees_dropped_package
-# Bài đo đó (A/B: có kiện / bỏ kiện ra) trả lời câu quyết định — siêu âm có THẤY
-# kiện đã thả không. Thấy thì robot tự dừng trước nó và không cần lùi; không thấy
-# thì bắt buộc phải đếm và lùi như trên. CHƯA AI CHẠY bài đó.
-# Nếu bật: 9.0 là bề sâu một kiện; đo lại trên sa bàn rồi chỉnh.
-FACTORY_STACK_BACKOFF_CM = 0.0
+# ĐÃ ĐO ngày 04/08 (tools.check_sees_dropped_package), số rất sạch:
+#     CÓ kiện    24.9cm  (tản 0.1)
+#     KHÔNG kiện 73.6cm  (tản 0.5)      chênh +48.7cm
+# Siêu âm nhìn kiện dưới sàn RẤT TỐT — tốt hơn hẳn nhìn giá kệ (kệ hở nên sóng lọt
+# qua, kiện thì đặc).
+#
+# ⚠️ NHƯNG KHÔNG DÙNG ĐƯỢC ĐỂ TỰ TRÁNH. Phép đo trên làm với càng Ở SÀN, KHÔNG
+# mang gì. Lúc giao hàng thì robot ĐANG CÕNG KIỆN, và chính kiện đó chắn chùm sóng
+# — đo hôm 03/08: cõng hàng đọc 8-10cm suốt, thả xong cùng cảm biến đọc 100cm.
+# Nên tuy siêu âm "thấy" được kiện cũ, nó không thấy vào ĐÚNG LÚC cần.
+# → BẮT BUỘC đếm kiện. Đó là lý do hằng số này được BẬT.
+#
+# 9.0 = bề sâu một kiện. Kiểm bằng mắt ở lượt đầu có 2 kiện vào cùng một nhà máy:
+# kiện thứ hai phải nằm NÔNG hơn và KHÔNG chồng lên kiện thứ nhất, cả hai vẫn
+# trong ô 25cm. Lệch thì chỉnh số này, đừng chỉnh chỗ khác.
+FACTORY_STACK_BACKOFF_CM = 9.0
 
 # Quãng LÙI tối thiểu trước khi tin một tín hiệu giao lộ (đo bằng encoder).
 # Vì sao không lọc bằng HÌNH DẠNG tín hiệu: đo trên robot 03/08 cho thấy chữ ký
