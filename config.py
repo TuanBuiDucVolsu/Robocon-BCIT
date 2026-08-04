@@ -1184,6 +1184,16 @@ MAX_TIER_RETRIES = 1         # Số lần thử lại tầng kệ trước khi b
 # Ô start không có line → tiến thẳng ra chạm line R0 rồi căn giữa. Robot đặt quay mặt
 # về phía Kệ 3. exit_start_zone() KHÔNG đếm giao lộ — bộ tìm đường lo phần đó.
 EXIT_START_SPEED = 50
+
+# Số mắt ĐEN ĐẬM LIỀN NHAU tối thiểu để tin "đã chạm line R0" khi rời ô xuất phát.
+# Trước đây chỉ cần `sum(values) > 0` — nhận bất kỳ hình dạng nào, kể cả mắt CÁCH
+# QUÃNG. Đo trên robot 04/08, nửa sân bên kia:
+#     Chạm line R0! sensor=[1, 0, 1, 0, 0, 1]   ← chấp nhận sau đúng 1ms
+# Ba mắt cách quãng, trên mặt tối om (ADC cao nhất 284; nền trắng nửa bên kia đọc
+# 400-900). Robot căn giữa vào chỗ không có vạch rồi đi mò cả sân, và log báo
+# "exit_start_zone OK".
+# Vạch rộng 20mm trên thanh trải 47mm luôn cho một dãy LIỀN ≥2 mắt.
+EXIT_START_LINE_EYES = 2
 EXIT_START_TIMEOUT = 5.0     # Giây, không thấy line thì báo lỗi
 # CHẶN TRÊN cho cửa sổ mù khi rời ô xuất phát — bỏ qua cảm biến trong khoảng này.
 # Cần vì ô xuất phát nằm trong khoảng đứt của R0 và chỗ đó IN HÌNH MASCOT, mặt robot

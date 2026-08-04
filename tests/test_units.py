@@ -1530,8 +1530,42 @@ class TestExitStartZone(unittest.TestCase):
         m.forward = MagicMock()
         m.stop = MagicMock()
         m.read_line_sensor = lambda: values
+        # exit_start_zone đòi DÃY ĐEN ĐẬM LIỀN NHAU trước khi tin "đã chạm line"
+        # (xem EXIT_START_LINE_EYES). Dựng raw khớp với `values`: mắt bật = đen
+        # đậm liền, mắt tắt = trắng — để bài test nói về CỬA SỔ MÙ vẫn nói đúng
+        # chuyện đó, không vô tình biến thành bài về bộ lọc hình dạng.
+        m.read_line_sensor_raw = lambda: [
+            0.0 if v else 0.9 for v in m.read_line_sensor()]
         m.follow_line = MagicMock(return_value=(False, values))
         return m
+
+
+    def test_mat_cach_quang_KHONG_phai_line(self):
+        """⚠️ HỒI QUY 04/08, nửa sân bên kia: robot rời ô xuất phát rồi đi mò cả sân.
+
+            hết cửa sổ mù 1.50s (không thấy vùng in nào)
+            Chạm line R0! sensor=[1, 0, 1, 0, 0, 1]      ← chấp nhận sau đúng 1ms
+
+        Ba mắt CÁCH QUÃNG, trên mặt tối om — ADC cao nhất 284, trong khi nền trắng
+        nửa bên kia đọc 400-900. `sum(values) > 0` nhận bất kỳ hình dạng nào. Vạch
+        rộng 20mm trên thanh trải 47mm thì LUÔN cho một dãy LIỀN.
+
+        Robot căn giữa vào chỗ không có vạch nào, và log vẫn báo exit_start_zone OK.
+        """
+        m = self._motion([1, 0, 1, 0, 0, 1])
+        m.read_line_sensor_raw = lambda: [v / 1023 for v in (164, 200, 89, 213, 190, 146)]
+        with patch.object(config, "EXIT_START_BLIND_TIME", 0.0), \
+             patch.object(config, "EXIT_START_TIMEOUT", 0.3):
+            self.assertFalse(m.exit_start_zone(),
+                             "mắt cách quãng trên mặt tối KHÔNG phải line R0")
+
+    def test_day_lien_van_duoc_nhan(self):
+        """Dãy liền thì vẫn nhận bình thường — không siết quá tay."""
+        m = self._motion([0, 0, 1, 1, 0, 0])
+        m.read_line_sensor_raw = lambda: [v / 1023 for v in (880, 850, 12, 8, 830, 900)]
+        with patch.object(config, "EXIT_START_BLIND_TIME", 0.0), \
+             patch.object(config, "EXIT_START_ALIGN_TIME", 0.02):
+            self.assertTrue(m.exit_start_zone())
 
     def _motion_seq(self, frames):
         """frames: đọc lần lượt; hết thì lặp giá trị cuối."""

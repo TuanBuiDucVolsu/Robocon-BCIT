@@ -486,9 +486,28 @@ class Motion:
                     time.sleep(0.01)
                     continue
 
+            # ⛔ ĐÒI CÁC MẮT LIỀN NHAU. `sum(values) > 0` nhận bất kỳ hình dạng nào,
+            # kể cả mắt CÁCH QUÃNG — mà vạch line rộng 20mm trên thanh trải 47mm thì
+            # luôn cho một dãy LIỀN. Đo trên robot 04/08, nửa sân bên kia:
+            #     Chạm line R0! sensor=[1, 0, 1, 0, 0, 1]   ← 1ms sau khi bắt đầu tìm
+            # Ba mắt cách quãng, trên một mặt tối om (ADC cao nhất 284, trong khi nền
+            # trắng bên nửa kia đọc 400-900). Robot căn giữa vào chỗ không có vạch
+            # nào rồi đi mò cả sân. Đáng lẽ phải DỪNG và báo lỗi.
+            raw_line = self.read_line_sensor_raw()
+            lien = LineSensor.day_den_dam_dai_nhat(raw_line)
+            if sum(values) > 0 and lien < config.EXIT_START_LINE_EYES:
+                logger.info(
+                    "Thoát ô start: bỏ qua tín hiệu %s — dãy đen ĐẬM LIỀN NHAU dài "
+                    "nhất chỉ %d/%d. Vạch thật cho các mắt liền nhau; cách quãng là "
+                    "nhiễu hoặc mặt tối, KHÔNG phải line. ADC %s",
+                    values, lien, config.EXIT_START_LINE_EYES,
+                    [int(round(v * 1023)) for v in raw_line])
+                time.sleep(0.01)
+                continue
+
             if sum(values) > 0:
                 self.stop()
-                logger.info("Chạm line R0! sensor=%s", values)
+                logger.info("Chạm line R0! sensor=%s (dãy liền %d mắt)", values, lien)
                 found = True
                 break
             time.sleep(0.01)
