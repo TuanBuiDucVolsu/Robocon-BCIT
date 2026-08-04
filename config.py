@@ -691,10 +691,16 @@ ADVANCE_INTERSECTION_DAM = 5
 # Lần thứ hai làm robot dừng NGAY nhịp đầu của advance rồi bước luồn càng tiến mù
 # ~20cm và chui vào gầm kệ. Sau đó đo thời gian thực (test_motion option 8) thấy nó
 # đọc ĐÚNG 12.2cm bất kể robot ở đâu — tức đang nhìn một vật cố định trên robot.
-# Hình học thì chắc: C0R0 → chân kệ = 35.4cm (docs/SA_BAN.md 3b, đo trên bản in),
-# và ta muốn dừng cách kệ ~20cm → đi 15cm kể từ giao lộ.
-# Quãng này ĐO TỪ LÚC BẮT ĐẦU THOÁT GIAO LỘ, nên đã gồm cả đoạn escape.
-ADVANCE_SHELF_STOP_CM = 15.0
+# ⚠️ MỐC 15.0 CŨ LÀ SAI, và sai theo kiểu không bao giờ cứu được gì. Nó lấy từ
+# C0R0 → chân kệ = 35.4cm (docs/SA_BAN.md 3b, đo TRÊN BẢN IN) rồi trừ 20cm.
+# Nhưng 35.4cm là khoảng cách trên SA BÀN, còn CÀNG NHÔ RA TRƯỚC BÁNH XE hơn 20cm.
+# Đo trên robot 04/08: bánh xe mới rời giao lộ 12cm (encoder báo 10.9cm — khớp,
+# encoder ĐÚNG) mà càng đã chui vào gầm kệ. Mốc 15cm luôn tới MUỘN hơn cú va.
+# Điểm dừng đúng là BÁNH XE NẰM TRÊN GIAO LỘ — tức quãng đi gần bằng 0, và bước
+# luồn càng (creep_until, dựa vào IR pallet) lo nốt đoạn cuối.
+# Quãng này đo TỪ GIAO LỘ. Ở chặng vào kệ advance KHÔNG thoát giao lộ nữa: escape
+# một mình đã ngốn ~7.9cm, quá nửa quãng cho phép.
+ADVANCE_SHELF_STOP_CM = 3.0
 
 # Bao lâu KHÔNG có xung encoder thì coi như encoder CHẾT và dừng khẩn.
 # 04/08, sau khi giao quyền dừng cho quãng đường: log in đúng dòng "dừng theo QUÃNG

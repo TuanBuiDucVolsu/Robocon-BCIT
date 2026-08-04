@@ -808,7 +808,22 @@ class Motion:
         self._doc_xung()
         xung_adv = 0
         quang_adv = 0.0
-        self._escape_intersection(base_speed)
+        cong_hang_som = getattr(self, "dang_cong_hang", False)
+        do_duoc_quang_som = (config.ENCODER_PULSES_PER_CM > 0
+                             and getattr(getattr(self, "_encoder_left", None),
+                                         "available", False)
+                             and getattr(getattr(self, "_encoder_right", None),
+                                         "available", False))
+        bo_escape = ((not cong_hang_som) and do_duoc_quang_som
+                     and config.ADVANCE_SHELF_STOP_CM > 0)
+        if bo_escape:
+            # ⛔ KHÔNG THOÁT GIAO LỘ khi vào kệ — mốc dừng NGẮN HƠN cả quãng escape.
+            # Đo trên robot 04/08: escape chạy 0.41s, nhịp tim đầu tiên của advance
+            # đã báo 7.9cm. Mà càng chui vào gầm kệ khi bánh mới rời giao lộ 12cm.
+            # Thoát giao lộ xong là đã đi quá nửa quãng cho phép rồi.
+            self.forward(base_speed)
+        else:
+            self._escape_intersection(base_speed)
         xung_adv += self._doc_xung()
         start = time.time()
         lost_since = None
@@ -1019,6 +1034,16 @@ class Motion:
                 return False
 
             at_intersection, values = self.follow_line(base_speed)
+            if at_intersection and bo_escape:
+                # Chặng vào kệ chỉ dài vài cm và KHÔNG có giao lộ nào để gặp —
+                # cái vừa thấy là chính giao lộ robot đang đứng trên (ta cố tình
+                # không thoát nó). Chạy tiếp cho tới khi đủ quãng.
+                # follow_line() vừa gọi stop() nên phải ra lệnh chạy lại.
+                self.forward(base_speed)
+                acquired = True
+                lost_since = None
+                time.sleep(0.01)
+                continue
             if at_intersection:
                 # ĐẾM MẮT ĐEN ĐẬM trước đã — y như back_to_intersection.
                 # Đo trên robot 03/08, chặng tới khu Samsung:
