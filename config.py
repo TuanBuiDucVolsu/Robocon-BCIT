@@ -136,7 +136,7 @@ PWM_COMPENSATION_LEFT_REV = 0.952  # Bù bánh TRÁI khi lùi
 # ============================================================
 LIFT_TIME_FLOOR = 0.0
 LIFT_TIME_SHELF_1 = 0.700
-LIFT_TIME_SHELF_2 = 3.40  # ĐO trên robot 04/08 (PIN ĐẦY — pin yếu cho 4.20)
+LIFT_TIME_SHELF_2 = 3.50  # ĐO trên robot 04/08 (PIN ĐẦY — pin yếu cho 4.20); đội cộng thêm 0.1
 
 # Không có limit switch — home_to_floor() hạ liên tục bấy nhiêu giây để ép chạm đáy.
 LIFT_HOME_DURATION = 3.7   # min_home_duration() = LIFT_TIME_SHELF_2 + LOWER_EXTRA lớn
