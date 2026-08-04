@@ -67,9 +67,16 @@ def main() -> int:
         print(f"\n  Đã lưu 3 ảnh vào {THU_MUC}/")
 
         # Chấm luôn để so ảnh với kết quả — cùng một khung hình, không chụp lại.
+        # ⚠️ PHẢI đi ĐÚNG đường chạy thật: truyền NỬA khung + level, để _crop_roi
+        # cắt đúng một lần. Bản đầu của công cụ này truyền ROI ĐÃ CẮT với
+        # level=None, nên _crop_roi cắt thêm 20% mỗi bên lần nữa — công cụ chấm
+        # trên một vùng HẸP HƠN hẳn lúc thi đấu và cho kết quả ĐÚNG trong khi
+        # robot vẫn nhận sai. Công cụ chẩn đoán mà không đi đúng đường thật thì
+        # nó che lỗi chứ không tìm ra lỗi.
         print("\n  --- Kết quả nhận diện trên CHÍNH khung vừa lưu ---")
-        for ten, roi in (("trái", trai), ("phải", phai)):
-            nhan, tin = v._classify_by_color(roi, level=None)
+        nua_trai, nua_phai = v.split_pair(frame)
+        for ten, nua in (("trái", nua_trai), ("phải", nua_phai)):
+            nhan, tin = v._classify_by_color(nua, level=tang)
             print(f"    {ten:5s}: {nhan}  ({tin * 100:.1f}%)")
 
         print("\n  MỞ ẢNH RA XEM. Ba câu hỏi, theo thứ tự:")

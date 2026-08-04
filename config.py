@@ -1082,8 +1082,17 @@ ROI_MARGIN = 0.2             # Tỉ lệ cắt mỗi cạnh lấy vùng giữa. 
 #     tầng 2 → y 143..435 (kiện 140..430, vừa khít)
 #     tầng 1 → y 573..865 (kiện 620..860, bỏ được dải sàn)
 ROI_Y_CENTER = {1: 0.74, 2: 0.295}  # tâm dọc vùng quét theo tầng (tỉ lệ chiều cao)
-ROI_HEIGHT = 0.30            # chiều cao vùng quét (tỉ lệ) ≈ 292px
-ROI_MARGIN_X = 0.10          # cắt ngang mỗi bên của NỬA khung. 0.2 xén hụt cả 2 mép:
+# ⚠️ HAI SỐ DƯỚI ĐÂY LÀ VÙNG ĐÃ CHỨNG MINH CHẤM ĐÚNG trên robot 04/08, không phải
+# số ướm. Đường chạy thật với vùng RỘNG (520x291) cho amkor/amkor — mà mỗi cặp
+# trên kệ LUÔN là hai nhà máy khác nhau, nên hai kết quả giống hệt tự nó là bằng
+# chứng nền đã lấn át nhãn. Cùng khung hình đó, cắt hẹp lại còn 312x175 thì:
+#     tầng 1:  hana_micron 26.9%   samsung 40.3%
+#     tầng 2:  foxconn     86.5%   amkor   96.2%
+# Kiện chỉ là khối 40mm trên pallet 90mm trong ngăn kệ 240mm — phần lớn vùng rộng
+# là kệ và pallet, nên % pixel đúng màu bị pha loãng tới mức nhãn sai thắng.
+# Suy ra từ chính vùng đó: x 168..480 và y 632..807 trên nửa khung 648x972.
+ROI_HEIGHT = 0.18            # chiều cao vùng quét (tỉ lệ) ≈ 175px
+ROI_MARGIN_X = 0.26          # cắt ngang mỗi bên của NỬA khung. 0.2 xén hụt cả 2 mép:
                              # kiện trong nửa trái trải x≈20..270 mà ROI chỉ lấy 64..256
 CENTER_WEIGHT_SIGMA = 0.85   # Trọng số Gauss theo khoảng cách tới tâm ROI: pixel nền
                              # ở rìa tính nhẹ hơn. Giảm → tập trung tâm mạnh hơn.
