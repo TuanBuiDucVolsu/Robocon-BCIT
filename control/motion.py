@@ -812,6 +812,9 @@ class Motion:
         xung_adv += self._doc_xung()
         start = time.time()
         lost_since = None
+        values = []              # nhánh "ĐI QUÁ XA" in nó ra, mà nó chỉ được gán ở
+                                 # cuối vòng — vòng đầu sẽ NameError nếu quãng đã
+                                 # vượt mốc ngay từ xung của escape.
         # Một lần đo siêu âm chập chờn là đủ để kết thúc advance và báo THÀNH CÔNG —
         # đây là chỗ duy nhất mà nhiễu gây "thành công giả". Đòi 2 nhịp liên tiếp thấy
         # gần mới tin (approach_shelf() phía sau lo nốt đoạn cuối, nên tốn thêm 1 nhịp
@@ -962,6 +965,26 @@ class Motion:
             xung_adv += self._doc_xung()
             if config.ENCODER_PULSES_PER_CM > 0:
                 quang_adv = xung_adv / config.ENCODER_PULSES_PER_CM
+
+            # ⛔ ENCODER CHẾT = KHÔNG CÓ GÌ CHẶN NỮA. Khi đã giao quyền dừng cho
+            # quãng đường thì encoder là điểm chết duy nhất, và nó hỏng KHÔNG
+            # TIẾNG ĐỘNG: mọi nhánh vẫn đúng, chỉ là con số không nhúc nhích nên
+            # chẳng mốc nào bị chạm — kể cả ADVANCE_MAX_TRAVEL_CM, vì nó cũng đo
+            # bằng chính encoder đó. Lý do + vệt log: ADVANCE_ENCODER_DEAD_TIME.
+            if (dung_bang_quang
+                    and time.time() - start >= config.ADVANCE_ENCODER_DEAD_TIME
+                    and xung_adv < config.ADVANCE_ENCODER_DEAD_PULSES):
+                self.stop()
+                logger.error(
+                    "Advance: ENCODER CHẾT — chạy %.1fs mà chỉ đếm %d xung (mốc "
+                    "%d). Đang dừng theo QUÃNG ĐƯỜNG mà quãng không nhúc nhích "
+                    "thì không mốc nào chặn được, kể cả lưới %.0fcm. DỪNG tại "
+                    "chỗ chứ không đi tiếp vào kệ. Chẩn: "
+                    "python3 -m tools.check_encoder_alive",
+                    time.time() - start, xung_adv,
+                    config.ADVANCE_ENCODER_DEAD_PULSES,
+                    config.ADVANCE_MAX_TRAVEL_CM)
+                return False
             # ⛔ CHỐT CHÍNH khi vào KỆ: dừng theo QUÃNG ĐƯỜNG, không theo siêu âm.
             # Siêu âm ở kệ sai cả hai chiều — xem config.ADVANCE_SHELF_STOP_CM.
             # Cõng hàng thì đang đi tới NHÀ MÁY, chốt đó do mảng in lo.

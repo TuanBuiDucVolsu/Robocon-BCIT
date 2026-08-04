@@ -2063,6 +2063,82 @@ class TestAdvanceKhiCongHang(unittest.TestCase):
         self.assertIn("CHẶN CỨNG", "\n".join(nk.output))
 
 
+class _EncoderTuotDay:
+    """Encoder giả cho bài dưới: available=True nhưng số xung do bài test quyết định.
+
+    Đúng hình dạng của WheelEncoder thật khi DÂY BỊ TUỘT — GPIO mở được nên
+    available=True, mà không xung nào về.
+    """
+
+    def __init__(self, xung_moi_lan: int):
+        self.available = True
+        self._xung = xung_moi_lan
+
+    def read_and_reset(self) -> int:
+        return self._xung
+
+
+class TestAdvanceEncoderChet(unittest.TestCase):
+    """⚠️ HỒI QUY: encoder chết KHÔNG TIẾNG ĐỘNG thì advance phải DỪNG, không đi tiếp.
+
+    Đo trên robot 04/08. Sau khi giao quyền dừng ở chặng vào kệ cho quãng đường
+    (siêu âm ở kệ sai cả hai chiều), log in ra đúng dòng:
+        Advance: dừng theo QUÃNG ĐƯỜNG 15.0cm từ giao lộ — bỏ qua siêu âm
+    rồi robot chạy thẳng vào kệ, và KHÔNG hề có dòng "ĐÃ ĐI ...cm".
+
+    Vì `WheelEncoder.available` chỉ nói GPIO có mở được không. Rút hẳn dây encoder
+    ra thì available vẫn True, xung vẫn 0, quãng đường đứng im ở 0.0 — nên KHÔNG
+    mốc nào bị chạm, kể cả lưới an toàn ADVANCE_MAX_TRAVEL_CM, vì nó cũng đo bằng
+    chính encoder đó. Một cảm biến hỏng, cả hai lưới rơi cùng lúc.
+    """
+
+    def _motion(self, xung_moi_lan: int, dist=999.0):
+        m = object.__new__(Motion)
+        m._aborted = lambda: False
+        m.get_distance = lambda *a, **k: dist
+        m.stop = MagicMock()
+        m.stop_gently = MagicMock()
+        m.forward = MagicMock()
+        m.backward = MagicMock()
+        m._escape_intersection = MagicMock()
+        m._recover_line = MagicMock(return_value=False)
+        m.read_line_sensor_raw = lambda: [v / 1023 for v in (917, 0, 0, 0, 0, 0)]
+        # Line vẫn ngon suốt — bài này nói về encoder, không phải về line.
+        m.follow_line = lambda speed: (False, [0, 0, 1, 1, 0, 0])
+        m._encoder_left = _EncoderTuotDay(xung_moi_lan)
+        m._encoder_right = _EncoderTuotDay(xung_moi_lan)
+        return m
+
+    def test_dead_encoder_stops_instead_of_ramming_the_shelf(self):
+        m = self._motion(0)
+        with self.assertLogs("control.motion", level="ERROR") as nk:
+            self.assertFalse(m.advance_to_end(timeout=6.0))
+        ghi = "\n".join(nk.output)
+        self.assertIn("ENCODER CHẾT", ghi)
+        m.stop.assert_called()
+
+    def test_a_live_encoder_reaches_the_distance_mark_normally(self):
+        """Encoder sống thì vẫn dừng theo quãng đường như thường — không báo động oan."""
+        # Mỗi vòng lặp đọc 2 bánh, ~10 xung/vòng → chạm 15cm sau ~54 vòng, rất nhanh.
+        m = self._motion(5)
+        with self.assertLogs("control.motion", level="INFO") as nk:
+            self.assertTrue(m.advance_to_end(timeout=6.0))
+        ghi = "\n".join(nk.output)
+        self.assertIn("ĐÃ ĐI", ghi)
+        self.assertNotIn("ENCODER CHẾT", ghi)
+
+    def test_the_guard_is_silent_when_the_sonar_is_in_charge(self):
+        """Không có encoder thì advance dừng bằng siêu âm — cảnh báo này không được bắn."""
+        m = self._motion(0, dist=9.4)
+        m._encoder_left.available = False
+        m._encoder_right.available = False
+        with self.assertLogs("control.motion", level="WARNING") as nk:
+            self.assertTrue(m.advance_to_end(timeout=6.0))
+        ghi = "\n".join(nk.output)
+        self.assertIn("CHẶN CỨNG", ghi)
+        self.assertNotIn("ENCODER CHẾT", ghi)
+
+
 class TestNguongThichNghiDoiCoDenThat(unittest.TestCase):
     """Ngưỡng thích nghi chỉ có nghĩa khi trên thanh CÓ CÁI GÌ ĐÓ ĐEN THẬT.
 

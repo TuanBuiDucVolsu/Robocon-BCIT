@@ -696,6 +696,19 @@ ADVANCE_INTERSECTION_DAM = 5
 # Quãng này ĐO TỪ LÚC BẮT ĐẦU THOÁT GIAO LỘ, nên đã gồm cả đoạn escape.
 ADVANCE_SHELF_STOP_CM = 15.0
 
+# Bao lâu KHÔNG có xung encoder thì coi như encoder CHẾT và dừng khẩn.
+# 04/08, sau khi giao quyền dừng cho quãng đường: log in đúng dòng "dừng theo QUÃNG
+# ĐƯỜNG 15.0cm — bỏ qua siêu âm" rồi robot chạy thẳng vào kệ, KHÔNG hề in dòng "ĐÃ
+# ĐI ...cm". Chữ ký của encoder chết: mọi nhánh vẫn đúng, chỉ là con số không bao
+# giờ nhúc nhích, nên không mốc nào bị chạm — kể cả lưới an toàn
+# ADVANCE_MAX_TRAVEL_CM, vì nó cũng đo bằng chính encoder đó.
+# `WheelEncoder.available` KHÔNG bắt được ca này: nó chỉ nói GPIO có mở được không.
+# Rút hẳn dây ra thì available vẫn True.
+# Ở SPEED_DEFAULT, 1 giây chạy cho hàng trăm xung, nên 1.5s mà dưới 20 xung thì
+# không thể là bánh đang quay. Chẩn bằng: python3 -m tools.check_encoder_alive
+ADVANCE_ENCODER_DEAD_TIME = 1.5
+ADVANCE_ENCODER_DEAD_PULSES = 20
+
 ADVANCE_FACTORY_DARK_MIN_CM = 4.0
 # ⚠️ 10.0 → 4.0 ngày 03/08. Ô FOXCONN nằm SÁT NGAY giao lộ (không như Samsung/Hana
 # ở xa hơn), nên advance chạm tấm in khi mới đi ~8cm. Với mốc 10 thì tín hiệu "đã
