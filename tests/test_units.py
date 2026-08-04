@@ -2410,13 +2410,33 @@ class TestMangInKhongPhaiGiaoLo(unittest.TestCase):
             self.assertEqual(LineSensor.la_giao_lo_that(raw), mong_doi,
                              f"{ten}: ADC {list(adc)}, tối nhất {min(adc)}")
 
-    def test_deep_black_threshold_sits_between_the_two_groups(self):
-        """Ngưỡng phải nằm GIỮA hai nhóm, không sát mép — để còn dư địa."""
-        that = [min(a) for _, a, ok in self.CA if ok]
-        in_hinh = [min(a) for _, a, ok in self.CA if not ok and min(a) > 0]
-        nguong = config.LINE_DEEP_BLACK * 1023
-        self.assertLess(max(that), nguong, "giao lộ thật phải nằm DƯỚI ngưỡng")
-        self.assertGreater(min(in_hinh), nguong, "mảng in phải nằm TRÊN ngưỡng")
+    def test_counting_deep_black_eyes_separates_far_better_than_the_minimum(self):
+        """⚠️ ĐẾM SỐ MẮT đen sâu, đừng so mắt TỐI NHẤT — biên rộng hơn nhiều.
+
+        Bản đầu đòi min(raw) ≤ ngưỡng. Biên khi đó là 34 (giao lộ tối nhất trong
+        các lần đo) ↔ 53 (tấm in) — chỉ 19 nấc ADC, quá mỏng cho một cảm biến đo
+        PHẢN XẠ mà độ sáng đèn phát còn trôi theo pin.
+        Đếm số mắt thì tách hẳn: giao lộ cho 3-6 mắt, mảng in cho 0-1.
+        """
+        # Hai điều kiện là AND. Chỉ so số mắt đen SÂU trên những ca đã qua được
+        # điều kiện thứ nhất (đủ mắt đen ĐẬM) — đó mới là lúc tiêu chí này quyết
+        # định. Ca "vạch thường" bị điều kiện thứ nhất loại nên không tính ở đây.
+        nguong = config.LINE_DEEP_BLACK
+        that, in_hinh = [], []
+        for _, adc, la_giao_lo in self.CA:
+            raw = [v / 1023 for v in adc]
+            if LineSensor.dem_den_dam(raw) < config.INTERSECTION_THRESHOLD:
+                self.assertFalse(la_giao_lo,
+                                 f"giao lộ thật mà không đủ mắt đen ĐẬM: {adc}")
+                continue
+            n = sum(1 for v in raw if v <= nguong)
+            (that if la_giao_lo else in_hinh).append(n)
+        self.assertGreaterEqual(min(that), config.LINE_DEEP_BLACK_COUNT,
+                                f"giao lộ thật cho quá ít mắt đen sâu: {that}")
+        self.assertLess(max(in_hinh), config.LINE_DEEP_BLACK_COUNT,
+                        f"mảng in lọt qua: {in_hinh}")
+        self.assertGreaterEqual(min(that) - max(in_hinh), 2,
+                                f"biên quá mỏng — giao lộ {that}, mảng in {in_hinh}")
 
 
 class TestDemGiaoLoDoiDenDam(unittest.TestCase):

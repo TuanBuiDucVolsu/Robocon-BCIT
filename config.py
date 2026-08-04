@@ -494,7 +494,14 @@ LINE_STRICT_BLACK = 0.15
 # Đây là dấu hiệu tách được hai loại, khác với ĐỘ SÁNG (đã thử và loại: ngã tư
 # thật cho cả 6 mắt đọc 0 nên "phải có mắt sáng" là sai).
 # 0.04 × 1023 ≈ ADC 41 — nằm giữa 0 và 53, cách xa cả hai phía.
-LINE_DEEP_BLACK = 0.04
+LINE_DEEP_BLACK = 0.06
+# Đòi ÍT NHẤT bấy nhiêu mắt đen sâu. Đếm SỐ MẮT chắc hơn hẳn nhìn mắt tối nhất —
+# số đo trên robot (cột phải là số mắt ≤61):
+#     giao lộ            0,0,0,0,74/52    → 3, 4, 4, 5, 6 mắt
+#     vòng tròn ROBOCON  min 69           → 0 mắt
+#     tấm in nhà máy     min 53, 56       → 1 mắt
+# Biên giữa hai nhóm là 1↔3, rộng gấp nhiều lần so với so mắt tối nhất (34↔53).
+LINE_DEEP_BLACK_COUNT = 2
 
 # Đo lại khi ĐỨNG YÊN mà GẦN hơn mục tiêu quá mức này → approach_shelf THẤT BẠI,
 # không trả True nữa. Đứng gần hơn mục tiêu nhiều nghĩa là có gì đó ở TRƯỚC đã sai

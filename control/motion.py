@@ -170,8 +170,9 @@ class LineSensor:
         """
         if not raw:
             return False
+        sau = sum(1 for v in raw if v <= config.LINE_DEEP_BLACK)
         return (LineSensor.dem_den_dam(raw) >= config.INTERSECTION_THRESHOLD
-                and min(raw) <= config.LINE_DEEP_BLACK)
+                and sau >= config.LINE_DEEP_BLACK_COUNT)
 
     def read(self) -> list[int]:
         """Đọc digital (0/1) sau ngưỡng — tương thích API cũ."""
@@ -830,8 +831,25 @@ class Motion:
         # Ở khu nhà máy vốn cũng chẳng có mặt phẳng nào để canh, nên điểm dừng đúng
         # là HẾT LINE — line kết thúc ở mép ô nhà máy.
         cong_hang = getattr(self, "dang_cong_hang", False)
+        # ⛔ VÀO KỆ: dừng theo QUÃNG ĐƯỜNG, siêu âm KHÔNG còn quyền quyết định.
+        # Bản trước đặt chốt quãng đường SAU các nhánh siêu âm trong vòng lặp nên
+        # siêu âm vẫn quyết trước — với số đo 12.2cm cố định (cảm biến đang nhìn một
+        # vật trên CHÍNH robot), advance dừng NGAY tại giao lộ rồi bước luồn càng
+        # tiến mù 35cm vào kệ. Vá nửa vời còn tệ hơn không vá: log trông như đã sửa.
+        do_duoc_quang = (config.ENCODER_PULSES_PER_CM > 0
+                         and getattr(getattr(self, "_encoder_left", None),
+                                     "available", False)
+                         and getattr(getattr(self, "_encoder_right", None),
+                                     "available", False))
+        dung_bang_quang = ((not cong_hang) and do_duoc_quang
+                           and config.ADVANCE_SHELF_STOP_CM > 0)
+        bo_sieu_am = cong_hang or dung_bang_quang
         if cong_hang:
             logger.info("Advance: ĐANG CÕNG HÀNG — bỏ qua siêu âm, đi tới HẾT LINE")
+        elif dung_bang_quang:
+            logger.info("Advance: dừng theo QUÃNG ĐƯỜNG %.1fcm từ giao lộ — bỏ qua "
+                        "siêu âm (ở kệ nó sai cả hai chiều)",
+                        config.ADVANCE_SHELF_STOP_CM)
         thay_muc_tieu = False    # đã từng thấy vật trong APPROACH_DETECT_DISTANCE
         mat_vong = 0             # số nhịp kịch trần LIÊN TIẾP
         nhieu = 0                # số gai nhiễu đã bỏ qua
@@ -858,7 +876,7 @@ class Motion:
             # Chỉ chặn khi số đo đang TRONG TẦM NGUY HIỂM. Số đo kịch trần (không
             # có tiếng vọng, ~100cm) cũng "không đổi" — chặn cả ca đó thì robot đứng
             # im vĩnh viễn. Ở xa thì số đo cũ vô hại vì còn lâu mới tới điểm dừng.
-            if (not cong_hang
+            if (not bo_sieu_am
                     and 0 <= dist <= config.APPROACH_SLOW_DISTANCE * 2
                     and time.time() - doi_luc > config.ULTRASONIC_STALE_TIME):
                 self.stop()
@@ -867,7 +885,7 @@ class Motion:
 
             # ⛔ MÙ SIÊU ÂM — nhánh "hết line" ở kệ CHÍNH LÀ đâm vào kệ (vạch
             # kéo tới cách chân kệ 1mm), nên không có số đo là không được đi tiếp.
-            if cong_hang:
+            if bo_sieu_am:
                 pass                      # mọi nhánh siêu âm dưới đây đều bỏ qua
             elif dist >= config.ADVANCE_MAX_RANGE_CM:
                 mat_vong += 1
@@ -876,7 +894,7 @@ class Motion:
                 if dist <= config.APPROACH_DETECT_DISTANCE:
                     thay_muc_tieu = True
 
-            if (not cong_hang) and thay_muc_tieu \
+            if (not bo_sieu_am) and thay_muc_tieu \
                     and mat_vong >= config.ADVANCE_LOST_ECHO_COUNT:
                 # Ca giết robot: thấy 30→25→22 rồi 100,100,100 mà vẫn chạy tiếp.
                 self.stop_gently(base_speed)
@@ -887,7 +905,7 @@ class Motion:
                     mat_vong, " ".join(f"{t:.2f}s:{d:.1f}" for t, d in vet_adv[-10:]))
                 return True
 
-            if ((not cong_hang) and (not thay_muc_tieu)
+            if ((not bo_sieu_am) and (not thay_muc_tieu)
                     and time.time() - start >= config.ADVANCE_BLIND_TIMEOUT):
                 self.stop()
                 logger.error(
@@ -905,7 +923,7 @@ class Motion:
             # lệnh xoá cắt từ dòng comment phía trên xuống và nuốt luôn nó. Test
             # viết cho nó lại không phân biệt được với nhánh "tới gần mục tiêu" nên
             # không ai biết, và robot lao vào kệ thêm nhiều lần.
-            if (not cong_hang) and 0 <= dist <= config.ADVANCE_HARD_STOP_CM:
+            if (not bo_sieu_am) and 0 <= dist <= config.ADVANCE_HARD_STOP_CM:
                 that, khop = self._do_lai_khi_dung(dist, base_speed)
                 if (not khop) and that > config.ADVANCE_HARD_STOP_CM \
                         and nhieu < config.ULTRASONIC_MAX_GLITCH:
@@ -921,7 +939,7 @@ class Motion:
                                " ".join(f"{t:.2f}s:{d:.1f}" for t, d in vet_adv[-10:]))
                 return True
 
-            if (not cong_hang) and 0 <= dist <= config.APPROACH_SLOW_DISTANCE:
+            if (not bo_sieu_am) and 0 <= dist <= config.APPROACH_SLOW_DISTANCE:
                 near_streak += 1
                 if near_streak >= 2:
                     that, khop = self._do_lai_khi_dung(dist, base_speed)
