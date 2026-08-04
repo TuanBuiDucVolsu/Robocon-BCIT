@@ -2114,8 +2114,7 @@ class Motion:
         return False
 
     def _escape_intersection(self, speed: float = config.SPEED_DEFAULT,
-                             reverse: bool = False,
-                             bo_qua_neu_khong_o_giao_lo: bool = False) -> bool:
+                             reverse: bool = False) -> bool:
         """Rời khỏi giao lộ đang đứng, trước khi bám line tiếp.
 
         Chạy tới khi CẢM BIẾN không còn báo giao lộ nữa, chặn trên bằng thời gian —
@@ -2145,33 +2144,56 @@ class Motion:
         # VỚI VIÊN PIN LÚC ĐO NÓ.
         # Bỏ qua ở đây an toàn vì chặng nào thật sự cần escape đều đã có CỔNG QUÃNG
         # ĐƯỜNG (FORWARD_MIN_TRAVEL_CM) chặn việc đếm lại chính giao lộ vừa đứng.
-        # ⚠️ CHỈ cho phép bỏ qua ở chặng ĐẦU của route KHÔNG khởi hành từ điểm cuối
-        # (tức route START → kệ). Mọi chặng khác robot ĐANG đứng trên giao lộ thật;
-        # đọc hụt một nhịp mà bỏ qua escape thì follow_line nhận lại CHÍNH giao lộ
-        # đó, route lệch một hàng và robot rẽ sai — đắt hơn hẳn lỗi đang chữa.
-        dau = self.read_line_sensor()
-        if bo_qua_neu_khong_o_giao_lo and sum(dau) < config.INTERSECTION_THRESHOLD:
-            logger.info(
-                "Không thoát giao lộ: cảm biến %s — chỉ %d/%d mắt thấy vạch, robot "
-                "KHÔNG đứng trên giao lộ nào. Chạy mù ~0.4s ở đây là bước qua luôn "
-                "giao lộ sắp phải đếm.", dau, sum(dau),
-                config.INTERSECTION_THRESHOLD)
-            return True
-
         drive = self.backward if reverse else self.forward
         drive(speed)
         start = time.time()
         cap = getattr(config, "ESCAPE_MAX_TIME", 1.2)
         san = getattr(config, "ESCAPE_MIN_TIME", 0.15)
         can_sach = getattr(config, "ESCAPE_CLEAR_TIME", 0.25)
+        # ⛔ SÀN VÀ TRẦN ĐO BẰNG QUÃNG ĐƯỜNG, KHÔNG BẰNG ĐỒNG HỒ.
+        # Đây là gốc của cú đâm kệ ngày 04/08. Sàn thời gian ESCAPE_MIN_TIME +
+        # ESCAPE_CLEAR_TIME ≈ 0.4s là một cú CHẠY MÙ, và quãng của 0.4s gắn với
+        # VIÊN PIN: pin yếu đi ~5cm, pin đầy đi ~8cm. Route START → SHELF0 để robot
+        # lại rất gần C0R0 mà chưa tới; 8cm là bước qua hẳn nó, bước đếm giao lộ
+        # chẳng còn gì để gặp nên chạy thẳng tới KỆ.
+        # Vá lần trước — "không đứng trên giao lộ thì đừng thoát" — SAI: robot vừa
+        # xoay 90° TẠI giao lộ thì nhìn dọc nhánh mới, ngã tư đọc ra y hệt vạch
+        # thẳng ([0,0,0,1,1,0]). Escape bị bỏ qua ở các chặng đó, follow_line nhận
+        # lại chính giao lộ đang đứng, route lệch một hàng, robot quay đầu ở chỗ
+        # logo. Không có phép thử cảm biến nào đúng được ngay sau khi xoay.
+        # Chốt bằng quãng đường thì không cần phép thử nào: 3cm đủ ra khỏi vạch
+        # rộng 2cm, và 3cm thì không bao giờ nhảy qua được một giao lộ.
+        do_duoc = (config.ENCODER_PULSES_PER_CM > 0
+                   and getattr(getattr(self, "_encoder_left", None),
+                               "available", False)
+                   and getattr(getattr(self, "_encoder_right", None),
+                               "available", False))
+        if do_duoc:
+            self._doc_xung()
+        xung = 0
+        san_cm = config.ESCAPE_MIN_CM
+        tran_cm = config.ESCAPE_MAX_CM
         sach_tu = None
         thoat = False
         while time.time() - start < cap:
             if self._aborted():
                 return False
+            if do_duoc:
+                xung += self._doc_xung()
+                di_cm = xung / config.ENCODER_PULSES_PER_CM
+                if di_cm >= tran_cm:
+                    self.stop()
+                    logger.warning(
+                        "Rời giao lộ: đã đi %.1fcm (trần %.1f) mà cảm biến vẫn báo "
+                        "giao lộ — dừng chứ không đi thêm. Quá trần ở đây là bước "
+                        "qua luôn giao lộ sắp phải đếm.", di_cm, tran_cm)
+                    return False
+            else:
+                di_cm = None
+            du_san = (di_cm >= san_cm) if di_cm is not None \
+                else (time.time() - start >= san)
             values = self.read_line_sensor()
-            if (sum(values) < config.INTERSECTION_THRESHOLD
-                    and time.time() - start >= san):
+            if sum(values) < config.INTERSECTION_THRESHOLD and du_san:
                 # Đòi sạch LIÊN TỤC một khoảng, không phải vài nhịp. 3 nhịp chỉ là
                 # 30ms — ở 40% duty robot mới nhích ~0.5cm, tức vừa chớm ra khỏi mép
                 # vạch chứ chưa qua hẳn, lắc nhẹ là cán lại vào và follow_line đọc ra
@@ -2194,7 +2216,8 @@ class Motion:
                 logger.warning("Rời giao lộ mất tới %.2fs (cảm biến %s) — chập chờn, "
                                "robot có thể đang ở MÉP mảng đen chứ chưa ra hẳn", dt, values)
             else:
-                logger.info("Rời giao lộ sau %.2fs (cảm biến %s)", dt, values)
+                logger.info("Rời giao lộ sau %.2fs, %s (cảm biến %s)", dt,
+                            "?" if di_cm is None else f"{di_cm:.1f}cm", values)
         else:
             logger.warning("Rời giao lộ: hết %.2fs mà cảm biến vẫn báo giao lộ — "
                            "robot có thể đang nằm trên mảng đen lớn, không phải vạch", dt)
@@ -2219,11 +2242,7 @@ class Motion:
             if self._aborted():
                 return False
             logger.info("Đi đến giao lộ %d/%d", i + 1, count)
-            # Chỉ chặng đầu của route xuất phát từ Ô START mới được bỏ qua escape —
-            # đó là chỗ duy nhất robot có thể KHÔNG đứng trên giao lộ.
-            self._escape_intersection(
-                base_speed,
-                bo_qua_neu_khong_o_giao_lo=(i == 0 and not roi_diem_cuoi))
+            self._escape_intersection(base_speed)
             # ⛔ CỔNG QUÃNG ĐƯỜNG áp cho MỌI chặng, TRỪ chặng ĐẦU của route không
             # khởi hành từ điểm cuối.
             #   i > 0  → luôn bật. Hai giao lộ thật cách nhau ~40cm, mà

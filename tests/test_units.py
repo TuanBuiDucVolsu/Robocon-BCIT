@@ -1355,26 +1355,40 @@ class TestEscapeIntersection(unittest.TestCase):
             self.assertFalse(m._escape_intersection(40),
                              "2 nhịp sạch giữa chừng không đủ để tuyên bố đã thoát")
 
-    def test_khong_dung_tren_giao_lo_thi_khong_chay_mu(self):
-        """⚠️ HỒI QUY: không đứng trên giao lộ thì escape KHÔNG được nhúc nhích.
+    def test_san_va_tran_do_bang_QUANG_DUONG_khong_bang_dong_ho(self):
+        """⚠️ HỒI QUY 04/08: sàn thời gian của escape là một cú CHẠY MÙ gắn với PIN.
 
-        Đo trên robot 04/08, route START → SHELF0: exit_start_zone bỏ robot lại
-        RẤT GẦN C0R0 mà chưa tới, rồi navigate_intersections mở đầu bằng escape —
-        log "Rời giao lộ sau 0.41s". Đó là chạy MÙ (sàn ESCAPE_MIN_TIME +
-        ESCAPE_CLEAR_TIME), và quãng của 0.41s phụ thuộc PIN: pin đầy đi ~8cm, đủ
-        bước qua hẳn C0R0. Bước đếm giao lộ sau đó chẳng còn gì để gặp nên chạy
-        tiếp tới KỆ và đọc gầm kệ thành giao lộ. Thước: bánh cách C0R0 25cm.
+        Sàn ESCAPE_MIN_TIME + ESCAPE_CLEAR_TIME ≈ 0.4s. Pin yếu 0.4s đi ~5cm, pin
+        đầy đi ~8cm. Route START → SHELF0 bỏ robot lại rất gần C0R0 mà chưa tới;
+        8cm là bước qua hẳn nó, bước đếm giao lộ chẳng còn gì để gặp nên chạy
+        thẳng tới KỆ và đọc gầm kệ (ADC [0,0,0,0,0,0]) thành giao lộ. Thước đo:
+        bánh dừng cách C0R0 25cm. Đó là lý do "hôm qua chạy được, hôm nay đâm".
+
+        Có encoder thì sàn phải tính bằng cm — dừng ngay khi đủ quãng, bất kể
+        đồng hồ nói gì.
         """
         m = self._motion([self.LINE])
-        with patch.object(config, "ESCAPE_MIN_TIME", 0.3), \
+        m._encoder_left = _EncoderTuotDay(30)     # ~0.8cm mỗi vòng lặp
+        m._encoder_right = _EncoderTuotDay(30)
+        with patch.object(config, "ESCAPE_MIN_TIME", 5.0), \
+             patch.object(config, "ESCAPE_MIN_CM", 3.0), \
              patch.object(config, "ESCAPE_CLEAR_TIME", 0.0):
             t0 = time.time()
-            self.assertTrue(m._escape_intersection(
-                40, bo_qua_neu_khong_o_giao_lo=True))
-        self.assertLess(time.time() - t0, 0.1, "không được chờ hết sàn thời gian")
-        m.forward.assert_not_called()
-        m.backward.assert_not_called()
+            self.assertTrue(m._escape_intersection(40))
+        self.assertLess(time.time() - t0, 1.0,
+                        "đủ 3cm là phải thoát, không chờ hết sàn ĐỒNG HỒ 5s")
 
+    def test_tran_quang_duong_chan_viec_buoc_qua_giao_lo(self):
+        """Mảng đen lớn: dừng khi đủ trần QUÃNG ĐƯỜNG, không đi thêm."""
+        m = self._motion([self.GIAO_LO])
+        m._encoder_left = _EncoderTuotDay(60)
+        m._encoder_right = _EncoderTuotDay(60)
+        with patch.object(config, "ESCAPE_MAX_CM", 8.0), \
+             patch.object(config, "ESCAPE_MAX_TIME", 5.0):
+            t0 = time.time()
+            self.assertFalse(m._escape_intersection(40))
+        self.assertLess(time.time() - t0, 1.0, "phải dừng theo cm, không chờ 5s")
+        m.stop.assert_called()
 
     def test_cac_chang_khac_van_thoat_binh_thuong(self):
         """⚠️ Bỏ qua escape CHỈ dành cho chặng rời ô START.

@@ -551,6 +551,14 @@ APPROACH_STEP_TIME = 0.15     # Giây chạy mỗi nhịp trong vùng gần
 # = 40 nằm không xa vùng chết nên 0.3s có thể chỉ đi 1.5-2cm — đúng ranh giới, và
 # smoke option 1 đã gãy thật vì chuyện này ("Advance: gặp giao lộ" ngay tại C0R0).
 ESCAPE_MIN_TIME = 0.15       # Giây tối thiểu vẫn chạy, kể cả khi cảm biến đã sạch ngay
+# ⛔ SÀN/TRẦN CỦA "THOÁT GIAO LỘ" ĐO BẰNG QUÃNG ĐƯỜNG, không bằng đồng hồ.
+# Gốc của cú đâm kệ 04/08: sàn thời gian ≈0.4s là một cú CHẠY MÙ, quãng của nó gắn
+# với VIÊN PIN — pin yếu ~5cm, pin đầy ~8cm. Route START → SHELF0 bỏ robot lại rất
+# gần C0R0 mà chưa tới; 8cm là bước qua hẳn nó, bước đếm giao lộ chẳng còn gì để
+# gặp nên chạy thẳng tới kệ (thước đo: bánh dừng cách C0R0 25cm).
+# 3cm đủ ra khỏi vạch rộng 2cm, và 3cm thì không bao giờ nhảy qua được một giao lộ.
+ESCAPE_MIN_CM = 3.0
+ESCAPE_MAX_CM = 8.0
 # Giây cảm biến phải sạch LIÊN TỤC mới coi là đã ra khỏi giao lộ. Không phải "vài
 # nhịp": 3 nhịp chỉ là 30ms, ở ADVANCE_SPEED=40 robot mới nhích ~0.5cm — vừa chớm ra
 # khỏi mép vạch chứ chưa qua hẳn, lắc nhẹ là cán lại vào. Robot VẪN CHẠY trong lúc
