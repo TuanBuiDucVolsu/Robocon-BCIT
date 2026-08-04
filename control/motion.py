@@ -812,6 +812,7 @@ class Motion:
         xung_adv += self._doc_xung()
         start = time.time()
         lost_since = None
+        nhip_luc = start         # lần cuối in nhịp tim quãng đường
         values = []              # nhánh "ĐI QUÁ XA" in nó ra, mà nó chỉ được gán ở
                                  # cuối vòng — vòng đầu sẽ NameError nếu quãng đã
                                  # vượt mốc ngay từ xung của escape.
@@ -965,6 +966,16 @@ class Motion:
             xung_adv += self._doc_xung()
             if config.ENCODER_PULSES_PER_CM > 0:
                 quang_adv = xung_adv / config.ENCODER_PULSES_PER_CM
+
+            # NHỊP TIM — in quãng đường đang đếm được, đều đặn.
+            # 04/08: encoder ĐO ĐƯỢC (365/368 xung trong 1s, check_encoder_alive),
+            # mà advance vẫn không bao giờ chạm mốc 15cm rồi đâm kệ. Không có số
+            # trong vòng lặp thì mọi giả thuyết đều là đoán. Rẻ: ~4 dòng/giây.
+            if time.time() - nhip_luc >= config.ADVANCE_HEARTBEAT_TIME:
+                nhip_luc = time.time()
+                logger.info("Advance: %.2fs — %d xung = %.1fcm (mốc %.1f), "
+                            "siêu âm %.1fcm", time.time() - start, xung_adv,
+                            quang_adv, config.ADVANCE_SHELF_STOP_CM, dist)
 
             # ⛔ ENCODER CHẾT = KHÔNG CÓ GÌ CHẶN NỮA. Khi đã giao quyền dừng cho
             # quãng đường thì encoder là điểm chết duy nhất, và nó hỏng KHÔNG

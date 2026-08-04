@@ -706,6 +706,11 @@ ADVANCE_SHELF_STOP_CM = 15.0
 # Rút hẳn dây ra thì available vẫn True.
 # Ở SPEED_DEFAULT, 1 giây chạy cho hàng trăm xung, nên 1.5s mà dưới 20 xung thì
 # không thể là bánh đang quay. Chẩn bằng: python3 -m tools.check_encoder_alive
+# Bao lâu in một dòng nhịp tim quãng đường trong advance. Không có số trong vòng
+# lặp thì mọi giả thuyết về "vì sao nó không dừng" đều là đoán — 04/08 tôi đoán
+# encoder chết, đo ra encoder sống, mất một lượt chạy vô ích.
+ADVANCE_HEARTBEAT_TIME = 0.25
+
 ADVANCE_ENCODER_DEAD_TIME = 1.5
 ADVANCE_ENCODER_DEAD_PULSES = 20
 
