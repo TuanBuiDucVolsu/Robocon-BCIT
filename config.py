@@ -1051,7 +1051,17 @@ CAMERA_RESOLUTION = (1296, 972)
 # Ngưỡng cũ 0.08 nằm DƯỚI cả nền: ngăn trống vẫn vượt ngưỡng nên robot nhận một
 # nhãn và tin là thật. 0.20 nằm giữa hai cụm, cách nền 1.7× mà vẫn còn biên dưới
 # số đo thật thấp nhất (26.9%).
-CONFIDENCE_THRESHOLD = 0.20  # Tỷ lệ pixel tối thiểu (đường HSV)
+# ⚠️ 0.12 LÀ SỐ ĐÃ ĐO VÀ CÓ LÝ DO — ĐỪNG NÂNG. Xem CLAUDE.md mục "HAI THAY ĐỔI SAU
+# PHẢI ĐI CÙNG NHAU" (a950c75). Decal hana nền TRẮNG nên dải amkor luôn ăn nhiều
+# pixel hơn: trên kiện hana thật, amkor 47.0% còn hana chỉ 15.4%. Hana KHÔNG cần
+# thắng về số pixel — màu đỏ là đặc trưng riêng, sạch hơn 20 lần (15.4% trên kiện
+# hana so với 0.6-0.9% trên ba loại kia). Nó chỉ cần VƯỢT NGƯỠNG để cơ chế ưu tiên
+# CHROMATIC_LABELS kích hoạt và chặn amkor.
+# Nâng lên 0.20 là hana 15.4% không vượt ngưỡng → amkor thắng → HANA THÀNH AMKOR.
+# Tôi đã làm đúng lỗi đó ngày 04/08 và người dùng báo "hana thành amkor" ngay sau.
+# Ô TRỐNG đọc 9.5-12.2% nên 0.12 để lọt sát nút — ca đó nay do luật "hai càng không
+# bao giờ cùng một nhãn" trong classify_pair chặn, KHÔNG phải do ngưỡng.
+CONFIDENCE_THRESHOLD = 0.12
 # Hạ tiếp 0.12 → 0.08. Ở 0.12, hana chỉ vượt ngưỡng đúng 0.5 điểm phần trăm
 # (đo được 12.5%) — ánh sáng đổi chút hoặc robot dừng lệch vài mm là tụt xuống dưới,
 # cơ chế ưu tiên chromatic không kích hoạt, và amkor (23.9%) thắng. ĐÃ GẶP THẬT.
