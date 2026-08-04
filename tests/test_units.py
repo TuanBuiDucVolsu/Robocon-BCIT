@@ -1333,8 +1333,12 @@ class TestEscapeIntersection(unittest.TestCase):
         m.stop.assert_called_once()
 
     def test_honours_min_time_even_if_clear_immediately(self):
-        """Sạch ngay từ đầu cũng phải chạy đủ sàn, không thì gần như không nhúc nhích."""
-        m = self._motion([self.LINE])
+        """Sạch ngay SAU NHỊP ĐẦU cũng phải chạy đủ sàn, không thì gần như không nhúc nhích.
+
+        Nhịp đầu vẫn phải là giao lộ: không đứng trên giao lộ thì escape không
+        chạy gì cả (xem test_khong_dung_tren_giao_lo_thi_khong_chay_mu).
+        """
+        m = self._motion([self.GIAO_LO] + [self.LINE])
         t0 = time.time()
         with patch.object(config, "ESCAPE_MIN_TIME", 0.2), \
              patch.object(config, "ESCAPE_CLEAR_TIME", 0.0):
@@ -1351,8 +1355,27 @@ class TestEscapeIntersection(unittest.TestCase):
             self.assertFalse(m._escape_intersection(40),
                              "2 nhịp sạch giữa chừng không đủ để tuyên bố đã thoát")
 
-    def test_reverse_uses_backward(self):
+    def test_khong_dung_tren_giao_lo_thi_khong_chay_mu(self):
+        """⚠️ HỒI QUY: không đứng trên giao lộ thì escape KHÔNG được nhúc nhích.
+
+        Đo trên robot 04/08, route START → SHELF0: exit_start_zone bỏ robot lại
+        RẤT GẦN C0R0 mà chưa tới, rồi navigate_intersections mở đầu bằng escape —
+        log "Rời giao lộ sau 0.41s". Đó là chạy MÙ (sàn ESCAPE_MIN_TIME +
+        ESCAPE_CLEAR_TIME), và quãng của 0.41s phụ thuộc PIN: pin đầy đi ~8cm, đủ
+        bước qua hẳn C0R0. Bước đếm giao lộ sau đó chẳng còn gì để gặp nên chạy
+        tiếp tới KỆ và đọc gầm kệ thành giao lộ. Thước: bánh cách C0R0 25cm.
+        """
         m = self._motion([self.LINE])
+        with patch.object(config, "ESCAPE_MIN_TIME", 0.3), \
+             patch.object(config, "ESCAPE_CLEAR_TIME", 0.0):
+            t0 = time.time()
+            self.assertTrue(m._escape_intersection(40))
+        self.assertLess(time.time() - t0, 0.1, "không được chờ hết sàn thời gian")
+        m.forward.assert_not_called()
+        m.backward.assert_not_called()
+
+    def test_reverse_uses_backward(self):
+        m = self._motion([self.GIAO_LO] + [self.LINE])
         with patch.object(config, "ESCAPE_MIN_TIME", 0.0), \
              patch.object(config, "ESCAPE_CLEAR_TIME", 0.0):
             m._escape_intersection(40, reverse=True)

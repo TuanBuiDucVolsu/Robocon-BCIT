@@ -2131,6 +2131,28 @@ class Motion:
         Trả True nếu đã thoát, False nếu hết chặn trên mà cảm biến vẫn báo giao lộ —
         khi đó nhiều khả năng robot nằm trên một mảng đen lớn, không phải giao lộ.
         """
+        # ⛔ KHÔNG ĐỨNG TRÊN GIAO LỘ THÌ ĐỪNG THOÁT. "Thoát giao lộ" chỉ có nghĩa
+        # khi đang đứng trên một cái; không thì đây là một cú CHẠY MÙ ~0.4s
+        # (ESCAPE_MIN_TIME + ESCAPE_CLEAR_TIME) — và quãng của 0.4s phụ thuộc PIN.
+        # Đo trên robot 04/08, route START → SHELF0: exit_start_zone bỏ robot lại
+        # RẤT GẦN C0R0 mà chưa tới, rồi navigate_intersections mở đầu bằng escape,
+        # log "Rời giao lộ sau 0.41s". Pin đầy thì 0.41s đi ~8cm — đủ để bước qua
+        # hẳn C0R0. Sau đó bước đếm giao lộ chẳng còn gì để gặp nên chạy tiếp tới
+        # KỆ, đọc gầm kệ (ADC [0,0,0,0,0,0]) thành giao lộ. Thước đo: bánh xe dừng
+        # cách C0R0 25cm. Pin yếu hôm trước, cùng 0.41s chỉ đi ~5cm nên dừng lại
+        # trước C0R0 và mọi thứ chạy đúng — đúng bài học cũ: HẰNG SỐ THỜI GIAN GẮN
+        # VỚI VIÊN PIN LÚC ĐO NÓ.
+        # Bỏ qua ở đây an toàn vì chặng nào thật sự cần escape đều đã có CỔNG QUÃNG
+        # ĐƯỜNG (FORWARD_MIN_TRAVEL_CM) chặn việc đếm lại chính giao lộ vừa đứng.
+        dau = self.read_line_sensor()
+        if sum(dau) < config.INTERSECTION_THRESHOLD:
+            logger.info(
+                "Không thoát giao lộ: cảm biến %s — chỉ %d/%d mắt thấy vạch, robot "
+                "KHÔNG đứng trên giao lộ nào. Chạy mù ~0.4s ở đây là bước qua luôn "
+                "giao lộ sắp phải đếm.", dau, sum(dau),
+                config.INTERSECTION_THRESHOLD)
+            return True
+
         drive = self.backward if reverse else self.forward
         drive(speed)
         start = time.time()
