@@ -802,7 +802,13 @@ class Motion:
         # Lệnh advance luôn bắt đầu khi robot đang ĐỨNG TRÊN giao lộ (vừa dừng ở
         # giao lộ cuối của forward, hoặc vừa xoay tại giao lộ). Không thoát ra trước
         # thì follow_line() nhận ngay chính giao lộ đó và báo "đi lố".
+        # Đếm quãng TỪ TRƯỚC khi thoát giao lộ: mốc 35.4cm trong SA_BAN là tính từ
+        # GIAO LỘ, mà escape đã đi mất một phần rồi. Bỏ phần đó là dừng muộn.
+        self._doc_xung()
+        xung_adv = 0
+        quang_adv = 0.0
         self._escape_intersection(base_speed)
+        xung_adv += self._doc_xung()
         start = time.time()
         lost_since = None
         # Một lần đo siêu âm chập chờn là đủ để kết thúc advance và báo THÀNH CÔNG —
@@ -831,11 +837,7 @@ class Motion:
         nhieu = 0                # số gai nhiễu đã bỏ qua
         bo_qua_dau = False       # đã dùng cửa sổ ân hạn đầu chưa
         da_quet = False          # đã quét tìm lại line chưa (1 lần)
-        # Quãng advance đã đi, để phân biệt mảng in khu nhà máy với mảng đen của
-        # chính giao lộ vừa thoát.
-        self._doc_xung()
-        xung_adv = 0
-        quang_adv = 0.0
+        # (quãng advance đã khởi tạo TRƯỚC escape — xem trên)
         doi_luc = start          # lần cuối siêu âm ĐỔI giá trị
 
         while time.time() - start < timeout:
@@ -942,6 +944,18 @@ class Motion:
             xung_adv += self._doc_xung()
             if config.ENCODER_PULSES_PER_CM > 0:
                 quang_adv = xung_adv / config.ENCODER_PULSES_PER_CM
+            # ⛔ CHỐT CHÍNH khi vào KỆ: dừng theo QUÃNG ĐƯỜNG, không theo siêu âm.
+            # Siêu âm ở kệ sai cả hai chiều — xem config.ADVANCE_SHELF_STOP_CM.
+            # Cõng hàng thì đang đi tới NHÀ MÁY, chốt đó do mảng in lo.
+            if (not cong_hang) and 0 < config.ADVANCE_SHELF_STOP_CM <= quang_adv:
+                self.stop_gently(base_speed)
+                logger.info(
+                    "Advance: ĐÃ ĐI %.1fcm từ giao lộ (mốc %.1f) — dừng trước kệ "
+                    "theo QUÃNG ĐƯỜNG, không tin siêu âm. Vệt siêu âm: %s",
+                    quang_adv, config.ADVANCE_SHELF_STOP_CM,
+                    " ".join(f"{t:.2f}s:{d:.1f}" for t, d in vet_adv[-10:]) or "(trống)")
+                return True
+
             if 0 < config.ADVANCE_MAX_TRAVEL_CM <= quang_adv:
                 # Lưới an toàn ĐỘC LẬP với cảm biến line: xem
                 # config.ADVANCE_MAX_TRAVEL_CM.

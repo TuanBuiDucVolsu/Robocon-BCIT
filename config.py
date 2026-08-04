@@ -676,6 +676,19 @@ ADVANCE_INTERSECTION_DAM = 5
 # đang cõng hàng, mảng tối đậm chính là điểm dừng.
 # Đòi thêm quãng đường tối thiểu để mảng đen của CHÍNH giao lộ vừa thoát không bị
 # tính nhầm (cửa sổ ân hạn lo phần đầu, số này lo phần sau).
+# Quãng đi tối đa từ GIAO LỘ vào kệ, đo bằng ENCODER — dừng ở đây bất kể siêu âm.
+# ⚠️ Đây là chốt chặn CHÍNH cho chặng vào kệ, không phải phương án dự phòng.
+# Siêu âm KHÔNG đáng tin ở kệ, đã đo hai chiều và cả hai đều sai:
+#     thước 12cm  → siêu âm báo 35.7cm   (04/08, giá kệ hở nên sóng lọt qua)
+#     thật ~35cm  → siêu âm báo 12.2cm   (04/08, robot còn ở giao lộ)
+# Lần thứ hai làm robot dừng NGAY nhịp đầu của advance rồi bước luồn càng tiến mù
+# ~20cm và chui vào gầm kệ. Sau đó đo thời gian thực (test_motion option 8) thấy nó
+# đọc ĐÚNG 12.2cm bất kể robot ở đâu — tức đang nhìn một vật cố định trên robot.
+# Hình học thì chắc: C0R0 → chân kệ = 35.4cm (docs/SA_BAN.md 3b, đo trên bản in),
+# và ta muốn dừng cách kệ ~20cm → đi 15cm kể từ giao lộ.
+# Quãng này ĐO TỪ LÚC BẮT ĐẦU THOÁT GIAO LỘ, nên đã gồm cả đoạn escape.
+ADVANCE_SHELF_STOP_CM = 15.0
+
 ADVANCE_FACTORY_DARK_MIN_CM = 4.0
 # ⚠️ 10.0 → 4.0 ngày 03/08. Ô FOXCONN nằm SÁT NGAY giao lộ (không như Samsung/Hana
 # ở xa hơn), nên advance chạm tấm in khi mới đi ~8cm. Với mốc 10 thì tín hiệu "đã
