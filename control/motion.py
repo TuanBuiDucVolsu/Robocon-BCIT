@@ -1071,7 +1071,13 @@ class Motion:
                 lost_since = time.time()
             elif time.time() - lost_since >= config.LINE_END_CONFIRM_TIME:
                 self.stop()
-                logger.info("Advance: đã hết line — dừng tại điểm cuối")
+                # In VỆT kèm trạng thái cõng hàng: lối thoát này là lối DUY NHẤT
+                # không dùng siêu âm, nên khi robot đi quá thì cần biết ngay nó vào
+                # đây vì hết line thật hay vì cờ cõng hàng kẹt bật.
+                logger.info(
+                    "Advance: đã hết line — dừng tại điểm cuối (cõng hàng=%s, đi "
+                    "%.1fcm). Vệt siêu âm: %s", cong_hang, quang_adv,
+                    " ".join(f"{t:.2f}s:{d:.1f}" for t, d in vet_adv[-10:]) or "(trống)")
                 return True
 
             time.sleep(0.01)

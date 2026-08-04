@@ -93,6 +93,13 @@ def smoke_exit_and_navigate(m: Motion, **_):
     print("  Đặt robot trong ô start, quay mặt về phía Kệ 3.")
     _pause("Sẵn sàng?")
 
+    # ⚠️ DỌN TRẠNG THÁI CÕNG HÀNG TRƯỚC MỖI LƯỢT. Menu smoke dùng CHUNG một đối
+    # tượng Motion cho mọi lần chạy, nên lượt trước hỏng giữa chừng lúc đang cõng
+    # hàng là cờ kẹt True — lượt sau advance BỎ QUA SIÊU ÂM, đi tới hết line và
+    # ĐÂM VÀO KỆ. main.py không dính vì _reset_for_new_run() dọn sẵn.
+    m.dang_cong_hang = False
+    m.xung_da_luon = 0
+
     if not m.exit_start_zone():
         print("  ❌ exit_start_zone THẤT BẠI")
         return False, nav.START_POSE
