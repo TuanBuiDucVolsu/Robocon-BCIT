@@ -580,6 +580,28 @@ class TestClassifyPair(unittest.TestCase):
         v._classify_frame = fake_classify
         return v
 
+    def test_ORB_khong_bi_vut_bo_vi_so_nham_thang_do(self):
+        """⚠️ HỒI QUY 04/08: luật "không trùng nhãn" so nhầm hai thang đo.
+
+        conf của ORB là inlier/CONFIDENCE_NORM, conf của HSV là tỉ lệ pixel — hai
+        thang KHÁC NHAU, không so trực tiếp được (chính codebase đã ghi điều này ở
+        chỗ chọn kết quả tốt nhất). Đo trên robot:
+            trái=amkor (15.0%, ORB), phải=amkor (17.3%, HSV)
+        So trần thì "trái yếu hơn" → vứt bỏ kết quả ORB ĐÃ CHẮC CHẮN để giữ một số
+        HSV mơ hồ. ORB tự quyết định đủ tự tin rồi; bên KHÔNG phải ORB mới đáng nghi.
+        """
+        v = self._vision([(("amkor", 0.150, True), ("amkor", 0.173, False))])
+        goi = []
+
+        def cham_lai(frame, level=None, loai_tru=None):
+            goi.append(loai_tru)
+            return "foxconn", 0.40
+
+        v._classify_by_color = cham_lai
+        self.assertEqual(v.classify_pair(), ("amkor", "foxconn"),
+                         "bên PHẢI (HSV) phải bị chấm lại, không phải bên ORB")
+        self.assertEqual(goi, [{"amkor"}])
+
     def test_hai_cang_cung_nhan_thi_cham_lai_ben_yeu(self):
         """⚠️ HỒI QUY 04/08: hai càng cùng một nhãn là BẰNG CHỨNG SAI.
 

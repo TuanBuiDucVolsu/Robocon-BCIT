@@ -357,7 +357,18 @@ class Vision:
             # robot giao nhầm cả hai kiện — log vẫn báo "Nhận diện OK".
             # Bên nào YẾU hơn thì chấm lại, loại nhãn vừa trùng ra.
             if label_l is not None and label_l == label_r:
-                yeu = "trái" if conf_l <= conf_r else "phải"
+                # ⚠️ KHÔNG so conf_l với conf_r khi một bên đến từ ORB.
+                # conf của ORB là inlier/CONFIDENCE_NORM, conf của HSV là tỉ lệ
+                # pixel — HAI THANG KHÁC NHAU (đã ghi ngay dưới, ở chỗ chọn kết
+                # quả tốt nhất). Đo trên robot 04/08:
+                #     trái=amkor (15.0%, ORB), phải=amkor (17.3%, HSV)
+                # So trần thì "trái yếu hơn" nên nó vứt bỏ một kết quả ORB ĐÃ
+                # CHẮC CHẮN để giữ lại một số HSV mơ hồ. ORB tự quyết định đủ tự
+                # tin rồi, nên bên nào KHÔNG phải ORB mới là bên đáng nghi.
+                if from_orb_l != from_orb_r:
+                    yeu = "phải" if from_orb_l else "trái"
+                else:
+                    yeu = "trái" if conf_l <= conf_r else "phải"
                 logger.warning(
                     "Hai càng cùng ra '%s' (trái %.1f%%, phải %.1f%%) — KHÔNG THỂ "
                     "ĐÚNG: mỗi cặp trên kệ luôn là hai nhà máy khác nhau. Chấm lại "
