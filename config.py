@@ -707,7 +707,14 @@ ADVANCE_INTERSECTION_DAM = 5
 # trong tầm — thanh cảm biến đang ở khoảng trống dưới gầm kệ.
 # Tức robot đã ở kệ TRƯỚC KHI advance chạy; bước đếm giao lộ đọc gầm kệ thành giao
 # lộ. Hạ mốc về gần 0 để advance không cộng thêm gì trong lúc truy chuyện đó.
-ADVANCE_SHELF_STOP_CM = 0.5
+# = RECENTER_CM. Đây KHÔNG phải số ướm — nó là khoảng cách THANH CẢM BIẾN → TRỤC
+# BÁNH, đã đo trên robot. follow_line dừng khi THANH CẢM BIẾN chạm giao lộ, lúc đó
+# TRỤC BÁNH còn cách giao lộ đúng chừng ấy. Đi thêm 12cm = bánh xe nằm trên giao
+# lộ, đúng tư thế bốc hàng.
+# (Mốc 15.0 lúc đầu lấy từ "C0R0 → chân kệ = 35.4cm trên sa bàn" rồi trừ 20 — sai
+# vì 35.4cm là khoảng cách TRÊN SA BÀN còn càng nhô ra trước bánh hơn 20cm, nên nó
+# luôn tới muộn hơn cú va. Mốc 0.5 là để khoá advance lại trong lúc truy lỗi.)
+ADVANCE_SHELF_STOP_CM = 12.0
 
 # Bao lâu KHÔNG có xung encoder thì coi như encoder CHẾT và dừng khẩn.
 # 04/08, sau khi giao quyền dừng cho quãng đường: log in đúng dòng "dừng theo QUÃNG
