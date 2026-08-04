@@ -989,8 +989,9 @@ class Motion:
             if time.time() - nhip_luc >= config.ADVANCE_HEARTBEAT_TIME:
                 nhip_luc = time.time()
                 logger.info("Advance: %.2fs — %d xung = %.1fcm (mốc %.1f), "
-                            "siêu âm %.1fcm", time.time() - start, xung_adv,
-                            quang_adv, config.ADVANCE_SHELF_STOP_CM, dist)
+                            "siêu âm %.1fcm, ADC %s", time.time() - start,
+                            xung_adv, quang_adv, config.ADVANCE_SHELF_STOP_CM,
+                            dist, self.read_line_sensor_adc())
 
             # ⛔ ENCODER CHẾT = KHÔNG CÓ GÌ CHẶN NỮA. Khi đã giao quyền dừng cho
             # quãng đường thì encoder là điểm chết duy nhất, và nó hỏng KHÔNG

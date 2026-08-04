@@ -700,7 +700,14 @@ ADVANCE_INTERSECTION_DAM = 5
 # luồn càng (creep_until, dựa vào IR pallet) lo nốt đoạn cuối.
 # Quãng này đo TỪ GIAO LỘ. Ở chặng vào kệ advance KHÔNG thoát giao lộ nữa: escape
 # một mình đã ngốn ~7.9cm, quá nửa quãng cho phép.
-ADVANCE_SHELF_STOP_CM = 3.0
+# 04/08, mốc 3.0: advance dừng ĐÚNG 3.0cm và báo ✅, robot vẫn ở trong kệ. Nhưng
+# log cùng lúc cho ADC [0, 0, 0, 0, 0, 0] — SÁU SỐ 0 TUYỆT ĐỐI, lặp lại suốt, và
+# siêu âm 6.2cm ngay nhịp đầu. Giao lộ thật không bao giờ cho thế: các chữ ký đã
+# đo là [74,52,0,0,0,34] và [32,0,0,0,0,0]. Sáu số 0 nghĩa là KHÔNG CÓ MẶT PHẢN XẠ
+# trong tầm — thanh cảm biến đang ở khoảng trống dưới gầm kệ.
+# Tức robot đã ở kệ TRƯỚC KHI advance chạy; bước đếm giao lộ đọc gầm kệ thành giao
+# lộ. Hạ mốc về gần 0 để advance không cộng thêm gì trong lúc truy chuyện đó.
+ADVANCE_SHELF_STOP_CM = 0.5
 
 # Bao lâu KHÔNG có xung encoder thì coi như encoder CHẾT và dừng khẩn.
 # 04/08, sau khi giao quyền dừng cho quãng đường: log in đúng dòng "dừng theo QUÃNG
