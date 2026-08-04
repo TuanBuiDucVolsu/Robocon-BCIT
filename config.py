@@ -135,7 +135,7 @@ PWM_COMPENSATION_LEFT_REV = 0.952  # Bù bánh TRÁI khi lùi
 # CƠ CẤU NÂNG (giây)
 # ============================================================
 LIFT_TIME_FLOOR = 0.0
-LIFT_TIME_SHELF_1 = 0.700
+LIFT_TIME_SHELF_1 = 0.55
 LIFT_TIME_SHELF_2 = 3.50  # ĐO trên robot 04/08 (PIN ĐẦY — pin yếu cho 4.20); đội cộng thêm 0.1
 
 # Không có limit switch — home_to_floor() hạ liên tục bấy nhiêu giây để ép chạm đáy.
@@ -144,8 +144,8 @@ LIFT_HOME_DURATION = 4.0   # min_home_duration() = LIFT_TIME_SHELF_2 + LOWER_EXT
 # Bù lệch 2 càng theo VỊ TRÍ TUYỆT ĐỐI: thời gian từ SÀN lên tầng n = LIFT_TIME_SHELF_n
 # + bù. Thời gian mỗi lần chạy = hiệu 2 mốc (Lift._level_time) → không cộng dồn khi đi
 # 0→1→2, và càng lẻ dùng chung hệ số với khi chạy cả 2 càng.
-LIFT_LEFT_EXTRA = -0.100         # Càng TRÁI khi nâng
-LIFT_RIGHT_EXTRA = 0.000         # Càng PHẢI khi nâng
+LIFT_LEFT_EXTRA = -0.150         # Càng TRÁI khi nâng
+LIFT_RIGHT_EXTRA = 0.100         # Càng PHẢI khi nâng
 
 # Bù RIÊNG THEO TỪNG TẦNG khi nâng — GHI ĐÈ hai hằng số trên cho tầng có mặt ở đây.
 # Vì sao cần: LIFT_*_EXTRA áp cho MỌI tầng, nhưng độ lệch 2 càng KHÔNG tỉ lệ với độ
@@ -166,8 +166,8 @@ LIFT_RIGHT_EXTRA_BY_LEVEL: dict[int, float] = {}
 # `_current_level` giữ nguyên là tầng đó, giống hệt cách lift_off() làm: phần dôi
 # ra nằm NGOÀI thang tầng, và home_to_floor() xoá sạch sai lệch tích luỹ.
 LIFT_INSERT_EXTRA = 0.20
-LIFT_LEFT_LOWER_EXTRA = 0.150     # Càng TRÁI khi hạ — ĐÃ ĐO trên robot 03/08
-LIFT_RIGHT_LOWER_EXTRA = 0.250      # Càng PHẢI khi hạ — ĐÃ ĐO trên robot 03/08
+LIFT_LEFT_LOWER_EXTRA = 0.250     # Càng TRÁI khi hạ — ĐÃ ĐO trên robot 03/08
+LIFT_RIGHT_LOWER_EXTRA = 0.350      # Càng PHẢI khi hạ — ĐÃ ĐO trên robot 03/08
 
 # Home RÚT GỌN khi đã biết chắc đang ở tầng nào (Lift.home_from). Hạ từ tầng 1 chỉ
 # cần ~0.9s trong khi home mặc định chạy 4.0s theo tầng cao nhất — hơn 3 giây motor
