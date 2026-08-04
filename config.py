@@ -1020,7 +1020,13 @@ CAMERA_RESOLUTION = (1296, 972)
 # hoạt và chặn amkor lại.
 # ⚠️ PHẢI đi kèm việc nâng sàn S của samsung lên 90. Hạ ngưỡng một mình thì samsung
 # (31.1% trên kiện AMKOR) sẽ thắng ở ô đó — chữa ô này hỏng ô kia.
-CONFIDENCE_THRESHOLD = 0.08  # Tỷ lệ pixel tối thiểu (đường HSV)
+# ⚠️ ĐÃ ĐO trên robot 04/08, không phải số ướm. Cùng một tư thế ở kệ:
+#     kiện THẬT   : 26.9  29.5  29.9  40.3  44.7  57.9  64.7  86.5  96.2 %
+#     ngăn TRỐNG  :  9.5  11.5  12.0  12.2 %   (camera đang đọc màu kệ)
+# Ngưỡng cũ 0.08 nằm DƯỚI cả nền: ngăn trống vẫn vượt ngưỡng nên robot nhận một
+# nhãn và tin là thật. 0.20 nằm giữa hai cụm, cách nền 1.7× mà vẫn còn biên dưới
+# số đo thật thấp nhất (26.9%).
+CONFIDENCE_THRESHOLD = 0.20  # Tỷ lệ pixel tối thiểu (đường HSV)
 # Hạ tiếp 0.12 → 0.08. Ở 0.12, hana chỉ vượt ngưỡng đúng 0.5 điểm phần trăm
 # (đo được 12.5%) — ánh sáng đổi chút hoặc robot dừng lệch vài mm là tụt xuống dưới,
 # cơ chế ưu tiên chromatic không kích hoạt, và amkor (23.9%) thắng. ĐÃ GẶP THẬT.

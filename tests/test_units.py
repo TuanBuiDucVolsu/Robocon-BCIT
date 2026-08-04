@@ -580,6 +580,34 @@ class TestClassifyPair(unittest.TestCase):
         v._classify_frame = fake_classify
         return v
 
+    def test_hai_cang_cung_nhan_thi_cham_lai_ben_yeu(self):
+        """⚠️ HỒI QUY 04/08: hai càng cùng một nhãn là BẰNG CHỨNG SAI.
+
+        12 kiện / 4 nhà máy = mỗi nhà máy 3 kiện, 6 cặp = 6 cạnh của đồ thị đủ 4
+        đỉnh → mỗi cặp LUÔN là hai nhà máy khác nhau (docs/HAPPY_CASE.md). Đo
+        trên robot: cả hai càng ra amkor 50.6%/58.3%, log báo "Nhận diện OK", và
+        robot giao NHẦM cả hai kiện. Tin cậy cao không cứu được — chính vì cao mà
+        nó lọt.
+
+        Bên YẾU hơn phải chấm lại, loại nhãn vừa trùng.
+        """
+        v = self._vision([(("amkor", 0.50, False), ("amkor", 0.58, False))])
+        goi = []
+
+        def cham_lai(frame, level=None, loai_tru=None):
+            goi.append(loai_tru)
+            return "samsung", 0.40
+
+        v._classify_by_color = cham_lai
+        self.assertEqual(v.classify_pair(), ("samsung", "amkor"),
+                         "bên TRÁI yếu hơn (50 < 58) nên nó phải bị chấm lại")
+        self.assertEqual(goi, [{"amkor"}], "phải loại đúng nhãn đã trùng")
+
+    def test_hai_nhan_khac_nhau_thi_khong_dung_toi(self):
+        v = self._vision([(("samsung", 0.50, False), ("amkor", 0.58, False))])
+        v._classify_by_color = lambda *a, **k: self.fail("không được chấm lại")
+        self.assertEqual(v.classify_pair(), ("samsung", "amkor"))
+
     def test_both_confident_first_try(self):
         v = self._vision([(("samsung", 0.9, True), ("foxconn", 0.9, True))])
         self.assertEqual(v.classify_pair(), ("samsung", "foxconn"))

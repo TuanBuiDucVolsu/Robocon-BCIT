@@ -183,7 +183,8 @@ class Vision:
     # Phân tích màu HSV — phương pháp DỰ PHÒNG
     # ----------------------------------------------------------
 
-    def _classify_by_color(self, frame, level=None) -> tuple[str | None, float]:
+    def _classify_by_color(self, frame, level=None,
+                           loai_tru=None) -> tuple[str | None, float]:
         """
         Phân tích màu HSV vùng trung tâm ảnh.
         Trả về (label, confidence), hoặc (None, 0.0) nếu KHÔNG có pixel nào
@@ -214,6 +215,15 @@ class Vision:
                 mask = cv2.bitwise_or(mask, cv2.inRange(hsv, lower_np, upper_np))
             weight = uniform_weight if label in no_center_weight else center_weight
             scores[label] = float((weight * (mask > 0)).sum() / weight.sum())
+
+        # LOẠI TRỪ nhãn đã được gán cho càng bên kia. Mỗi cặp trên kệ LUÔN là hai
+        # nhà máy khác nhau (12 kiện / 4 nhà máy = 6 cặp = 6 cạnh của đồ thị đủ 4
+        # đỉnh — xem docs/HAPPY_CASE.md), nên trùng nhãn là BẰNG CHỨNG SAI, không
+        # phải chuyện xui. Xem classify_pair.
+        if loai_tru:
+            scores = {k: v for k, v in scores.items() if k not in loai_tru}
+            if not scores:
+                return None, 0.0
 
         # Ưu tiên màu sắc nét hơn Amkor (xám) để nền trắng/xám không "ăn" mất
         # kiện có màu. Chỉ rơi về Amkor khi không màu chromatic nào đạt ngưỡng.
@@ -338,6 +348,31 @@ class Vision:
             logger.info("Lần %d: trái=%s (%.1f%%, %s), phải=%s (%.1f%%, %s)",
                         attempt, label_l, conf_l * 100, "ORB" if from_orb_l else "HSV",
                         label_r, conf_r * 100, "ORB" if from_orb_r else "HSV")
+
+            # ⛔ HAI CÀNG KHÔNG BAO GIỜ CÙNG MỘT NHÃN.
+            # 12 kiện / 4 nhà máy = mỗi nhà máy 3 kiện, 6 cặp = 6 cạnh của đồ thị
+            # đủ 4 đỉnh → mỗi cặp LUÔN là hai nhà máy khác nhau (HAPPY_CASE.md).
+            # Nên trùng nhãn là BẰNG CHỨNG SAI, chắc chắn, không cần biết tin cậy
+            # bao nhiêu. Đo trên robot 04/08: cả hai càng ra amkor 50.6%/58.3% và
+            # robot giao nhầm cả hai kiện — log vẫn báo "Nhận diện OK".
+            # Bên nào YẾU hơn thì chấm lại, loại nhãn vừa trùng ra.
+            if label_l is not None and label_l == label_r:
+                yeu = "trái" if conf_l <= conf_r else "phải"
+                logger.warning(
+                    "Hai càng cùng ra '%s' (trái %.1f%%, phải %.1f%%) — KHÔNG THỂ "
+                    "ĐÚNG: mỗi cặp trên kệ luôn là hai nhà máy khác nhau. Chấm lại "
+                    "bên %s, loại '%s'.", label_l, conf_l * 100, conf_r * 100,
+                    yeu, label_l)
+                if yeu == "trái":
+                    label_l, conf_l = self._classify_by_color(
+                        frame_left, level, loai_tru={label_l})
+                    from_orb_l = False
+                else:
+                    label_r, conf_r = self._classify_by_color(
+                        frame_right, level, loai_tru={label_r})
+                    from_orb_r = False
+                logger.warning("  → sau khi loại: trái=%s (%.1f%%), phải=%s (%.1f%%)",
+                               label_l, conf_l * 100, label_r, conf_r * 100)
 
             # ORB đã tự quyết định đủ tự tin — không so confidence quy đổi với
             # CONFIDENCE_THRESHOLD nữa (chỉ có ý nghĩa với % pixel của HSV).
