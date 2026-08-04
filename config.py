@@ -722,7 +722,10 @@ ADVANCE_INTERSECTION_DAM = 5
 # (Mốc 15.0 lúc đầu lấy từ "C0R0 → chân kệ = 35.4cm trên sa bàn" rồi trừ 20 — sai
 # vì 35.4cm là khoảng cách TRÊN SA BÀN còn càng nhô ra trước bánh hơn 20cm, nên nó
 # luôn tới muộn hơn cú va. Mốc 0.5 là để khoá advance lại trong lúc truy lỗi.)
-ADVANCE_SHELF_STOP_CM = 12.0
+# 12.0 = RECENTER_CM đưa TRỤC BÁNH tới đúng giao lộ. Đội thấy càng vẫn còn xa
+# pallet ở tư thế đó nên xin thêm 5cm — 17.0. Số này giờ KHÔNG còn thuần hình học
+# nữa, nó là 12.0 (đo được) + 5.0 (chọn tay), sửa tiếp thì sửa phần cộng thêm.
+ADVANCE_SHELF_STOP_CM = 17.0
 
 # Bao lâu KHÔNG có xung encoder thì coi như encoder CHẾT và dừng khẩn.
 # 04/08, sau khi giao quyền dừng cho quãng đường: log in đúng dòng "dừng theo QUÃNG
