@@ -139,7 +139,7 @@ LIFT_TIME_SHELF_1 = 0.700
 LIFT_TIME_SHELF_2 = 3.50  # ĐO trên robot 04/08 (PIN ĐẦY — pin yếu cho 4.20); đội cộng thêm 0.1
 
 # Không có limit switch — home_to_floor() hạ liên tục bấy nhiêu giây để ép chạm đáy.
-LIFT_HOME_DURATION = 3.7   # min_home_duration() = LIFT_TIME_SHELF_2 + LOWER_EXTRA lớn
+LIFT_HOME_DURATION = 4.0   # min_home_duration() = LIFT_TIME_SHELF_2 + LOWER_EXTRA lớn
 
 # Bù lệch 2 càng theo VỊ TRÍ TUYỆT ĐỐI: thời gian từ SÀN lên tầng n = LIFT_TIME_SHELF_n
 # + bù. Thời gian mỗi lần chạy = hiệu 2 mốc (Lift._level_time) → không cộng dồn khi đi
