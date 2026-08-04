@@ -2114,7 +2114,8 @@ class Motion:
         return False
 
     def _escape_intersection(self, speed: float = config.SPEED_DEFAULT,
-                             reverse: bool = False) -> bool:
+                             reverse: bool = False,
+                             bo_qua_neu_khong_o_giao_lo: bool = False) -> bool:
         """Rời khỏi giao lộ đang đứng, trước khi bám line tiếp.
 
         Chạy tới khi CẢM BIẾN không còn báo giao lộ nữa, chặn trên bằng thời gian —
@@ -2144,8 +2145,12 @@ class Motion:
         # VỚI VIÊN PIN LÚC ĐO NÓ.
         # Bỏ qua ở đây an toàn vì chặng nào thật sự cần escape đều đã có CỔNG QUÃNG
         # ĐƯỜNG (FORWARD_MIN_TRAVEL_CM) chặn việc đếm lại chính giao lộ vừa đứng.
+        # ⚠️ CHỈ cho phép bỏ qua ở chặng ĐẦU của route KHÔNG khởi hành từ điểm cuối
+        # (tức route START → kệ). Mọi chặng khác robot ĐANG đứng trên giao lộ thật;
+        # đọc hụt một nhịp mà bỏ qua escape thì follow_line nhận lại CHÍNH giao lộ
+        # đó, route lệch một hàng và robot rẽ sai — đắt hơn hẳn lỗi đang chữa.
         dau = self.read_line_sensor()
-        if sum(dau) < config.INTERSECTION_THRESHOLD:
+        if bo_qua_neu_khong_o_giao_lo and sum(dau) < config.INTERSECTION_THRESHOLD:
             logger.info(
                 "Không thoát giao lộ: cảm biến %s — chỉ %d/%d mắt thấy vạch, robot "
                 "KHÔNG đứng trên giao lộ nào. Chạy mù ~0.4s ở đây là bước qua luôn "
@@ -2214,7 +2219,11 @@ class Motion:
             if self._aborted():
                 return False
             logger.info("Đi đến giao lộ %d/%d", i + 1, count)
-            self._escape_intersection(base_speed)
+            # Chỉ chặng đầu của route xuất phát từ Ô START mới được bỏ qua escape —
+            # đó là chỗ duy nhất robot có thể KHÔNG đứng trên giao lộ.
+            self._escape_intersection(
+                base_speed,
+                bo_qua_neu_khong_o_giao_lo=(i == 0 and not roi_diem_cuoi))
             # ⛔ CỔNG QUÃNG ĐƯỜNG áp cho MỌI chặng, TRỪ chặng ĐẦU của route không
             # khởi hành từ điểm cuối.
             #   i > 0  → luôn bật. Hai giao lộ thật cách nhau ~40cm, mà

@@ -1369,10 +1369,25 @@ class TestEscapeIntersection(unittest.TestCase):
         with patch.object(config, "ESCAPE_MIN_TIME", 0.3), \
              patch.object(config, "ESCAPE_CLEAR_TIME", 0.0):
             t0 = time.time()
-            self.assertTrue(m._escape_intersection(40))
+            self.assertTrue(m._escape_intersection(
+                40, bo_qua_neu_khong_o_giao_lo=True))
         self.assertLess(time.time() - t0, 0.1, "không được chờ hết sàn thời gian")
         m.forward.assert_not_called()
         m.backward.assert_not_called()
+
+
+    def test_cac_chang_khac_van_thoat_binh_thuong(self):
+        """⚠️ Bỏ qua escape CHỈ dành cho chặng rời ô START.
+
+        Mọi chặng khác robot ĐANG đứng trên giao lộ thật. Đọc hụt một nhịp mà bỏ
+        qua escape thì follow_line nhận lại CHÍNH giao lộ đó, route lệch một hàng
+        và robot rẽ sai — đắt hơn hẳn lỗi đang chữa.
+        """
+        m = self._motion([self.LINE])
+        with patch.object(config, "ESCAPE_MIN_TIME", 0.15), \
+             patch.object(config, "ESCAPE_CLEAR_TIME", 0.0):
+            m._escape_intersection(40)          # KHÔNG bật cờ bỏ qua
+        m.forward.assert_called_once_with(40)
 
     def test_reverse_uses_backward(self):
         m = self._motion([self.GIAO_LO] + [self.LINE])
