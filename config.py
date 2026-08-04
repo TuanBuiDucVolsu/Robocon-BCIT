@@ -953,7 +953,19 @@ FACTORY_STACK_BACKOFF_CM = 9.0
 # Quãng đường thì phân biệt được: mảng đen chân kệ nằm NGAY ĐẦU chặng lùi, còn
 # giao lộ thì cách một đoạn. Để nhỏ thôi — sau retreat_from_shelf robot đã lùi
 # sẵn ~20cm nên phần còn lại tới giao lộ không nhiều.
-BACK_MIN_TRAVEL_CM = 5.0
+# ⚠️ 5.0 LÀ QUÁ LỚN KỂ TỪ KHI ADVANCE_SHELF_STOP_CM LÊN 17.0.
+# Hình học: robot dừng cách giao lộ 17.0cm, retreat_from_shelf lùi 12.9cm → giao lộ
+# chỉ còn cách 4.1cm khi chặng lùi bắt đầu. Cổng 5.0 bác ĐÚNG cái giao lộ cần tìm.
+# Đo trên robot 04/08:
+#     Phát hiện giao lộ  ADC [276, 292, 0, 0, 0, 0]   ← 4 mắt đen sâu + 2 mắt sáng,
+#                                                       khớp hệt giao lộ thật đã
+#                                                       xác nhận [306,372,0,0,0,46]
+#     Lùi: bỏ qua — mới lùi 4.6cm (cần 5.0)           ← thiếu 0.4cm
+#     ERROR Lùi: mất line quá 1.2s — dừng an toàn
+# Rồi tuyến tới nhà máy hỏng ngay bước đầu và robot thả kiện tại chỗ.
+# 3.0 vẫn đủ chặn mảng đen chân kệ (nằm NGAY đầu chặng lùi, <1cm), mà không chạm
+# tới giao lộ ở 4.1cm.
+BACK_MIN_TRAVEL_CM = 3.0
 
 # Quãng TIẾN tối thiểu trước khi tin một tín hiệu giao lộ (đo bằng encoder).
 # Cùng lý do như BACK_MIN_TRAVEL_CM, nhưng cho chiều TIẾN — và ca gây lỗi ở đây là
