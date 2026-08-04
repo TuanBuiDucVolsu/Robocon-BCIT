@@ -991,7 +991,7 @@ class Motion:
                 logger.info("Advance: %.2fs — %d xung = %.1fcm (mốc %.1f), "
                             "siêu âm %.1fcm, ADC %s", time.time() - start,
                             xung_adv, quang_adv, config.ADVANCE_SHELF_STOP_CM,
-                            dist, self.read_line_sensor_adc())
+                            dist, self._adc_de_ghi())
 
             # ⛔ ENCODER CHẾT = KHÔNG CÓ GÌ CHẶN NỮA. Khi đã giao quyền dừng cho
             # quãng đường thì encoder là điểm chết duy nhất, và nó hỏng KHÔNG
@@ -1450,6 +1450,17 @@ class Motion:
             f"({ly_do}) " if ly_do else "", cm, da, can, time.time() - start,
             " — HẾT CHẶN TRÊN, chưa đủ quãng. Encoder rớt xung?" if het_gio else "")
         return True
+
+    def _adc_de_ghi(self):
+        """ADC 6 mắt để IN RA LOG — không bao giờ ném lỗi.
+
+        Nhịp tim chỉ để quan sát, nó không được phép làm hỏng chặng đang chạy
+        (hoặc làm đỏ các bài test dựng Motion tối giản, không có _line_sensor).
+        """
+        try:
+            return self.read_line_sensor_adc()
+        except Exception as e:
+            return f"(khong doc duoc: {e})"
 
     def _doc_xung(self) -> int:
         """Tổng xung encoder 2 bánh kể từ lần gọi trước (đọc xong là RESET).
@@ -2001,6 +2012,7 @@ class Motion:
         # xuống, và chỉ cho chặng `forward` ĐẦU TIÊN.
         do_duoc = do_duoc and roi_diem_cuoi
         self._doc_xung()
+        nhip_luc = time.time()   # lần cuối in nhịp tim (xem trong vòng lặp)
         di_xung = 0
 
         while time.time() - start < timeout:
@@ -2008,6 +2020,17 @@ class Motion:
                 return False
             di_xung += self._doc_xung()
             di_cm = di_xung / config.ENCODER_PULSES_PER_CM if do_duoc else None
+            # NHỊP TIM — xem robot đi được bao xa và thanh cảm biến đang thấy gì.
+            # 04/08: bước này vượt C0R0 tận 22cm rồi mới dừng, mà log chỉ có ĐÚNG
+            # MỘT dòng "Phát hiện giao lộ" với ADC [0,0,0,0,0,0] (gầm kệ). Không có
+            # dòng "Bỏ qua tín hiệu giao lộ" nào — tức C0R0 không hề được đưa ra
+            # xét. Phải thấy chuỗi ADC dọc đường mới biết nó bỏ sót ở đâu.
+            if time.time() - nhip_luc >= config.ADVANCE_HEARTBEAT_TIME:
+                nhip_luc = time.time()
+                logger.info("Đếm giao lộ: %.2fs — đi %s, ADC %s",
+                            time.time() - start,
+                            "?" if di_cm is None else f"{di_cm:.1f}cm",
+                            self._adc_de_ghi())
             at_intersection, values = self.follow_line(base_speed)
             if at_intersection and di_cm is not None \
                     and di_cm < config.FORWARD_MIN_TRAVEL_CM:
