@@ -501,7 +501,17 @@ LINE_DEEP_BLACK = 0.06
 #     vòng tròn ROBOCON  min 69           → 0 mắt
 #     tấm in nhà máy     min 53, 56       → 1 mắt
 # Biên giữa hai nhóm là 1↔3, rộng gấp nhiều lần so với so mắt tối nhất (34↔53).
-LINE_DEEP_BLACK_COUNT = 2
+# ⚠️ 2 LÀ QUÁ THẤP — nó nằm ĐÚNG trên ranh giới. Đo lại trên robot 04/08, chặng
+# rời kệ đi giao hàng, số mắt ≤ LINE_DEEP_BLACK:
+#     giao lộ THẬT :  [306, 372, 0, 0, 0, 46] → 4      [0,0,0,0,0,0] → 6
+#                     (các lần đo trước: 3, 4, 4, 6)
+#     TẤM IN       :  [0, 91, 51, 133, 101, 116] → 2   [0, 220, 95, 198, 138, 150] → 1
+#                     [0, 38, 126, 250, 194, 165] → 2  (trước đó: 0, 1, 1)
+# Với mốc 2, tấm in [0, 91, 51, ...] LỌT: cả 6 mắt đều ≤ LINE_STRICT_BLACK nên
+# điều kiện đầu đạt, và đúng 2 mắt (0 và 51) lọt xuống dưới 61. Robot đếm mảng in
+# thành giao lộ, lệch hàng, rồi THẢ HÀNG Ở LOGO TRUNG TÂM.
+# Mốc 3 tách sạch: thật ≥3, in ≤2.
+LINE_DEEP_BLACK_COUNT = 3
 
 # Đo lại khi ĐỨNG YÊN mà GẦN hơn mục tiêu quá mức này → approach_shelf THẤT BẠI,
 # không trả True nữa. Đứng gần hơn mục tiêu nhiều nghĩa là có gì đó ở TRƯỚC đã sai

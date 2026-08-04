@@ -3473,5 +3473,39 @@ class TestBoEscapeSauKhiRoiOXuatPhat(unittest.TestCase):
         self.assertTrue(m.execute_route([("forward", 1)]))
         m._escape_intersection.assert_called_once()
 
+
+class TestTamInGiuaSanKhongPhaiGiaoLo(unittest.TestCase):
+    """⚠️ HỒI QUY 04/08: robot THẢ HÀNG Ở LOGO TRUNG TÂM.
+
+    Rời kệ, xoay phải, rồi nằm trên một mảng in tối lớn. Cả 6 mắt đều dưới
+    LINE_STRICT_BLACK nên điều kiện "đủ mắt đen đậm" đạt, và ĐÚNG 2 mắt lọt
+    xuống dưới LINE_DEEP_BLACK — vừa đủ mốc cũ (2). Robot đếm mảng in thành giao
+    lộ, lệch hàng, thả hàng giữa sân.
+
+    Chữ ký ĐO ĐƯỢC trong chính lần chạy đó, số mắt ≤ LINE_DEEP_BLACK:
+        giao lộ THẬT :  [306, 372, 0, 0, 0, 46] → 4     [0,0,0,0,0,0] → 6
+        TẤM IN       :  [0, 91, 51, 133, 101, 116] → 2  [0, 220, 95, 198, 138, 150] → 1
+                        [0, 38, 126, 250, 194, 165] → 2
+    Mốc 3 tách sạch. Mốc 2 nằm ĐÚNG trên ranh giới — và ranh giới là chỗ hỏng.
+    """
+
+    THAT = [(306, 372, 0, 0, 0, 46), (0, 0, 0, 0, 0, 0)]
+    IN = [(0, 91, 51, 133, 101, 116), (0, 220, 95, 198, 138, 150),
+          (0, 38, 126, 250, 194, 165), (4, 220, 95, 198, 138, 150),
+          (30, 227, 127, 215, 155, 156), (3, 206, 85, 205, 147, 126)]
+
+    def test_giao_lo_that_van_duoc_nhan(self):
+        for adc in self.THAT:
+            with self.subTest(adc=adc):
+                self.assertTrue(
+                    LineSensor.la_giao_lo_that([v / 1023 for v in adc]))
+
+    def test_tam_in_bi_bac_bo(self):
+        for adc in self.IN:
+            with self.subTest(adc=adc):
+                self.assertFalse(
+                    LineSensor.la_giao_lo_that([v / 1023 for v in adc]),
+                    "mảng in bị nhận là giao lộ → robot thả hàng giữa sân")
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
