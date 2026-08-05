@@ -737,9 +737,17 @@ class TestSoGiaoTheoNhaMay(unittest.TestCase):
         r._retreat_from_shelf.assert_not_called()
 
     def test_backoff_scales_with_how_many_are_already_there(self):
+        """Bù tăng theo số kiện đã có — bài này kiểm ĐƯỜNG LÙI (chốt quãng TẮT).
+
+        Từ 04/08, mặc định là TRỪ NGAY vào quãng đi vào nhà máy
+        (ADVANCE_FACTORY_STOP_CM > 0) và khi đó bước lùi này bị tắt để không bù
+        HAI LẦN — xem TestTranhKienCuKhongBuHaiLan trong test_units. Bài này ép
+        chốt quãng về 0 để vẫn kiểm được đường lùi cũ.
+        """
         from unittest.mock import patch
         r = self._robot()
-        with patch.object(config, "FACTORY_STACK_BACKOFF_CM", 9.0):
+        with patch.object(config, "FACTORY_STACK_BACKOFF_CM", 9.0), \
+             patch.object(config, "ADVANCE_FACTORY_STOP_CM", 0.0):
             r._lui_tranh_kien_cu("samsung")          # chưa có kiện nào
             r._retreat_from_shelf.assert_not_called()
             r._ghi_nhan_giao("samsung")
