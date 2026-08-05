@@ -69,7 +69,14 @@ def _hoi_tang(mac_dinh: int = 1) -> int:
 
 
 def _run(m: Motion, goal: str, pose) -> tuple[bool, tuple]:
-    """Đi từ `pose` tới `goal` bằng đúng route mà main.py sẽ dùng."""
+    """Đi từ `pose` tới `goal` bằng đúng route mà main.py sẽ dùng.
+
+    ⚠️ PHẢI đặt cờ y hệt main._goto, không thì bài smoke chạy một đường khác với
+    thi đấu và nó CHE lỗi thay vì tìm ra lỗi. Đã dính đúng cái này ngày 04/08 với
+    tools/chup_o_ke: công cụ cắt ROI hai lần nên cho kết quả ĐÚNG trong khi robot
+    vẫn nhận sai.
+    """
+    m.lui_khoi_nha_may = bool(pose and str(pose[0]).startswith("F_"))
     route, new_pose = nav.plan(pose, goal)
     if route is None:
         print(f"  ❌ Không có đường {pose} → {goal}")
@@ -530,6 +537,109 @@ def smoke_route_to_samsung(m: Motion, **_):
     return True, pose
 
 
+
+
+# ==========================================================
+# SMOKE 9 — QUAY VỀ từ CẢ 4 NHÀ MÁY
+# ==========================================================
+
+def smoke_return_from_factories(m: Motion, **_):
+    """Chặng QUAY VỀ kệ, chạy riêng từ từng nhà máy trong 4 nhà máy.
+
+    Vì sao tách thành bài riêng: chặng quay về là chỗ hỏng nhiều nhất mà lại nằm
+    CUỐI mỗi lượt — mọi bài có bốc/thả đều phải chạy qua pickup và drop trước, nên
+    hỏng ở đó là không bao giờ tới được phần này. Bài này bỏ hết, đặt tay robot
+    vào nhà máy rồi bấm chạy.
+
+    Bốn nhà máy KHÔNG tương đương nhau: chúng ở 4 hàng khác nhau nên độ dài chặng
+    lùi, số giao lộ và chiều xoay đều khác. Đo trên robot 04/08, đội báo chặng về
+    từ SAMSUNG (hàng xa nhất) quay ~135° ở giao lộ rồi lạc, trong khi test_motion
+    option 10 cho ĐÚNG 90° — tức sai số tích luỹ theo ĐỘ DÀI chặng lùi, không phải
+    lỗi của cú xoay. Chạy đủ 4 nhà máy mới thấy được quy luật đó.
+
+    Bài này đi ĐÚNG đường main.py đi: nav.plan + execute_route + cờ lui_khoi_nha_may.
+    """
+    print("\n[SMOKE 9] Chặng QUAY VỀ — chạy riêng từ từng nhà máy")
+    print("  Không bốc, không thả. Chỉ đo chặng nhà máy → kệ.")
+
+    ke = _ask("\n  Quay về kệ nào? [1=Kệ 3(R0)  2=Kệ 2(R2)  3=Kệ 1(R4), Enter=1]: ", "1")
+    dich = {"1": "SHELF0", "2": "SHELF1", "3": "SHELF2"}.get(ke, "SHELF0")
+    ten_ke = {"SHELF0": "Kệ 3 (R0)", "SHELF1": "Kệ 2 (R2)", "SHELF2": "Kệ 1 (R4)"}[dich]
+
+    thu_tu = ["foxconn", "amkor", "hana_micron", "samsung"]
+    chon = _ask("  Nhà máy nào? [Enter = chạy CẢ 4, hoặc gõ tên]: ", "")
+    if chon:
+        khop = [t for t in thu_tu if t.startswith(chon.replace(" ", "_"))]
+        if not khop:
+            print(f"  Không có nhà máy nào khớp '{chon}'. Tên hợp lệ: {', '.join(thu_tu)}")
+            return False, None
+        thu_tu = khop
+
+    print(f"\n  Nửa sân: nhà máy cùng hàng ô xuất phát = {nav.FACTORY_AT_START_ROW.upper()}")
+    print(f"  Đích: {ten_ke}")
+
+    # In TRƯỚC toàn bộ route để thấy ngay cái nào khác thường — chạy khô bản đồ
+    # 04/08 cho thấy CHỈ nhà máy ở hàng R4 sinh HAI cú xoay liên tiếp (quay đầu
+    # 180°), ba nhà máy kia chỉ một cú. Đó là ứng viên số 1 cho "xoay quá 90 độ".
+    print("\n  ROUTE SẼ CHẠY (đọc kỹ — cái nào có HAI cú xoay liên tiếp là đáng ngờ):")
+    for nhan in thu_tu:
+        t = nav.FACTORY_TERMINAL[nhan]
+        r, _ = nav.plan(nav.pose_at(t), dich)
+        txt = nav.route_to_text(r) if r else "KHÔNG CÓ ĐƯỜNG"
+        doi = " ← ⚠ QUAY ĐẦU 180°" if r and any(
+            r[i][0] in ("left", "right") and r[i][0] == r[i + 1][0]
+            for i in range(len(r) - 1)) else ""
+        print(f"    {nhan:<13} (node {nav.TERMINALS[t][0]}): {txt}{doi}")
+
+    ket = []
+    pose_cuoi = None
+    for i, nhan in enumerate(thu_tu, 1):
+        terminal = nav.FACTORY_TERMINAL[nhan]
+        hang = nav.TERMINALS[terminal][0]
+        print("\n" + "=" * 62)
+        print(f"  [{i}/{len(thu_tu)}] {nhan.upper()}  (node {hang}) → {ten_ke}")
+        print("=" * 62)
+        print(f"  ĐẶT TAY robot vào khu {nhan.upper()}, ĐÚNG tư thế sau khi thả:")
+        print("    • quay mặt VÀO nhà máy (như lúc vừa thả xong)")
+        print("    • bánh xe nằm trên vạch line dẫn vào khu")
+        print("  Đặt sai tư thế thì bài này vô nghĩa — nó đo CHÍNH tư thế đó.")
+        tra_loi = _ask(f"  Chạy {nhan.upper()}? [Enter=chạy, s=bỏ qua, q=thoát]: ")
+        if tra_loi == "q":
+            print("  Thoát theo yêu cầu.")
+            break
+        if tra_loi == "s":
+            print(f"  Bỏ qua {nhan.upper()}.")
+            continue
+
+        pose = nav.pose_at(terminal)
+        m.dang_cong_hang = False        # đã thả xong, không còn cõng hàng
+        ok, pose_moi = _run(m, dich, pose)
+        pose_cuoi = pose_moi
+        ket.append((nhan, ok))
+        print(f"  {'✅' if ok else '❌'} {nhan.upper()} → {ten_ke}: {ok}")
+        if ok:
+            print("     KIỂM BẰNG MẮT: robot có đứng trước ĐÚNG kệ, quay mặt vào kệ,")
+            print("     lệch ngang ≤ 3cm không? Log xanh mà đứng sai chỗ vẫn là HỎNG.")
+        else:
+            print("     Gãy ở lệnh nào? Xem log — dòng cuối trước khi dừng.")
+            print("     Lùi sai   → test_motion option 15")
+            print("     Xoay sai  → test_motion option 10 (đo ĐÚNG chiều bị lỗi)")
+            print("     Mất line  → test_motion option 7")
+
+    print("\n" + "=" * 62)
+    print("  TỔNG KẾT CHẶNG QUAY VỀ")
+    print("=" * 62)
+    for nhan, ok in ket:
+        print(f"    {'✅' if ok else '❌'}  {nhan.upper():<14} → {ten_ke}")
+    dat = sum(1 for _, ok in ket if ok)
+    print(f"\n  {dat}/{len(ket)} chặng đạt.")
+    if ket and dat < len(ket):
+        print("  ⚠ Nhà máy nào hỏng thì so ĐỘ DÀI chặng lùi của nó với các nhà máy")
+        print("    đạt — sai số tích luỹ theo độ dài là giả thuyết hàng đầu.")
+    print("  ⚠ Mỗi chặng phải ĐẠT 3/3 LẦN mới tính là chạy được (tests/NGHIEM_THU.md).")
+    return (dat == len(ket) and bool(ket)), pose_cuoi
+
+
 SMOKES = {
     "1": ("Xuất phát: exit start → Kệ 3 (dò nửa sân nếu BOARD_AUTO_DETECT)",
           smoke_exit_and_navigate),
@@ -542,6 +652,8 @@ SMOKES = {
     "7": ("NHIỆM VỤ 2 đầy đủ: Kệ 4 → nhà máy liên hợp", smoke_task2_full),
     "8": ("Đường dài KHÔNG bốc hàng: xuất phát → trước Kệ 3 → lùi → Samsung",
           smoke_route_to_samsung),
+    "9": ("★ CHẶNG QUAY VỀ từ CẢ 4 nhà máy (không bốc/thả)",
+          smoke_return_from_factories),
 }
 
 # Smoke nào cần camera — tránh khởi tạo Vision (mất ~2s) khi không dùng
