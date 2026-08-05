@@ -1901,6 +1901,26 @@ class Motion:
         line ở đây nghĩa là đã lệch thật, mà quét tìm khi đang lùi thì dễ đâm vào kệ
         vừa rời.
         """
+
+        # ⛔ CỔNG QUÃNG ĐƯỜNG KHÁC NHAU GIỮA KỆ VÀ NHÀ MÁY — hình học hai chỗ khác hẳn.
+        # Ở KỆ: robot dừng cách giao lộ ADVANCE_SHELF_STOP_CM (17.0), lùi ra khỏi kệ
+        #   12.9cm trước → khi chặng lùi bắt đầu, giao lộ chỉ còn cách 4.1cm. Cổng
+        #   phải NHỎ HƠN 4.1, nên hạ về 3.0 (04/08).
+        # Ở NHÀ MÁY: mảng đen ngay đầu chặng lùi VƯỢT ĐƯỢC bộ lọc giao lộ. Đo trên
+        #   robot 04/08, chặng lùi khỏi nhà máy: ADC [458, 0, 113, 0, 600, 45] cho
+        #   4 mắt đen đậm + 3 mắt đen sâu → la_giao_lo_that() = True. Nó chỉ bị loại
+        #   nhờ CỔNG QUÃNG ĐƯỜNG, vì xuất hiện ở 0.9cm. Hạ cổng chung xuống 3.0 làm
+        #   biên tụt từ 4.1cm còn 2.1cm — robot lùi lệch một chút là mảng đó lọt,
+        #   route đếm thừa một giao lộ và TOÀN BỘ chặng quay về sai.
+        # Nên chỗ này giữ 5.0 (giá trị đã chạy đúng trước 04/08). Caller báo bằng
+        # `motion.lui_khoi_nha_may`, cùng kiểu với cờ `dang_cong_hang`.
+        moc_lui = (config.BACK_MIN_TRAVEL_FACTORY_CM
+                   if getattr(self, "lui_khoi_nha_may", False)
+                   else config.BACK_MIN_TRAVEL_CM)
+        if getattr(self, "lui_khoi_nha_may", False):
+            logger.info("Lùi khỏi NHÀ MÁY — cổng quãng đường %.1fcm (kệ dùng %.1f)",
+                        moc_lui, config.BACK_MIN_TRAVEL_CM)
+
         if count <= 0:
             return True
 
@@ -2000,12 +2020,12 @@ class Motion:
                         self.backward(base_speed)
 
                 if at_intersection and lui_cm is not None \
-                        and lui_cm < config.BACK_MIN_TRAVEL_CM:
+                        and lui_cm < moc_lui:
                     logger.info(
                         "Lùi: bỏ qua tín hiệu giao lộ ở %.2fs — mới lùi %.1fcm "
                         "(cần %.1f). Mảng đen chân kệ nằm ngay đầu chặng lùi, giao "
                         "lộ thì cách một đoạn. Cảm biến %s",
-                        time.time() - start, lui_cm, config.BACK_MIN_TRAVEL_CM, values)
+                        time.time() - start, lui_cm, moc_lui, values)
                     at_intersection = False
                     # Cùng lý do như trên: follow_line() vừa phanh, phải chạy lại.
                     self.backward(base_speed)

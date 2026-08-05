@@ -290,6 +290,13 @@ class Robot:
             self.pose = new_pose
             return True
 
+        # Chặng LÙI khỏi KHU NHÀ MÁY cần cổng quãng đường LỚN HƠN chỗ lùi khỏi kệ —
+        # mảng đen ngay đầu chặng lùi ở nhà máy vượt được bộ lọc giao lộ, chỉ có cổng
+        # quãng đường chặn nó. Lý do + số đo: config.BACK_MIN_TRAVEL_FACTORY_CM.
+        noi_dung = self.pose[0] if self.pose else ""
+        self.motion.lui_khoi_nha_may = bool(
+            noi_dung and noi_dung.startswith("F_"))
+
         logger.info("Đi %s → %s: %s",
                     navigation.describe(self.pose), goal, navigation.route_to_text(route))
         ok = self.motion.execute_route(route)

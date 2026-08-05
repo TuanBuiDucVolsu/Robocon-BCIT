@@ -3611,5 +3611,40 @@ class TestTranhKienCuKhongBuHaiLan(unittest.TestCase):
             r._lui_tranh_kien_cu("samsung")
         r._retreat_from_shelf.assert_called_once()
 
+
+class TestCongLuiKhacNhauGiuaKeVaNhaMay(unittest.TestCase):
+    """⚠️ HỒI QUY 04/08: "quay trở lại sau khi thả hàng đang đi sai hết".
+
+    Mảng đen ngay đầu chặng LÙI KHỎI NHÀ MÁY VƯỢT ĐƯỢC bộ lọc giao lộ. Đo trên
+    robot: ADC [458, 0, 113, 0, 600, 45] → 4 mắt đen đậm + 3 mắt đen sâu →
+    la_giao_lo_that() = True. Nó chỉ bị loại nhờ CỔNG QUÃNG ĐƯỜNG (hiện ở 0.9cm).
+
+    Cùng hôm đó tôi hạ cổng chung 5.0 → 3.0 để chữa hình học ở KỆ (giao lộ chỉ còn
+    cách 4.1cm sau khi ADVANCE_SHELF_STOP_CM lên 17.0). Biên ở nhà máy tụt từ
+    4.1cm còn 2.1cm — robot lùi lệch chút là mảng đó lọt, route đếm thừa một giao
+    lộ, toàn bộ chặng quay về sai.
+
+    Hai chỗ, hai hình học, phải hai hằng số.
+    """
+
+    def test_chu_ky_gia_o_nha_may_VUOT_duoc_bo_loc_giao_lo(self):
+        """Cơ sở của cả bài: nếu bộ lọc chặn được thì đã không cần cổng quãng đường."""
+        gia = [v / 1023 for v in (458, 0, 113, 0, 600, 45)]
+        self.assertTrue(LineSensor.la_giao_lo_that(gia),
+                        "chữ ký giả này ĐÚNG LÀ vượt được bộ lọc — đó là lý do "
+                        "cổng quãng đường phải gánh")
+
+    def test_hai_hang_so_tach_bach(self):
+        self.assertGreater(config.BACK_MIN_TRAVEL_FACTORY_CM,
+                           config.BACK_MIN_TRAVEL_CM,
+                           "cổng ở nhà máy phải LỚN HƠN ở kệ")
+
+    def test_ke_van_du_cho_giao_lo_o_4_1cm(self):
+        """Ở kệ giao lộ nằm ở 17.0 − 12.9 = 4.1cm, cổng phải nhỏ hơn thế."""
+        con_lai = config.ADVANCE_SHELF_STOP_CM - 12.9
+        self.assertLess(config.BACK_MIN_TRAVEL_CM, con_lai,
+                        f"cổng {config.BACK_MIN_TRAVEL_CM} bác luôn giao lộ thật "
+                        f"ở {con_lai:.1f}cm")
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -995,6 +995,17 @@ FACTORY_STACK_BACKOFF_CM = 9.0
 # tới giao lộ ở 4.1cm.
 BACK_MIN_TRAVEL_CM = 3.0
 
+# Cổng quãng đường cho chặng LÙI KHỎI KHU NHÀ MÁY — KHÁC chỗ lùi khỏi kệ.
+# Mảng đen ngay đầu chặng lùi ở nhà máy VƯỢT ĐƯỢC bộ lọc giao lộ. Đo trên robot
+# 04/08: ADC [458, 0, 113, 0, 600, 45] → 4 mắt đen đậm + 3 mắt đen sâu →
+# la_giao_lo_that() = True. Nó chỉ bị loại nhờ cổng quãng đường (xuất hiện ở 0.9cm).
+# Hạ cổng chung xuống 3.0 (để chữa hình học ở KỆ) làm biên tụt từ 4.1cm còn 2.1cm —
+# robot lùi lệch một chút là mảng đó lọt, route đếm thừa một giao lộ và TOÀN BỘ
+# chặng quay về sai. Đúng triệu chứng đội báo: "quay trở lại sau khi thả hàng đang
+# đi sai hết".
+# 5.0 là giá trị đã chạy đúng trước 04/08 — giữ nguyên cho chặng nhà máy.
+BACK_MIN_TRAVEL_FACTORY_CM = 5.0
+
 # Quãng TIẾN tối thiểu trước khi tin một tín hiệu giao lộ (đo bằng encoder).
 # Cùng lý do như BACK_MIN_TRAVEL_CM, nhưng cho chiều TIẾN — và ca gây lỗi ở đây là
 # TẤM IN KHU NHÀ MÁY, không phải chân kệ.
