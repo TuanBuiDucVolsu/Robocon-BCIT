@@ -1884,11 +1884,45 @@ class TestAdvanceToEnd(unittest.TestCase):
         m.get_distance = lambda *a, **k: 100.0
         m._encoder_left = _EncoderGia(500)
         m._encoder_right = _EncoderGia(500)
-        with self.assertLogs("control.motion", level="INFO") as nk:
+        # Tắt chốt QUÃNG ĐƯỜNG để bài này nói đúng chuyện nó định nói: mảng in là
+        # ĐÃ TỚI chứ không phải lỗi bản đồ. Khi ADVANCE_FACTORY_STOP_CM > 0 thì
+        # quãng đường dừng trước, và đó là hành vi mặc định mới — xem bài
+        # test_khu_nha_may_dung_theo_QUANG_DUONG ngay dưới.
+        with patch.object(config, "ADVANCE_FACTORY_STOP_CM", 0.0), \
+             self.assertLogs("control.motion", level="INFO") as nk:
             self.assertTrue(m.advance_to_end(timeout=3.0))
         ghi = "\n".join(nk.output)
         self.assertIn("ĐÃ VÀO KHU NHÀ MÁY", ghi)
         self.assertNotIn("Bản đồ hoặc vị trí không khớp", ghi)
+
+    def test_khu_nha_may_dung_theo_QUANG_DUONG_khong_do_tam_in(self):
+        """⚠️ HỒI QUY 04/08: dò tấm in cho điểm dừng NGẪU NHIÊN.
+
+        Phép kiểm tấm in bị nhốt trong nhánh `if at_intersection`, nên nó chỉ được
+        đánh giá ở những nhịp follow_line() TÌNH CỜ báo giao lộ — mà cái đó dùng
+        ngưỡng THÍCH NGHI, tự co giãn theo dải sáng-tối từng lần đọc. Trên tấm in
+        tối dần đều, thời điểm ngưỡng bật là ngẫu nhiên. Đo trong MỘT chặng ngày
+        04/08, ngưỡng nhảy: 139, 148, 156, 160, 169, 175, 200, 228, 250, 272.
+        Và lúc tuyên bố đã tới, ADC là [349, 0, 104, 0, 587, 0] — sáng tối xen kẽ,
+        không phải mảng in đồng đều: nó bắt một trạng thái chuyển tiếp.
+
+        Người dùng mô tả đúng triệu chứng: "đi chệch khi đến tấm in nhà máy, không
+        theo một quy luật cụ thể nào cả".
+
+        Giống hệt chặng vào kệ: chốt bằng QUÃNG ĐƯỜNG từ giao lộ.
+        """
+        m = self._motion([[0, 0, 1, 1, 0, 0]] * 400)
+        m.dang_cong_hang = True
+        m.get_distance = lambda *a, **k: 100.0
+        m.follow_line = lambda speed: (False, [0, 0, 1, 1, 0, 0])
+        m._encoder_left = _EncoderGia(60)
+        m._encoder_right = _EncoderGia(60)
+        with patch.object(config, "ADVANCE_FACTORY_STOP_CM", 12.0), \
+             self.assertLogs("control.motion", level="INFO") as nk:
+            self.assertTrue(m.advance_to_end(timeout=5.0))
+        ghi = "\n".join(nk.output)
+        self.assertIn("theo QUÃNG ĐƯỜNG", ghi)
+        self.assertIn("mốc 12.0", ghi)
 
     def test_factory_print_is_told_apart_by_the_BRIGHTEST_eye(self):
         """⚠️ HỒI QUY: 4 mắt đen là chưa đủ để phân biệt tấm in với vạch line.

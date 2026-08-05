@@ -755,6 +755,23 @@ ADVANCE_HEARTBEAT_TIME = 0.25
 ADVANCE_ENCODER_DEAD_TIME = 1.5
 ADVANCE_ENCODER_DEAD_PULSES = 20
 
+# ⛔ CHỐT CHÍNH khi vào KHU NHÀ MÁY: dừng theo QUÃNG ĐƯỜNG, y như chặng vào kệ.
+# Cách cũ dò TẤM IN, và nó cho điểm dừng NGẪU NHIÊN: phép kiểm bị nhốt trong nhánh
+# `if at_intersection`, tức chỉ được đánh giá ở những nhịp follow_line() TÌNH CỜ báo
+# giao lộ — mà cái đó dùng ngưỡng THÍCH NGHI, tự co giãn theo dải sáng-tối từng lần
+# đọc. Trên tấm in tối dần đều, thời điểm ngưỡng bật là ngẫu nhiên. Đo trong một
+# chặng ngày 04/08, ngưỡng nhảy: 139, 148, 156, 160, 169, 175, 200, 228, 250, 272.
+# Và lúc tuyên bố "đã vào khu nhà máy", ADC là [349, 0, 104, 0, 587, 0] — sáng tối
+# xen kẽ, KHÔNG phải mảng in đồng đều: nó bắt một trạng thái chuyển tiếp.
+#
+# 12.0 lấy từ hai lượt chạy ĐÚNG hôm đó, cả hai đều dừng sau khi đi 12.1cm. Đây là
+# số ĐO ĐƯỢC, nhưng đo ở điểm dừng của cơ chế cũ — CHƯA phải điểm thả tối ưu.
+# Cách chỉnh: đẩy robot bằng tay tới đúng chỗ muốn thả, đo từ vạch giao lộ tới TRỤC
+# BÁNH, đặt vào đây. Bước xoay trước đó đã có tien_bu_cm(RECENTER_CM) nên lúc xoay
+# trục bánh nằm ĐÚNG trên giao lộ — quãng này đo từ đó.
+# Đặt 0 để quay về cách dò tấm in.
+ADVANCE_FACTORY_STOP_CM = 12.0
+
 ADVANCE_FACTORY_DARK_MIN_CM = 4.0
 # ⚠️ 10.0 → 4.0 ngày 03/08. Ô FOXCONN nằm SÁT NGAY giao lộ (không như Samsung/Hana
 # ở xa hơn), nên advance chạm tấm in khi mới đi ~8cm. Với mốc 10 thì tín hiệu "đã

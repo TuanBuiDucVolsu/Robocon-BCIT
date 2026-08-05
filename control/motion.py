@@ -1041,6 +1041,21 @@ class Motion:
                     config.ADVANCE_ENCODER_DEAD_PULSES,
                     config.ADVANCE_MAX_TRAVEL_CM)
                 return False
+            # ⛔ CHỐT CHÍNH khi vào KHU NHÀ MÁY: cũng dừng theo QUÃNG ĐƯỜNG.
+            # Cách cũ dò TẤM IN cho điểm dừng NGẪU NHIÊN — phép kiểm bị nhốt trong
+            # nhánh `if at_intersection` nên chỉ được đánh giá ở những nhịp
+            # follow_line() TÌNH CỜ báo giao lộ, mà cái đó dùng ngưỡng THÍCH NGHI
+            # tự co giãn. Lý do đầy đủ + vệt số: config.ADVANCE_FACTORY_STOP_CM.
+            if (cong_hang and do_duoc_quang
+                    and 0 < config.ADVANCE_FACTORY_STOP_CM <= quang_adv):
+                self.stop_gently(base_speed)
+                logger.info(
+                    "Advance: ĐÃ ĐI %.1fcm từ giao lộ (mốc %.1f) — dừng trong khu "
+                    "nhà máy theo QUÃNG ĐƯỜNG, không dò tấm in (tấm in cho điểm "
+                    "dừng ngẫu nhiên). ADC %s",
+                    quang_adv, config.ADVANCE_FACTORY_STOP_CM, self._adc_de_ghi())
+                return True
+
             # ⛔ CHỐT CHÍNH khi vào KỆ: dừng theo QUÃNG ĐƯỜNG, không theo siêu âm.
             # Siêu âm ở kệ sai cả hai chiều — xem config.ADVANCE_SHELF_STOP_CM.
             # Cõng hàng thì đang đi tới NHÀ MÁY, chốt đó do mảng in lo.
