@@ -349,41 +349,14 @@ class Vision:
                         attempt, label_l, conf_l * 100, "ORB" if from_orb_l else "HSV",
                         label_r, conf_r * 100, "ORB" if from_orb_r else "HSV")
 
-            # ⛔ HAI CÀNG KHÔNG BAO GIỜ CÙNG MỘT NHÃN.
-            # 12 kiện / 4 nhà máy = mỗi nhà máy 3 kiện, 6 cặp = 6 cạnh của đồ thị
-            # đủ 4 đỉnh → mỗi cặp LUÔN là hai nhà máy khác nhau (HAPPY_CASE.md).
-            # Nên trùng nhãn là BẰNG CHỨNG SAI, chắc chắn, không cần biết tin cậy
-            # bao nhiêu. Đo trên robot 04/08: cả hai càng ra amkor 50.6%/58.3% và
-            # robot giao nhầm cả hai kiện — log vẫn báo "Nhận diện OK".
-            # Bên nào YẾU hơn thì chấm lại, loại nhãn vừa trùng ra.
-            if label_l is not None and label_l == label_r:
-                # ⚠️ KHÔNG so conf_l với conf_r khi một bên đến từ ORB.
-                # conf của ORB là inlier/CONFIDENCE_NORM, conf của HSV là tỉ lệ
-                # pixel — HAI THANG KHÁC NHAU (đã ghi ngay dưới, ở chỗ chọn kết
-                # quả tốt nhất). Đo trên robot 04/08:
-                #     trái=amkor (15.0%, ORB), phải=amkor (17.3%, HSV)
-                # So trần thì "trái yếu hơn" nên nó vứt bỏ một kết quả ORB ĐÃ
-                # CHẮC CHẮN để giữ lại một số HSV mơ hồ. ORB tự quyết định đủ tự
-                # tin rồi, nên bên nào KHÔNG phải ORB mới là bên đáng nghi.
-                if from_orb_l != from_orb_r:
-                    yeu = "phải" if from_orb_l else "trái"
-                else:
-                    yeu = "trái" if conf_l <= conf_r else "phải"
-                logger.warning(
-                    "Hai càng cùng ra '%s' (trái %.1f%%, phải %.1f%%) — KHÔNG THỂ "
-                    "ĐÚNG: mỗi cặp trên kệ luôn là hai nhà máy khác nhau. Chấm lại "
-                    "bên %s, loại '%s'.", label_l, conf_l * 100, conf_r * 100,
-                    yeu, label_l)
-                if yeu == "trái":
-                    label_l, conf_l = self._classify_by_color(
-                        frame_left, level, loai_tru={label_l})
-                    from_orb_l = False
-                else:
-                    label_r, conf_r = self._classify_by_color(
-                        frame_right, level, loai_tru={label_r})
-                    from_orb_r = False
-                logger.warning("  → sau khi loại: trái=%s (%.1f%%), phải=%s (%.1f%%)",
-                               label_l, conf_l * 100, label_r, conf_r * 100)
+            # ⚠️ ĐỪNG THÊM LẠI LUẬT "hai càng không bao giờ cùng một nhãn".
+            # Ngày 04/08 tôi đã cài nó, suy từ docs/HAPPY_CASE.md ("mỗi cặp luôn
+            # là hai nhà máy khác nhau"). Đội đính chính: thể lệ đặt 12 kiện NGẪU
+            # NHIÊN trên 3 giá, nên CẶP TRÙNG LOẠI LÀ HỢP LỆ. Luật đó sẽ ép sai
+            # một kiện đang nhận ĐÚNG — tệ hơn hẳn thứ nó định chữa.
+            # main.py vốn đã có nhánh "2 kiện cùng loại — giao 1 điểm duy nhất".
+            # Ràng buộc "mỗi cặp hai loại khác nhau" chỉ đúng khi TỰ XẾP được
+            # (luyện tập, thi cấp trường), không đúng ở vòng chính thức.
 
             # ORB đã tự quyết định đủ tự tin — không so confidence quy đổi với
             # CONFIDENCE_THRESHOLD nữa (chỉ có ý nghĩa với % pixel của HSV).

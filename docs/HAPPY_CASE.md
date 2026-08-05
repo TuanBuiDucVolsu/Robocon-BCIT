@@ -5,6 +5,13 @@
 > Thực tế **mỗi cặp luôn là hai loại KHÁC nhau**, nên toàn bộ phần tiết kiệm đó không
 > tồn tại. Bản này viết lại theo ràng buộc đúng.
 
+> ⛔ **RÀNG BUỘC DƯỚI ĐÂY CHỈ ĐÚNG KHI TỰ XẾP ĐƯỢC** (luyện tập, thi cấp trường).
+> Vòng chính thức, BTC đặt **12 kiện NGẪU NHIÊN trên 3 giá** — nên **HAI Ô CÙNG MỘT
+> TẦNG CÓ THỂ TRÙNG LOẠI**. Đừng suy ngược từ tài liệu này thành một luật trong code.
+> Ngày 04/08 đã xảy ra: `classify_pair` bị cài luật "hai càng không bao giờ cùng một
+> nhãn", và nó ÉP SAI một kiện đang nhận ĐÚNG. Đã gỡ.
+> `main.py` vốn có sẵn nhánh "2 kiện cùng loại — giao 1 điểm duy nhất".
+
 ## Ràng buộc
 
 Mỗi cặp (2 ô trên một tầng) là **hai nhà máy khác nhau**. 12 kiện, 4 nhà máy → mỗi

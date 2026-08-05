@@ -580,55 +580,20 @@ class TestClassifyPair(unittest.TestCase):
         v._classify_frame = fake_classify
         return v
 
-    def test_ORB_khong_bi_vut_bo_vi_so_nham_thang_do(self):
-        """⚠️ HỒI QUY 04/08: luật "không trùng nhãn" so nhầm hai thang đo.
 
-        conf của ORB là inlier/CONFIDENCE_NORM, conf của HSV là tỉ lệ pixel — hai
-        thang KHÁC NHAU, không so trực tiếp được (chính codebase đã ghi điều này ở
-        chỗ chọn kết quả tốt nhất). Đo trên robot:
-            trái=amkor (15.0%, ORB), phải=amkor (17.3%, HSV)
-        So trần thì "trái yếu hơn" → vứt bỏ kết quả ORB ĐÃ CHẮC CHẮN để giữ một số
-        HSV mơ hồ. ORB tự quyết định đủ tự tin rồi; bên KHÔNG phải ORB mới đáng nghi.
-        """
-        v = self._vision([(("amkor", 0.150, True), ("amkor", 0.173, False))])
-        goi = []
+    def test_hai_cang_CUNG_NHAN_van_duoc_chap_nhan(self):
+        """⚠️ Thể lệ đặt 12 kiện NGẪU NHIÊN trên 3 giá — cặp TRÙNG LOẠI là HỢP LỆ.
 
-        def cham_lai(frame, level=None, loai_tru=None):
-            goi.append(loai_tru)
-            return "foxconn", 0.40
+        Ngày 04/08 tôi từng cài luật "hai càng không bao giờ cùng một nhãn", suy
+        từ docs/HAPPY_CASE.md. Đội đính chính: ràng buộc đó chỉ đúng khi TỰ XẾP
+        được (luyện tập), không đúng ở vòng chính thức. Luật đó ép sai một kiện
+        đang nhận ĐÚNG — tệ hơn hẳn thứ nó định chữa.
 
-        v._classify_by_color = cham_lai
-        self.assertEqual(v.classify_pair(), ("amkor", "foxconn"),
-                         "bên PHẢI (HSV) phải bị chấm lại, không phải bên ORB")
-        self.assertEqual(goi, [{"amkor"}])
-
-    def test_hai_cang_cung_nhan_thi_cham_lai_ben_yeu(self):
-        """⚠️ HỒI QUY 04/08: hai càng cùng một nhãn là BẰNG CHỨNG SAI.
-
-        12 kiện / 4 nhà máy = mỗi nhà máy 3 kiện, 6 cặp = 6 cạnh của đồ thị đủ 4
-        đỉnh → mỗi cặp LUÔN là hai nhà máy khác nhau (docs/HAPPY_CASE.md). Đo
-        trên robot: cả hai càng ra amkor 50.6%/58.3%, log báo "Nhận diện OK", và
-        robot giao NHẦM cả hai kiện. Tin cậy cao không cứu được — chính vì cao mà
-        nó lọt.
-
-        Bên YẾU hơn phải chấm lại, loại nhãn vừa trùng.
+        main.py vốn đã có nhánh "2 kiện cùng loại — giao 1 điểm duy nhất".
         """
         v = self._vision([(("amkor", 0.50, False), ("amkor", 0.58, False))])
-        goi = []
-
-        def cham_lai(frame, level=None, loai_tru=None):
-            goi.append(loai_tru)
-            return "samsung", 0.40
-
-        v._classify_by_color = cham_lai
-        self.assertEqual(v.classify_pair(), ("samsung", "amkor"),
-                         "bên TRÁI yếu hơn (50 < 58) nên nó phải bị chấm lại")
-        self.assertEqual(goi, [{"amkor"}], "phải loại đúng nhãn đã trùng")
-
-    def test_hai_nhan_khac_nhau_thi_khong_dung_toi(self):
-        v = self._vision([(("samsung", 0.50, False), ("amkor", 0.58, False))])
         v._classify_by_color = lambda *a, **k: self.fail("không được chấm lại")
-        self.assertEqual(v.classify_pair(), ("samsung", "amkor"))
+        self.assertEqual(v.classify_pair(), ("amkor", "amkor"))
 
     def test_both_confident_first_try(self):
         v = self._vision([(("samsung", 0.9, True), ("foxconn", 0.9, True))])
