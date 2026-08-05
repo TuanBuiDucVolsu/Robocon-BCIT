@@ -3597,5 +3597,54 @@ class TestTamInGiuaSanKhongPhaiGiaoLo(unittest.TestCase):
                     LineSensor.la_giao_lo_that([v / 1023 for v in adc]),
                     "mảng in bị nhận là giao lộ → robot thả hàng giữa sân")
 
+
+class TestTranhKienCuKhongBuHaiLan(unittest.TestCase):
+    """Kiện đã thả nằm ĐÚNG trên đường robot đi vào — phải né, nhưng chỉ MỘT lần.
+
+    Người dùng chỉ ra: chốt quãng đường cố định tới điểm thả sẽ HÚC vào kiện đã thả
+    trước đó ở cùng nhà máy (mỗi nhà máy nhận 3 kiện). Cơ chế cũ `_lui_tranh_kien_cu`
+    lùi SAU KHI ĐÃ TỚI — tức đã va rồi mới lùi.
+
+    Nay trừ NGAY vào quãng đi tới. Nhưng khi đó bước lùi cũ phải TẮT, không thì bù
+    hai lần: kiện thứ 2 rơi cách kiện thứ 1 tận 18cm thay vì 9cm, tràn khỏi ô 25cm.
+    """
+
+    def _robot(self, da_giao: int):
+        import main as M
+        r = object.__new__(M.Robot)
+        r.motion = MagicMock()
+        r.da_giao_theo_nha_may = {"samsung": da_giao}
+        return r
+
+    def test_bao_cho_motion_dung_som_dung_so_cm(self):
+        r = self._robot(2)
+        with patch.object(config, "FACTORY_STACK_BACKOFF_CM", 9.0):
+            r._dat_bot_quang_nha_may("samsung")
+        self.assertAlmostEqual(r.motion.bot_quang_nha_may, 18.0)
+
+    def test_nha_may_chua_co_kien_thi_khong_tru_gi(self):
+        r = self._robot(0)
+        with patch.object(config, "FACTORY_STACK_BACKOFF_CM", 9.0):
+            r._dat_bot_quang_nha_may("samsung")
+        self.assertEqual(r.motion.bot_quang_nha_may, 0.0)
+
+    def test_khong_lui_them_khi_quang_di_vao_da_tru_san(self):
+        """⚠️ Bù hai lần = kiện thứ 2 cách kiện thứ 1 18cm, tràn khỏi ô 25cm."""
+        r = self._robot(1)
+        r._retreat_from_shelf = MagicMock()
+        with patch.object(config, "FACTORY_STACK_BACKOFF_CM", 9.0), \
+             patch.object(config, "ADVANCE_FACTORY_STOP_CM", 12.0):
+            r._lui_tranh_kien_cu("samsung")
+        r._retreat_from_shelf.assert_not_called()
+
+    def test_van_lui_khi_chot_quang_duong_bi_TAT(self):
+        """ADVANCE_FACTORY_STOP_CM = 0 → quay về cách dò tấm in, cần lùi như cũ."""
+        r = self._robot(1)
+        r._retreat_from_shelf = MagicMock()
+        with patch.object(config, "FACTORY_STACK_BACKOFF_CM", 9.0), \
+             patch.object(config, "ADVANCE_FACTORY_STOP_CM", 0.0):
+            r._lui_tranh_kien_cu("samsung")
+        r._retreat_from_shelf.assert_called_once()
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

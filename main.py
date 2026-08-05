@@ -711,6 +711,9 @@ class Robot:
                            self.time_remaining())
             return State.DONE
 
+        # Trừ NGAY vào quãng đi tới, đừng đi vào rồi lùi ra: kiện đã thả ở nhà máy
+        # này nằm đúng trên đường robot sắp đi vào. Xem config.ADVANCE_FACTORY_STOP_CM.
+        self._dat_bot_quang_nha_may(label)
         self._deliver_nav_ok = self._goto(goal, f"DELIVER → {label}")
         return State.DROP_FIRST
 
@@ -743,6 +746,21 @@ class Robot:
                     ", ".join(f"{k}={v}" for k, v in
                               sorted(self.da_giao_theo_nha_may.items())))
 
+    def _dat_bot_quang_nha_may(self, label: str) -> None:
+        """Báo cho Motion phải dừng SỚM bao nhiêu cm vì nhà máy đó đã có kiện.
+
+        Mỗi nhà máy nhận 3 kiện và chúng nằm ĐÚNG trên đường robot đi vào, nên
+        chốt quãng đường cố định sẽ húc vào kiện cũ. `_lui_tranh_kien_cu()` lùi
+        SAU KHI ĐÃ TỚI — tức đã va rồi mới lùi. Trừ trước thì không bao giờ chạm.
+        """
+        bu = getattr(config, "FACTORY_STACK_BACKOFF_CM", 0.0)
+        da_co = self._so_kien_da_giao(label)
+        bot = bu * da_co if bu > 0 else 0.0
+        self.motion.bot_quang_nha_may = bot
+        if bot > 0:
+            logger.info("Nhà máy %s đã có %d kiện — dừng SỚM hơn %.1fcm để không "
+                        "húc vào chúng", label.upper(), da_co, bot)
+
     def _lui_tranh_kien_cu(self, label: str) -> None:
         """Lùi bớt trước khi thả, để kiện mới không chồng lên kiện đã có.
 
@@ -753,6 +771,14 @@ class Robot:
         bu = getattr(config, "FACTORY_STACK_BACKOFF_CM", 0.0)
         da_co = self._so_kien_da_giao(label)
         if bu <= 0 or da_co <= 0:
+            return
+        # ⛔ ĐỪNG BÙ HAI LẦN. Khi ADVANCE_FACTORY_STOP_CM > 0 thì chặng đi vào khu
+        # nhà máy đã TRỪ SẴN phần này khỏi quãng đi tới (_dat_bot_quang_nha_may),
+        # nên robot dừng sớm và KHÔNG hề chạm kiện cũ. Lùi thêm ở đây là lùi đúp:
+        # kiện thứ 2 rơi cách kiện thứ 1 tận 18cm thay vì 9cm, tràn khỏi ô 25cm.
+        if getattr(config, "ADVANCE_FACTORY_STOP_CM", 0.0) > 0:
+            logger.info("Nhà máy %s: KHÔNG lùi thêm — quãng đi vào đã trừ sẵn "
+                        "%.1fcm tránh kiện cũ", label.upper(), bu * da_co)
             return
         lui = bu * da_co
         logger.info("Nhà máy %s đã có %d kiện — lùi thêm %.1fcm trước khi thả để "
@@ -895,6 +921,7 @@ class Robot:
 
         # Bộ tìm đường tự lo đoạn nhà máy → nhà máy (phải vòng về cột giữa vì giữa
         # các khu nhà máy không có line nối dọc).
+        self._dat_bot_quang_nha_may(label)
         self._deliver_nav_ok = self._goto(goal, f"DELIVER kiện 2 → {label}")
         return State.DROP_SECOND
 

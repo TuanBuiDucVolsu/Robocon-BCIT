@@ -898,6 +898,26 @@ class Motion:
             logger.info("Advance: dừng theo QUÃNG ĐƯỜNG %.1fcm từ giao lộ — bỏ qua "
                         "siêu âm (ở kệ nó sai cả hai chiều)",
                         config.ADVANCE_SHELF_STOP_CM)
+        # ⛔ TRỪ NGAY VÀO QUÃNG ĐI TỚI, đừng đi vào rồi lùi ra.
+        # Mỗi nhà máy nhận 3 kiện (12 kiện / 4 nhà máy). Kiện đã thả nằm ĐÚNG trên
+        # đường robot sắp đi vào, nên chốt quãng đường cố định sẽ húc vào nó. Bước
+        # _lui_tranh_kien_cu() bên main lùi SAU KHI ĐÃ TỚI — tức đã va rồi mới lùi.
+        # Trừ trước thì robot không bao giờ chạm vào kiện cũ.
+        # Số kiện đã thả do main đặt vào `bot_quang_nha_may` (cm) trước khi chạy
+        # route, cùng kiểu với cờ `dang_cong_hang`.
+        bot_cm = max(0.0, float(getattr(self, "bot_quang_nha_may", 0.0) or 0.0))
+        moc_nha_may = config.ADVANCE_FACTORY_STOP_CM - bot_cm
+        if cong_hang and bot_cm > 0:
+            if moc_nha_may < config.ADVANCE_FACTORY_MIN_STOP_CM:
+                logger.warning(
+                    "Advance: mốc nhà máy sau khi trừ %.1fcm tránh kiện cũ chỉ còn "
+                    "%.1fcm, DƯỚI sàn %.1f — kẹp lại. Khu nhà máy sâu 25cm mà mỗi "
+                    "kiện chiếm 9cm, kiện thứ 3 KHÔNG lọt (docs/HAPPY_CASE.md).",
+                    bot_cm, moc_nha_may, config.ADVANCE_FACTORY_MIN_STOP_CM)
+                moc_nha_may = config.ADVANCE_FACTORY_MIN_STOP_CM
+            logger.info("Advance: mốc nhà máy %.1f − %.1f (tránh kiện cũ) = %.1fcm",
+                        config.ADVANCE_FACTORY_STOP_CM, bot_cm, moc_nha_may)
+
         thay_muc_tieu = False    # đã từng thấy vật trong APPROACH_DETECT_DISTANCE
         mat_vong = 0             # số nhịp kịch trần LIÊN TIẾP
         nhieu = 0                # số gai nhiễu đã bỏ qua
@@ -1046,14 +1066,17 @@ class Motion:
             # nhánh `if at_intersection` nên chỉ được đánh giá ở những nhịp
             # follow_line() TÌNH CỜ báo giao lộ, mà cái đó dùng ngưỡng THÍCH NGHI
             # tự co giãn. Lý do đầy đủ + vệt số: config.ADVANCE_FACTORY_STOP_CM.
-            if (cong_hang and do_duoc_quang
-                    and 0 < config.ADVANCE_FACTORY_STOP_CM <= quang_adv):
+            if cong_hang and do_duoc_quang and moc_nha_may > 0 \
+                    and moc_nha_may <= quang_adv:
                 self.stop_gently(base_speed)
                 logger.info(
-                    "Advance: ĐÃ ĐI %.1fcm từ giao lộ (mốc %.1f) — dừng trong khu "
-                    "nhà máy theo QUÃNG ĐƯỜNG, không dò tấm in (tấm in cho điểm "
-                    "dừng ngẫu nhiên). ADC %s",
-                    quang_adv, config.ADVANCE_FACTORY_STOP_CM, self._adc_de_ghi())
+                    "Advance: ĐÃ ĐI %.1fcm từ giao lộ (mốc %.1f%s) — dừng trong "
+                    "khu nhà máy theo QUÃNG ĐƯỜNG, không dò tấm in (tấm in cho "
+                    "điểm dừng ngẫu nhiên). ADC %s",
+                    quang_adv, moc_nha_may,
+                    "" if bot_cm <= 0 else
+                    f" = {config.ADVANCE_FACTORY_STOP_CM:.1f} − {bot_cm:.1f} tránh "
+                    f"kiện cũ", self._adc_de_ghi())
                 return True
 
             # ⛔ CHỐT CHÍNH khi vào KỆ: dừng theo QUÃNG ĐƯỜNG, không theo siêu âm.

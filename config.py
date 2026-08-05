@@ -772,6 +772,17 @@ ADVANCE_ENCODER_DEAD_PULSES = 20
 # Đặt 0 để quay về cách dò tấm in.
 ADVANCE_FACTORY_STOP_CM = 12.0
 
+# Sàn cho mốc trên sau khi TRỪ phần tránh kiện cũ. Mỗi nhà máy nhận 3 kiện, kiện đã
+# thả nằm ĐÚNG trên đường robot sắp đi vào — nên mỗi lần thả sau phải dừng SỚM HƠN
+# đúng bằng FACTORY_STACK_BACKOFF_CM × số kiện đã có.
+# ⚠️ SỐ HỌC KHÔNG ĐỦ CHỖ CHO KIỆN THỨ 3: 12.0 − 2×9.0 = −6.0. Đây không phải lỗi
+# phần mềm mà là ràng buộc VẬT LÝ đã ghi trong docs/HAPPY_CASE.md — 3 × 9cm = 27cm
+# lớn hơn chiều sâu khu nhà máy 25cm, ba kiện xếp một hàng KHÔNG lọt. Cách chữa nêu
+# trong tài liệu đó là thả SO LE trái/phải (2 cột × 2 hàng), chưa làm.
+# Kẹp ở sàn này để robot vẫn thả được thay vì lùi vào chỗ âm; kiện thứ 3 sẽ chồng
+# lấn kiện thứ 2 — mất điểm kiện đó, nhưng không kẹt robot.
+ADVANCE_FACTORY_MIN_STOP_CM = 3.0
+
 ADVANCE_FACTORY_DARK_MIN_CM = 4.0
 # ⚠️ 10.0 → 4.0 ngày 03/08. Ô FOXCONN nằm SÁT NGAY giao lộ (không như Samsung/Hana
 # ở xa hơn), nên advance chạm tấm in khi mới đi ~8cm. Với mốc 10 thì tín hiệu "đã
