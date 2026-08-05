@@ -1509,6 +1509,26 @@ class Motion:
             if self._aborted():
                 break
             da += self._doc_xung()
+            # ⛔ CÓ LÁI, KHÔNG CHẠY MÙ — đây là 12cm NGAY TRƯỚC MỘT CÚ XOAY, tức
+            # đoạn quyết định tư thế của cả chặng sau.
+            # Đội đo 04/08: test_motion option 10 cho ĐÚNG 90°, nhưng chạy thật ở
+            # giao lộ Samsung robot quay ~135° rồi lạc. Cú xoay KHÔNG sai — tư thế
+            # lúc xoay mới sai. Samsung ở R4 (nhà máy xa nhất) nên chặng lùi về nó
+            # dài nhất, sai lệch hướng tích luỹ nhiều nhất; rồi 12cm chạy MÙ này
+            # khuếch đại nốt, và robot xoay đủ 90° nhưng quanh một tư thế đã xiên
+            # — so với vạch line thì thành ~135°.
+            # Đúng bài học đã ghi cho _forward_guided: "Robot không đi thẳng tuyệt
+            # đối nên nó lệch dần". Còn thấy line thì lái, mất line thì giữ nguyên
+            # hành vi cũ (forward) nên không xấu đi ở chỗ không có vạch.
+            # Cờ giao lộ của follow_line() bị BỎ QUA: ta đang đứng ngay trên giao
+            # lộ nên nó báo liên tục, mà ở đây chỉ cần phần LÁI.
+            if config.RECENTER_BAM_LINE:
+                try:
+                    _, gia_tri = self.follow_line(speed)
+                    if sum(gia_tri) == 0:
+                        self.forward(speed)   # mất line → như cũ
+                except Exception:
+                    self.forward(speed)
             time.sleep(0.01)
         self.stop()
         het_gio = da < can

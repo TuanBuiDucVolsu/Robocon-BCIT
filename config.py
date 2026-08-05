@@ -916,6 +916,18 @@ ENCODER_PULSES_PER_CM = 35.940  # ĐÃ CHỐT trên robot 03/08 — 3 lần nh�
                                 # (tools/calibrate_encoder_cm.py). 0 = chưa calibrate
 RECENTER_CM = 12.0            # cm — ĐO BẰNG THƯỚC trên robot, không phải số đoán
 RECENTER_MAX_TIME = 5.0       # Giây chặn trên: encoder hỏng thì không chạy vô hạn
+
+# Bước tiến bù 12cm trước khi xoay có BÁM LINE không (thay vì chạy mù).
+# Đây là 12cm NGAY TRƯỚC MỘT CÚ XOAY — đoạn quyết định tư thế của cả chặng sau.
+# Đo trên robot 04/08: test_motion option 10 cho ĐÚNG 90°, nhưng chạy thật ở giao
+# lộ Samsung robot quay ~135° rồi lạc khỏi line. Cú xoay KHÔNG sai — tư thế lúc
+# xoay mới sai. Samsung ở R4 (nhà máy xa nhất) nên chặng lùi về nó dài nhất, sai
+# lệch hướng tích luỹ nhiều nhất, rồi 12cm chạy mù khuếch đại nốt: robot xoay đủ
+# 90° nhưng quanh một tư thế đã xiên, so với vạch thành ~135°.
+# Cùng bài học đã ghi cho _forward_guided ("robot không đi thẳng tuyệt đối nên nó
+# lệch dần"). Mất line thì rơi về forward() y như cũ, nên không xấu đi ở chỗ
+# không có vạch. Đặt False để về hành vi cũ.
+RECENTER_BAM_LINE = True
 # ⚠️ 3.0 → 5.0 ngày 03/08. Số 3.0 đặt hồi robot đi 12cm trong 1.2s. Về cuối buổi
 # nó chậm dần — cùng 12cm mất 1.8-2.2s, và có lượt CHỈ ĐI ĐƯỢC 287/431 rồi 207/431
 # xung trước khi chạm trần:

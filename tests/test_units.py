@@ -3646,5 +3646,57 @@ class TestCongLuiKhacNhauGiuaKeVaNhaMay(unittest.TestCase):
                         f"cổng {config.BACK_MIN_TRAVEL_CM} bác luôn giao lộ thật "
                         f"ở {con_lai:.1f}cm")
 
+
+class TestTienBuCoLai(unittest.TestCase):
+    """⚠️ HỒI QUY 04/08: 12cm chạy MÙ ngay trước cú xoay làm lệch tư thế.
+
+    Đội đo: test_motion option 10 cho ĐÚNG 90°, nhưng chạy thật ở giao lộ Samsung
+    robot quay ~135° rồi lạc khỏi line. Cú xoay KHÔNG sai — tư thế lúc xoay mới
+    sai. Samsung ở R4 (nhà máy xa nhất) nên chặng lùi về nó dài nhất, sai lệch
+    hướng tích luỹ nhiều nhất; rồi 12cm chạy mù này khuếch đại nốt.
+
+    Cùng bài học đã ghi cho _forward_guided: "robot không đi thẳng tuyệt đối nên
+    nó lệch dần".
+    """
+
+    def _motion(self, thay_line: bool):
+        m = object.__new__(Motion)
+        m._aborted = lambda: False
+        m.forward = MagicMock()
+        m.stop = MagicMock()
+        m.follow_line = MagicMock(
+            return_value=(False, [0, 0, 1, 1, 0, 0] if thay_line else [0] * 6))
+        m._encoder_left = _EncoderGia(40)
+        m._encoder_right = _EncoderGia(40)
+        return m
+
+    def test_con_thay_line_thi_LAI(self):
+        m = self._motion(thay_line=True)
+        with patch.object(config, "RECENTER_BAM_LINE", True):
+            self.assertTrue(m.tien_bu_cm(12.0, 35))
+        m.follow_line.assert_called()
+
+    def test_mat_line_thi_ve_dung_hanh_vi_cu(self):
+        """Không có vạch thì phải chạy thẳng như trước — không được xấu đi."""
+        m = self._motion(thay_line=False)
+        with patch.object(config, "RECENTER_BAM_LINE", True):
+            self.assertTrue(m.tien_bu_cm(12.0, 35))
+        m.forward.assert_called()
+
+    def test_tat_co_thi_khong_lai(self):
+        m = self._motion(thay_line=True)
+        with patch.object(config, "RECENTER_BAM_LINE", False):
+            self.assertTrue(m.tien_bu_cm(12.0, 35))
+        m.follow_line.assert_not_called()
+
+    def test_van_dung_dung_quang_duong(self):
+        """Bám line không được làm hỏng phép đo quãng: vẫn dừng theo encoder."""
+        m = self._motion(thay_line=True)
+        with patch.object(config, "RECENTER_BAM_LINE", True), \
+             self.assertLogs("control.motion", level="INFO") as nk:
+            m.tien_bu_cm(12.0, 35)
+        self.assertNotIn("HẾT CHẶN TRÊN", "\n".join(nk.output))
+        m.stop.assert_called()
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
