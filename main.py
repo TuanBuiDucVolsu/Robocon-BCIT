@@ -769,6 +769,14 @@ class Robot:
         da_co = self._so_kien_da_giao(label)
         bot = bu * da_co if bu > 0 else 0.0
         self.motion.bot_quang_nha_may = bot
+        # Mốc riêng của khu này, nếu đã đo. Bốn khu cách giao lộ khác nhau —
+        # xem config.ADVANCE_FACTORY_STOP_CM_RIENG.
+        rieng = getattr(config, "ADVANCE_FACTORY_STOP_CM_RIENG", {}) or {}
+        self.motion.moc_nha_may_rieng = rieng.get(label)
+        if self.motion.moc_nha_may_rieng:
+            logger.info("Nhà máy %s dùng mốc RIÊNG %.1fcm (chung là %.1f)",
+                        label.upper(), self.motion.moc_nha_may_rieng,
+                        config.ADVANCE_FACTORY_STOP_CM)
         if bot > 0:
             logger.info("Nhà máy %s đã có %d kiện — dừng SỚM hơn %.1fcm để không "
                         "húc vào chúng", label.upper(), da_co, bot)

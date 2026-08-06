@@ -1927,7 +1927,12 @@ class TestAdvanceToEnd(unittest.TestCase):
         xung = int(5.0 * config.ENCODER_PULSES_PER_CM)
         m._encoder_left = _EncoderGia(xung)
         m._encoder_right = _EncoderGia(0)
-        with self.assertLogs("control.motion", level="INFO") as nk:
+        # Tắt chốt QUÃNG ĐƯỜNG để bài này kiểm đúng thứ nó sinh ra để kiểm: cơ chế
+        # DÒ TẤM IN không được chặn ô Foxconn (nằm sát giao lộ). Từ 06/08 chốt quãng
+        # đường là cơ chế chính và nó dừng trước — xem
+        # test_khu_nha_may_dung_theo_QUANG_DUONG_khong_do_tam_in.
+        with patch.object(config, "ADVANCE_FACTORY_STOP_CM", 0.0), \
+             self.assertLogs("control.motion", level="INFO") as nk:
             self.assertTrue(m.advance_to_end(timeout=3.0))
         ghi = "\n".join(nk.output)
         self.assertIn("ĐÃ VÀO KHU NHÀ MÁY", ghi)

@@ -944,7 +944,10 @@ class Motion:
         # Số kiện đã thả do main đặt vào `bot_quang_nha_may` (cm) trước khi chạy
         # route, cùng kiểu với cờ `dang_cong_hang`.
         bot_cm = max(0.0, float(getattr(self, "bot_quang_nha_may", 0.0) or 0.0))
-        moc_nha_may = config.ADVANCE_FACTORY_STOP_CM - bot_cm
+        # Mốc riêng của khu (nếu đã đo) đè lên số chung — bốn khu cách giao lộ
+        # những khoảng khác nhau. Xem config.ADVANCE_FACTORY_STOP_CM_RIENG.
+        _goc = getattr(self, "moc_nha_may_rieng", None) or config.ADVANCE_FACTORY_STOP_CM
+        moc_nha_may = _goc - bot_cm
         if cong_hang and bot_cm > 0:
             if moc_nha_may < config.ADVANCE_FACTORY_MIN_STOP_CM:
                 logger.warning(

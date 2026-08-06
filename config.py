@@ -785,7 +785,30 @@ ADVANCE_ENCODER_DEAD_PULSES = 20
 # BÁNH, đặt vào đây. Bước xoay trước đó đã có tien_bu_cm(RECENTER_CM) nên lúc xoay
 # trục bánh nằm ĐÚNG trên giao lộ — quãng này đo từ đó.
 # Đặt 0 để quay về cách dò tấm in.
-ADVANCE_FACTORY_STOP_CM = 12.0
+# ⚠️ 12.0 ĐƯA ROBOT QUÁ CUỐI VẠCH. Đo 06/08 bằng smoke option 9: đặt robot đúng
+# tư thế nó kết thúc sau khi thả, cảm biến đọc [937, 938, 753, 865, 772, 480] —
+# KHÔNG mắt nào thấy vạch. Chặng lùi về do đó không có gì để bám ngay từ đầu, và
+# sau cú quay đầu 180° robot chạy 23.1cm trên nền trắng rồi bỏ cuộc.
+# Không bản vá nào ở chặng quay về chữa được, vì lỗi có TỪ TRƯỚC khi nó bắt đầu.
+# 12.0 lấy từ điểm dừng của cơ chế DÒ TẤM IN cũ — chính chỗ này đã ghi "chưa phải
+# điểm thả tối ưu", và đúng là không phải.
+# Hạ về 8.0. CÁCH KIỂM: chạy smoke option 9, đọc dòng "Cảm biến line ngay dưới
+# robot" ở tư thế sau khi thả — phải có ÍT NHẤT 2 mắt gần 0. Còn toàn số >400 thì
+# hạ tiếp 2cm một lần.
+ADVANCE_FACTORY_STOP_CM = 8.0
+
+# Mốc RIÊNG cho từng nhà máy, đè lên số chung ở trên. BỐN KHU CÁCH GIAO LỘ NHỮNG
+# KHOẢNG KHÁC NHAU — số đo trên robot 03/08 (ghi trong
+# tests/test_units.py::test_foxconn_zone_right_next_to_the_junction...):
+#     "advance chạm tấm in FOXCONN khi mới đi ~8cm (Samsung và Hana thì XA HƠN)"
+# Nên một hằng số chung không thể đúng cho cả bốn, và đó chính là lý do 12.0 đưa
+# robot QUÁ CUỐI VẠCH ở Samsung (đo 06/08: đặt robot đúng tư thế sau khi thả,
+# cảm biến đọc [937, 938, 753, 865, 772, 480] — không mắt nào thấy vạch).
+# CÁCH ĐO từng khu: chạy smoke option 9, chọn nhà máy đó, đọc dòng
+# "Cảm biến line ngay dưới robot" — phải có ÍT NHẤT 2 mắt gần 0. Còn toàn số >400
+# thì robot đã đi quá cuối vạch, hạ mốc của riêng khu đó xuống 2cm rồi thử lại.
+# Ví dụ:  ADVANCE_FACTORY_STOP_CM_RIENG = {"samsung": 8.0, "foxconn": 6.0}
+ADVANCE_FACTORY_STOP_CM_RIENG: dict[str, float] = {}
 
 # Sàn cho mốc trên sau khi TRỪ phần tránh kiện cũ. Mỗi nhà máy nhận 3 kiện, kiện đã
 # thả nằm ĐÚNG trên đường robot sắp đi vào — nên mỗi lần thả sau phải dừng SỚM HƠN
