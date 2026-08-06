@@ -427,6 +427,20 @@ tại điểm giao, line cắt ngang nằm dọc thanh cảm biến nên xoay ki
 
 ## Test
 
+> ⛔ **ĐỘI ĐÃ YÊU CẦU (06/08): KHÔNG chạy `test_units` / `test_logic` /
+> `test_match_sim` nữa, và không viết test mô phỏng mới.** Sửa lỗi bằng **LOG THẬT**
+> từ sa bàn (`test_log.txt`, `robot_log.txt`) và số đo bằng thước.
+> Lý do, kiểm bằng chính ngày 06/08: mọi lỗi thật đều tìm ra từ số đo — cộng ba con
+> số trong log ra lỗi `ESCAPE_MAX_CM` nhỏ hơn quãng thuật toán cần; dòng ADC ra lỗi
+> robot dừng quá cuối vạch ở nhà máy; thước của đội bác giả thuyết "encoder hỏng".
+> **Không lỗi nào do test mô phỏng tìm ra** — chúng chỉ kiểm code có khớp GIẢ ĐỊNH
+> của người viết không, mà mọi lỗi đều nằm ở chính giả định đó.
+> Chỉ giữ HAI loại kiểm tra, vì chúng rẻ và đã bắt được lỗi thật:
+> **(1)** bất đẳng thức giữa các hằng số (`ESCAPE_MAX_CM > ESCAPE_MIN_CM + xác nhận`,
+> `LIFT_HOME_DURATION ≥ LIFT_TIME_SHELF_2 + LOWER_EXTRA`);
+> **(2)** chữ ký ADC ĐÃ ĐO trên sa bàn (giao lộ thật vs tấm in).
+
+
 | Script | Mục đích |
 |--------|----------|
 | `tests/test_logic.py` | 118 unit test — **an toàn chạy cả trên Pi** (tự ép pin factory giả, xem dưới): bản đồ + mô phỏng route tới đúng chỗ + polarity + phân loại màu + reset + resume |
