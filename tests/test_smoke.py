@@ -620,6 +620,27 @@ def smoke_return_from_factories(m: Motion, **_):
             print(f"  Bỏ qua {nhan.upper()}.")
             continue
 
+        # ⛔ KIỂM TƯ THẾ TRƯỚC KHI CHẠY. Bài này ĐO chính tư thế đó, nên đặt sai là
+        # mất trắng một lượt và log cho ra kết luận sai. Đo 06/08: cùng chặng
+        # Samsung, lượt 21:00 bước lùi tìm thấy giao lộ (ADC [936,943,0,0,0,0]),
+        # lượt 21:09 "mất line quá 1.2s" ngay bước đầu — khác biệt duy nhất là chỗ
+        # đặt tay. Một lần đọc cảm biến rẻ hơn nhiều so với một lượt chạy hỏng.
+        try:
+            adc = m.read_line_sensor_adc()
+            toi_nhat = min(adc)
+            print(f"  Cảm biến line ngay dưới robot: {adc}")
+            if toi_nhat > config.LINE_STRICT_BLACK * 1023:
+                print(f"  ⚠ KHÔNG THẤY VẠCH NÀO — mắt tối nhất {toi_nhat}, cần "
+                      f"≤{int(config.LINE_STRICT_BLACK * 1023)}.")
+                print("    Thanh cảm biến đang nằm ngoài vạch dẫn vào nhà máy.")
+                print("    Chạy tiếp thì bước LÙI mất line ngay và bài đo vô nghĩa.")
+                if _ask("    Đặt lại rồi Enter [c = cứ chạy, s = bỏ qua]: ") == "s":
+                    continue
+                adc = m.read_line_sensor_adc()
+                print(f"  Đọc lại: {adc}")
+        except Exception as e:
+            print(f"  (không đọc được cảm biến line: {e})")
+
         pose = nav.pose_at(terminal)
         m.dang_cong_hang = False        # đã thả xong, không còn cõng hàng
         ok, pose_moi = _run(m, dich, pose)
