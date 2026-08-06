@@ -750,7 +750,10 @@ ADVANCE_INTERSECTION_DAM = 5
 # 06/08: ở 24.0 robot dừng CÒN XA KỆ, camera nhận diện kiện không chuẩn — ảnh mẫu
 # ORB và dải HSV đều chốt ở khoảng cách dừng CŨ, xa hơn là kiện nhỏ đi trong khung
 # và tỉ lệ pixel đúng màu tụt. Nâng 24.0 → 29.0 (thanh cảm biến cách chân kệ 6.4cm).
-ADVANCE_SHELF_STOP_CM = 29.0
+# 06/08: ở 29.0 camera quét kiện chưa tốt (trái samsung 10.6% — dưới ngưỡng 0.12,
+# phải amkor 38.6%). Nâng lên 32.0 → thanh cảm biến cách chân kệ 3.4cm.
+# ⚠️ 35.4 LÀ CHÂN KỆ. Đừng vượt 33.0 nếu chưa đo bằng thước.
+ADVANCE_SHELF_STOP_CM = 32.0
 
 # Bao lâu KHÔNG có xung encoder thì coi như encoder CHẾT và dừng khẩn.
 # 04/08, sau khi giao quyền dừng cho quãng đường: log in đúng dòng "dừng theo QUÃNG
