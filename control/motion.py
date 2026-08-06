@@ -762,9 +762,11 @@ class Motion:
                         self.last_route_progress.append(("back", 1))
                 elif action == "left":
                     self.turn_left_90()
+                    self._bat_lai_line_sau_xoay("trái")
                     self.last_route_progress.append(step)
                 elif action == "right":
                     self.turn_right_90()
+                    self._bat_lai_line_sau_xoay("phải")
                     self.last_route_progress.append(step)
                 elif action == "advance":
                     if not self.advance_to_end():
@@ -782,6 +784,42 @@ class Motion:
             if xoa_co_sau_route:
                 self.tren_giao_lo_dau = False
             self.vua_roi_o_xuat_phat = False
+
+    def _bat_lai_line_sau_xoay(self, chieu: str) -> bool:
+        """Xoay xong mà KHÔNG thấy vạch nào thì QUÉT TÌM LẠI NGAY, đừng đi.
+
+        ⚠️ HỒI QUY 06/08, smoke option 9, chặng Samsung → Kệ 3. Hai cú xoay trái
+        (quay đầu 180°) đều đủ xung — 714/713 và 716/713 — nhưng xoay xong cả sáu
+        mắt đều SÁNG, không vạch nào dưới thanh cảm biến:
+            5.9cm  ADC [923, 924, 724, 922, 931, 848]
+           11.9cm  ADC [778, 751, 580, 828, 765, 694]
+           17.9cm  ADC [577, 571, 408, 623, 578, 634]
+           23.7cm  ADC [489, 480, 409, 575, 516, 541]
+            → Mất line quá 1.2s! Quét tìm lại... → Không tìm lại được line!
+        Robot chạy 23.7cm trên nền trắng trơn RỒI MỚI quét, và lúc đó đã quá xa
+        để _recover_line() (quét ±0.5s tại chỗ) với tới.
+
+        Xoay tại chỗ luôn có trượt ngang, và hai cú liên tiếp thì cộng dồn. Quét
+        NGAY khi còn đứng cạnh vạch thì tìm lại được; đi 23cm rồi mới quét thì không.
+
+        Chỉ hành động khi KHÔNG thấy gì — thấy vạch thì trả về ngay, không tốn giây nào.
+        """
+        try:
+            values = self.read_line_sensor()
+        except Exception:
+            return True
+        if sum(values) > 0:
+            return True
+        logger.warning(
+            "Xoay %s xong nhưng KHÔNG thấy vạch nào (cảm biến %s) — quét tìm lại "
+            "NGAY tại chỗ. Đi tiếp rồi mới quét là quá muộn: xoay tại chỗ có trượt "
+            "ngang, càng đi càng xa vạch.", chieu, values)
+        if self._recover_line():
+            logger.info("Xoay %s: đã tìm lại được vạch", chieu)
+            return True
+        logger.error("Xoay %s: KHÔNG tìm lại được vạch ngay sau khi xoay — "
+                     "tư thế sau cú xoay sai nhiều hơn tầm quét.", chieu)
+        return False
 
     def _do_lai_khi_dung(self, dist_quyet: float,
                          base_speed: float) -> tuple[float, bool]:

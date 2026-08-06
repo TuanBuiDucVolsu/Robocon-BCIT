@@ -3721,5 +3721,48 @@ class TestTienBuCoLai(unittest.TestCase):
         self.assertNotIn("HẾT CHẶN TRÊN", "\n".join(nk.output))
         m.stop.assert_called()
 
+
+class TestQuetLaiNgaySauKhiXoay(unittest.TestCase):
+    """⚠️ HỒI QUY 06/08 (smoke option 9, Samsung → Kệ 3): xoay xong mất vạch.
+
+    Hai cú xoay trái (quay đầu 180°) đều ĐỦ XUNG — 714/713 và 716/713 — nhưng xoay
+    xong cả sáu mắt đều SÁNG, không vạch nào dưới thanh cảm biến:
+         5.9cm  ADC [923, 924, 724, 922, 931, 848]
+        23.7cm  ADC [489, 480, 409, 575, 516, 541]
+        → Mất line quá 1.2s! Quét tìm lại... → Không tìm lại được line!
+    Robot chạy 23.7cm trên nền trắng RỒI MỚI quét — quá xa để _recover_line() với tới.
+
+    Cú xoay không sai. Cái sai là sau khi xoay KHÔNG AI KIỂM còn thấy vạch không.
+    """
+
+    def _motion(self, thay_line: bool, quet_duoc: bool = True):
+        m = object.__new__(Motion)
+        m._aborted = lambda: False
+        m.stop = MagicMock()
+        m.forward = MagicMock()
+        m.turn_left_90 = MagicMock()
+        m.turn_right_90 = MagicMock()
+        m.read_line_sensor = lambda: ([0, 0, 1, 1, 0, 0] if thay_line else [0] * 6)
+        m._recover_line = MagicMock(return_value=quet_duoc)
+        m.last_route_progress = []
+        return m
+
+    def test_mat_vach_thi_QUET_NGAY(self):
+        m = self._motion(thay_line=False)
+        with self.assertLogs("control.motion", level="WARNING"):
+            m.execute_route([("left",)])
+        m._recover_line.assert_called_once()
+
+    def test_con_thay_vach_thi_KHONG_ton_giay_nao(self):
+        m = self._motion(thay_line=True)
+        m.execute_route([("right",)])
+        m._recover_line.assert_not_called()
+
+    def test_quet_khong_ra_thi_bao_LOI_ro_rang(self):
+        m = self._motion(thay_line=False, quet_duoc=False)
+        with self.assertLogs("control.motion", level="ERROR") as nk:
+            m.execute_route([("left",)])
+        self.assertIn("KHÔNG tìm lại được vạch", "\n".join(nk.output))
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

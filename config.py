@@ -942,7 +942,18 @@ RECENTER_MAX_TIME = 5.0       # Giây chặn trên: encoder hỏng thì không c
 # Cùng bài học đã ghi cho _forward_guided ("robot không đi thẳng tuyệt đối nên nó
 # lệch dần"). Mất line thì rơi về forward() y như cũ, nên không xấu đi ở chỗ
 # không có vạch. Đặt False để về hành vi cũ.
-RECENTER_BAM_LINE = True
+# ⛔ TẮT (06/08). Bật lên là HỎNG NẶNG HƠN thứ nó định chữa, hai lần liên tiếp:
+#   1. follow_line() tự stop() khi thấy giao lộ, mà bước này chạy khi robot ĐANG
+#      ĐỨNG TRÊN giao lộ → phanh mọi vòng lặp. Đo: 16/431 xung trong 5.01s.
+#   2. Vá xong lần 1 thì lộ ra lỗi nặng hơn: ở giao lộ CẢ THANH cảm biến đều đen,
+#      sai số line tính bằng trung bình có trọng số ở trạng thái đó VÔ NGHĨA, mà
+#      follow_line vẫn biến nó thành lệnh LÁI. Robot bị xoay sẵn một góc trước khi
+#      cú xoay 90° bắt đầu → xoay quá rồi lạc. Đội báo: "đoạn xoay trái để bám line
+#      nó toàn xoay quá và đi lung tung", hỏng chặng quay về của CẢ 4 nhà máy.
+# Lý do tôi thêm nó (Samsung xoay ~135°) hoá ra có nguyên nhân khác: tuyến về từ
+# hàng R4 chứa HAI cú xoay liên tiếp = quay đầu 180°, xem smoke option 9.
+# Muốn bật lại thì phải chặn lái khi cảm biến KHÔNG thấy một vạch rõ ràng — chưa làm.
+RECENTER_BAM_LINE = False
 # ⚠️ 3.0 → 5.0 ngày 03/08. Số 3.0 đặt hồi robot đi 12cm trong 1.2s. Về cuối buổi
 # nó chậm dần — cùng 12cm mất 1.8-2.2s, và có lượt CHỈ ĐI ĐƯỢC 287/431 rồi 207/431
 # xung trước khi chạm trần:
