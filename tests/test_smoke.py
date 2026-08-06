@@ -33,12 +33,21 @@ from vision import Vision
 # logger.info() của control/* bị nuốt. Mất trắng phần chẩn đoán quan trọng nhất:
 # khoảng cách dừng thật, thời gian nâng từng càng, lý do luồn càng thất bại...
 # Đã tốn nhiều lượt thử chỉ vì các số đó không hiện ra.
-# CHỈ ra màn hình, KHÔNG ghi file: robot_log.txt là của trận đấu thật, tools.measure_phases
-# đọc nó — trộn log test vào là số đo trận bị bịa.
+# KHÔNG ghi vào robot_log.txt — đó là log của trận đấu thật, tools.measure_phases
+# đọc nó, trộn log test vào là số đo trận bị bịa.
+# NHƯNG PHẢI ghi ra MỘT file riêng: trước 06/08 các bài này chỉ in ra màn hình, nên
+# mỗi lần cần chẩn đoán là đội phải chép tay hàng trăm dòng qua chat, và phần lớn bị
+# cắt mất đúng đoạn cần. Ghi vào config.TEST_LOG_FILE thì đọc lại được đầy đủ, kể cả
+# lượt chạy đã trôi qua.
+# `mode="w"`: mỗi phiên test ghi đè, để không phải lội qua log của phiên trước.
 logging.basicConfig(
     level=logging.INFO,
-    format="    %(levelname)-7s %(name)s: %(message)s",
-    handlers=[logging.StreamHandler()],
+    format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
+    handlers=[
+        logging.FileHandler(getattr(config, "TEST_LOG_FILE", "test_log.txt"),
+                            mode="w"),
+        logging.StreamHandler(),
+    ],
 )
 
 

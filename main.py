@@ -41,13 +41,18 @@ from vision import Vision
 # Logging
 # ============================================================
 
+# ⚠️ BỘ TEST KHÔNG ĐƯỢC ĐỔ RÁC VÀO robot_log.txt.
+# tests/test_match_sim.py import chính module này để mô phỏng trọn trận, nên
+# FileHandler dưới đây chạy luôn và ghi vào ĐÚNG file log thi đấu. Đo ngày 06/08:
+# một lần chạy bộ test đẻ ra 18864 dòng TRONG MỘT GIÂY, nhấn chìm lượt chạy thật —
+# không đọc lại được log để chẩn đoán, và tools.measure_phases cũng ăn phải rác đó
+# rồi cho ra số vô nghĩa.
+_ghi_file = os.environ.get("ROBOT_NO_FILE_LOG") != "1"
 logging.basicConfig(
     level=logging.DEBUG if config.DEBUG_MODE else logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    handlers=[
-        logging.FileHandler(config.LOG_FILE),
-        logging.StreamHandler(),
-    ],
+    handlers=([logging.FileHandler(config.LOG_FILE)] if _ghi_file else [])
+             + [logging.StreamHandler()],
 )
 logger = logging.getLogger("main")
 

@@ -747,7 +747,10 @@ ADVANCE_INTERSECTION_DAM = 5
 # cách chân kệ 11.4cm, phần còn lại do creep_until bò vào bằng cảm biến IR pallet.
 # CHỈNH BẰNG THƯỚC, không đoán: đo mũi càng cách pallet bao nhiêu sau khi nó dừng,
 # rồi đặt = giá trị hiện tại + (số đo − 4). Chừa 4cm cuối cho creep_until.
-ADVANCE_SHELF_STOP_CM = 24.0
+# 06/08: ở 24.0 robot dừng CÒN XA KỆ, camera nhận diện kiện không chuẩn — ảnh mẫu
+# ORB và dải HSV đều chốt ở khoảng cách dừng CŨ, xa hơn là kiện nhỏ đi trong khung
+# và tỉ lệ pixel đúng màu tụt. Nâng 24.0 → 29.0 (thanh cảm biến cách chân kệ 6.4cm).
+ADVANCE_SHELF_STOP_CM = 29.0
 
 # Bao lâu KHÔNG có xung encoder thì coi như encoder CHẾT và dừng khẩn.
 # 04/08, sau khi giao quyền dừng cho quãng đường: log in đúng dòng "dừng theo QUÃNG
@@ -1361,6 +1364,11 @@ MATCH_STATE_FILE = "/tmp/robot_match_state"
 # LOGGING & DEBUG
 # ============================================================
 LOG_FILE = "robot_log.txt"
+# File log RIÊNG cho các menu test phần cứng (test_smoke/motion/lift/vision).
+# Trước 06/08 chúng chỉ in ra màn hình, nên mỗi lần cần chẩn đoán là phải chép tay
+# hàng trăm dòng — và log thi đấu thì lại bị bộ test mô phỏng đổ rác vào. Tách hẳn
+# hai file: robot_log.txt chỉ của main.py, test_log.txt của các bài test.
+TEST_LOG_FILE = "test_log.txt"
 WEB_PORT = 5000
 DEBUG_MODE = True            # True = web debug (luyện tập); False = thi đấu
 if os.environ.get("ROBOT_COMPETE") == "1":   # scripts/start.sh đặt cờ này

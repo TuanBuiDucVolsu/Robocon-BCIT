@@ -27,6 +27,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import config
 import navigation as nav
+# Mô phỏng này import main.py, mà main.py gắn FileHandler vào robot_log.txt ngay
+# lúc import — một lần chạy bộ test đẻ 18864 dòng trong một giây và nhấn chìm log
+# thật. Tắt trước khi import.
+os.environ["ROBOT_NO_FILE_LOG"] = "1"
 import main as main_mod
 
 LABELS = ["samsung", "foxconn", "amkor", "hana_micron"]
