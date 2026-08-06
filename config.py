@@ -735,7 +735,19 @@ ADVANCE_INTERSECTION_DAM = 5
 # 12.0 = RECENTER_CM đưa TRỤC BÁNH tới đúng giao lộ. Đội thấy càng vẫn còn xa
 # pallet ở tư thế đó nên xin thêm 5cm — 17.0. Số này giờ KHÔNG còn thuần hình học
 # nữa, nó là 12.0 (đo được) + 5.0 (chọn tay), sửa tiếp thì sửa phần cộng thêm.
-ADVANCE_SHELF_STOP_CM = 17.0
+# ⚠️ ĐO TỪ LÚC CẢM BIẾN CHẠM GIAO LỘ, KHÔNG PHẢI TỪ TRỤC BÁNH.
+# Thanh cảm biến nằm TRƯỚC trục bánh 12cm (RECENTER_CM), và follow_line dừng khi
+# THANH CẢM BIẾN chạm giao lộ. Nên quãng này bị "ăn" mất 12cm đầu chỉ để kéo trục
+# bánh lên tới giao lộ:
+#       quãng đặt ở đây   trục bánh qua giao lộ được
+#            12.0                  0.0cm   (bánh NẰM TRÊN giao lộ)
+#            17.0                  5.0cm   ← đội quan sát: "bánh còn chưa qua giao lộ"
+#            24.0                 12.0cm
+# Giao lộ C0R0 → chân kệ = 35.4cm (docs/SA_BAN.md 3b), nên 24.0 để thanh cảm biến
+# cách chân kệ 11.4cm, phần còn lại do creep_until bò vào bằng cảm biến IR pallet.
+# CHỈNH BẰNG THƯỚC, không đoán: đo mũi càng cách pallet bao nhiêu sau khi nó dừng,
+# rồi đặt = giá trị hiện tại + (số đo − 4). Chừa 4cm cuối cho creep_until.
+ADVANCE_SHELF_STOP_CM = 24.0
 
 # Bao lâu KHÔNG có xung encoder thì coi như encoder CHẾT và dừng khẩn.
 # 04/08, sau khi giao quyền dừng cho quãng đường: log in đúng dòng "dừng theo QUÃNG
