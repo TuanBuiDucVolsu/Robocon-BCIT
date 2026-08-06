@@ -568,7 +568,15 @@ ESCAPE_MIN_TIME = 0.15       # Giây tối thiểu vẫn chạy, kể cả khi c
 # gặp nên chạy thẳng tới kệ (thước đo: bánh dừng cách C0R0 25cm).
 # 3cm đủ ra khỏi vạch rộng 2cm, và 3cm thì không bao giờ nhảy qua được một giao lộ.
 ESCAPE_MIN_CM = 3.0
-ESCAPE_MAX_CM = 8.0
+# ⚠️ 8.0 NHỎ HƠN QUÃNG TỐI THIỂU CHÍNH THUẬT TOÁN CẦN — mọi cú thoát đều chạm trần.
+# Số học: sàn ESCAPE_MIN_CM 3.0cm + xác nhận sạch ESCAPE_CLEAR_TIME 0.25s. Ở ~20cm/s
+# (đo trên robot) thì 0.25s ≈ 5.0cm, tổng 8.0cm — ĐÚNG BẰNG trần cũ.
+# Đo trên robot 06/08: dòng "Rời giao lộ: đã đi 8.0cm (trần 8.0)" xuất hiện ở 6/6
+# chặng, luôn 8.0-8.2cm. Không phải cảm biến hỏng — chỉ là chạm trần trước khi kịp
+# đủ khoảng sạch, nên escape LUÔN trả về THẤT BẠI và in cảnh báo sai sự thật.
+# 14.0 để còn biên cho pin đầy (chạy nhanh hơn thì 0.25s đi được xa hơn). Vẫn an
+# toàn: hai giao lộ cách nhau ~40cm và cổng FORWARD_MIN_TRAVEL_CM là 10cm.
+ESCAPE_MAX_CM = 14.0
 # Giây cảm biến phải sạch LIÊN TỤC mới coi là đã ra khỏi giao lộ. Không phải "vài
 # nhịp": 3 nhịp chỉ là 30ms, ở ADVANCE_SPEED=40 robot mới nhích ~0.5cm — vừa chớm ra
 # khỏi mép vạch chứ chưa qua hẳn, lắc nhẹ là cán lại vào. Robot VẪN CHẠY trong lúc

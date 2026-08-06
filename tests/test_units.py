@@ -3792,5 +3792,38 @@ class TestQuetLaiNgaySauKhiXoay(unittest.TestCase):
             m.execute_route([("left",)])
         self.assertIn("KHÔNG tìm lại được vạch", "\n".join(nk.output))
 
+
+class TestTranThoatGiaoLoPhaiDuChoThuatToan(unittest.TestCase):
+    """⚠️ HỒI QUY 06/08: trần thoát giao lộ NHỎ HƠN quãng chính thuật toán cần.
+
+    Escape đòi: đi đủ SÀN ESCAPE_MIN_CM, rồi thấy sạch LIÊN TỤC ESCAPE_CLEAR_TIME.
+    Ở ~20cm/s đo trên robot, 0.25s ≈ 5.0cm. Cộng sàn 3.0cm = 8.0cm — ĐÚNG BẰNG
+    trần cũ, nên MỌI cú thoát đều chạm trần và trả về THẤT BẠI:
+        "Rời giao lộ: đã đi 8.0cm (trần 8.0)"  xuất hiện 6/6 chặng, luôn 8.0-8.2cm
+
+    Đây là bất biến SỐ HỌC, không phải chuyện cảm biến — nên kiểm được bằng test.
+    """
+
+    TOC_DO_CM_S = 20.0      # đo trên robot 06/08 (8.0cm trong ~0.40s)
+
+    def test_tran_phai_lon_hon_san_cong_khoang_xac_nhan(self):
+        can = config.ESCAPE_MIN_CM + config.ESCAPE_CLEAR_TIME * self.TOC_DO_CM_S
+        self.assertGreater(
+            config.ESCAPE_MAX_CM, can,
+            f"trần {config.ESCAPE_MAX_CM}cm ≤ quãng tối thiểu {can:.1f}cm "
+            f"(sàn {config.ESCAPE_MIN_CM} + {config.ESCAPE_CLEAR_TIME}s×"
+            f"{self.TOC_DO_CM_S}cm/s) → MỌI cú thoát giao lộ đều chạm trần")
+
+    def test_van_con_bien_cho_pin_day(self):
+        """Pin đầy chạy nhanh hơn → 0.25s đi xa hơn. Cần dư ít nhất 50%."""
+        can = config.ESCAPE_MIN_CM + config.ESCAPE_CLEAR_TIME * self.TOC_DO_CM_S
+        self.assertGreaterEqual(config.ESCAPE_MAX_CM, can * 1.5,
+                                "hết biên khi pin đầy làm robot chạy nhanh hơn")
+
+    def test_tran_khong_duoc_vuot_khoang_cach_hai_giao_lo(self):
+        """Thoát quá xa là bước qua luôn giao lộ sắp phải đếm."""
+        self.assertLess(config.ESCAPE_MAX_CM, 40.0,
+                        "hai hàng giao lộ cách nhau ~40cm")
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

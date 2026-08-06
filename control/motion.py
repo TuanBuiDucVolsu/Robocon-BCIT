@@ -2367,9 +2367,13 @@ class Motion:
                 if di_cm >= tran_cm:
                     self.stop()
                     logger.warning(
-                        "Rời giao lộ: đã đi %.1fcm (trần %.1f) mà cảm biến vẫn báo "
-                        "giao lộ — dừng chứ không đi thêm. Quá trần ở đây là bước "
-                        "qua luôn giao lộ sắp phải đếm.", di_cm, tran_cm)
+                        "Rời giao lộ: CHẠM TRẦN %.1fcm sau %.1fcm — dừng chứ không "
+                        "đi thêm. Cảm biến %s. ⚠️ Nếu dòng này xuất hiện ở MỌI "
+                        "chặng thì trần đang NHỎ HƠN quãng tối thiểu thuật toán "
+                        "cần (sàn %.1fcm + %.2fs xác nhận sạch) — xem "
+                        "config.ESCAPE_MAX_CM, không phải lỗi cảm biến.",
+                        tran_cm, di_cm, self.read_line_sensor(),
+                        san_cm, can_sach)
                     return False
             else:
                 di_cm = None
