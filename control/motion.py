@@ -1524,9 +1524,17 @@ class Motion:
             # lộ nên nó báo liên tục, mà ở đây chỉ cần phần LÁI.
             if config.RECENTER_BAM_LINE:
                 try:
-                    _, gia_tri = self.follow_line(speed)
-                    if sum(gia_tri) == 0:
-                        self.forward(speed)   # mất line → như cũ
+                    tai_gl, gia_tri = self.follow_line(speed)
+                    # ⛔ PHẢI RA LỆNH CHẠY LẠI khi follow_line thấy giao lộ.
+                    # Nó tự gọi stop() ở đó, mà robot đang đứng NGAY TRÊN giao lộ
+                    # (đó là cả mục đích của bước bù này) nên nó phanh ở MỌI vòng
+                    # lặp. Đo trên robot 04/08 sau khi tôi thêm bám line vào đây:
+                    #     Tiến bù (sau khi lùi) 12.0cm: 16/431 xung trong 5.01s
+                    # 16 xung = robot đứng im suốt 5 giây rồi bỏ cuộc.
+                    # Bẫy này CLAUDE.md đã ghi rõ; tôi bỏ qua GIÁ TRỊ TRẢ VỀ mà
+                    # quên rằng nó đã kịp dừng motor.
+                    if tai_gl or sum(gia_tri) == 0:
+                        self.forward(speed)
                 except Exception:
                     self.forward(speed)
             time.sleep(0.01)

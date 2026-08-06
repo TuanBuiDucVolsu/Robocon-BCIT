@@ -3670,6 +3670,29 @@ class TestTienBuCoLai(unittest.TestCase):
         m._encoder_right = _EncoderGia(40)
         return m
 
+    def test_dung_TREN_giao_lo_van_phai_chay(self):
+        """⚠️ HỒI QUY 04/08: follow_line() tự stop() ở giao lộ → robot đứng im.
+
+        Bước bù này chạy khi robot đang đứng NGAY TRÊN giao lộ (đó là mục đích của
+        nó), nên follow_line báo giao lộ ở MỌI vòng lặp và phanh mỗi vòng. Đo trên
+        robot ngay sau khi tôi thêm bám line vào đây:
+            Tiến bù (sau khi lùi) 12.0cm: 16/431 xung trong 5.01s — HẾT CHẶN TRÊN
+        16 xung = đứng im 5 giây rồi bỏ cuộc, và cú xoay sau đó quay quanh sai chỗ.
+        """
+        m = self._motion(thay_line=True)
+        m.follow_line = MagicMock(return_value=(True, [1, 1, 1, 1, 1, 0]))
+        with patch.object(config, "RECENTER_BAM_LINE", True):
+            m.tien_bu_cm(12.0, 35)
+        # forward() được gọi MỘT lần trước vòng lặp, nên assert_called() luôn đúng
+        # và KHÔNG bắt được lỗi. Phải đếm: mỗi vòng thấy giao lộ là một lần ra lệnh
+        # lại. follow_line bị gọi bao nhiêu vòng thì forward phải theo sát bấy nhiêu.
+        so_vong = m.follow_line.call_count
+        self.assertGreater(so_vong, 0, "vòng lặp phải chạy")
+        self.assertGreaterEqual(
+            m.forward.call_count, so_vong,
+            f"follow_line stop() {so_vong} lần mà chỉ ra lệnh chạy lại "
+            f"{m.forward.call_count - 1} lần — robot sẽ đứng im")
+
     def test_con_thay_line_thi_LAI(self):
         m = self._motion(thay_line=True)
         with patch.object(config, "RECENTER_BAM_LINE", True):
