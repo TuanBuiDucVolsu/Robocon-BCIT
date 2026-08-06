@@ -2209,12 +2209,21 @@ class Motion:
                 raw_gl = self.read_line_sensor_raw()
                 if LineSensor.la_giao_lo_that(raw_gl):
                     return True
+                # ⚠️ IN ĐÚNG HAI ĐIỀU KIỆN mà la_giao_lo_that() thật sự dùng.
+                # Bản cũ in "tối nhất 0 (cần ≤61)" — số đó ĐẠT, nên đọc log thấy
+                # như bị bác oan, trong khi lý do thật là thiếu MẮT ĐEN ĐẬM. Đo
+                # 06/08: "3/4 mắt đen ĐẬM, tối nhất 0 (cần ≤61)" làm mất thời gian
+                # đuổi nhầm. Điều kiện là ĐẾM mắt, không phải mắt tối nhất.
+                _dam = LineSensor.dem_den_dam(raw_gl)
+                _sau = sum(1 for v in raw_gl if v <= config.LINE_DEEP_BLACK)
                 logger.info(
-                    "Bỏ qua tín hiệu giao lộ ở %.2fs — %d/%d mắt đen ĐẬM, tối nhất "
-                    "%d (cần ≤%d). ADC %s. Vạch thường hoặc MẢNG IN, KHÔNG đếm.",
-                    time.time() - start, LineSensor.dem_den_dam(raw_gl),
-                    config.INTERSECTION_THRESHOLD, int(round(min(raw_gl) * 1023)),
-                    int(round(config.LINE_DEEP_BLACK * 1023)),
+                    "Bỏ qua tín hiệu giao lộ ở %.2fs — %d/%d mắt đen ĐẬM%s, "
+                    "%d/%d mắt đen SÂU%s. ADC %s. Vạch thường hoặc MẢNG IN, KHÔNG đếm.",
+                    time.time() - start,
+                    _dam, config.INTERSECTION_THRESHOLD,
+                    " (THIẾU)" if _dam < config.INTERSECTION_THRESHOLD else " ✓",
+                    _sau, config.LINE_DEEP_BLACK_COUNT,
+                    " (THIẾU)" if _sau < config.LINE_DEEP_BLACK_COUNT else " ✓",
                     [int(round(v * 1023)) for v in raw_gl])
                 # follow_line() vừa gọi stop() khi thấy giao lộ — phải ra lệnh chạy
                 # lại, không thì vòng sau nó lại thấy, lại phanh, robot đứng im.
