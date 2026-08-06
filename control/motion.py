@@ -760,13 +760,31 @@ class Motion:
                         if not self.back_to_intersection(1):
                             return False
                         self.last_route_progress.append(("back", 1))
-                elif action == "left":
-                    self.turn_left_90()
-                    self._bat_lai_line_sau_xoay("trái")
-                    self.last_route_progress.append(step)
-                elif action == "right":
-                    self.turn_right_90()
-                    self._bat_lai_line_sau_xoay("phải")
+                elif action in ("left", "right"):
+                    # ⛔ GIỮA MỘT CÚ QUAY ĐẦU 180° THÌ ĐỪNG QUÉT.
+                    # Route rút khỏi hàng R4 có HAI cú xoay cùng chiều liên tiếp.
+                    # Sau cú THỨ NHẤT robot quay mặt lên hướng KHÔNG HỀ CÓ VẠCH
+                    # (R4 là hàng trên cùng) nên quét chắc chắn thất bại — mà
+                    # _recover_line() lại xoay robot qua lại ±0.5s ba lần, THÊM sai
+                    # lệch ngay trước cú xoay thứ hai. Đo trên robot 06/08, hai lượt
+                    # liên tiếp đều: "Xoay trái xong nhưng KHÔNG thấy vạch nào" →
+                    # "KHÔNG tìm lại được vạch" → xoay tiếp → chạy 45.9cm trên nền
+                    # trắng. Quét ở đó vừa vô ích vừa CÓ HẠI.
+                    giua_quay_dau = (i + 1 < len(route)
+                                     and route[i + 1][0] == action)
+                    if action == "left":
+                        self.turn_left_90()
+                    else:
+                        self.turn_right_90()
+                    if giua_quay_dau:
+                        logger.info(
+                            "Xoay %s: đây là cú ĐẦU của quay đầu 180° — KHÔNG quét "
+                            "tìm vạch (hướng này không có vạch, quét chỉ làm lệch "
+                            "thêm trước cú xoay thứ hai)",
+                            "trái" if action == "left" else "phải")
+                    else:
+                        self._bat_lai_line_sau_xoay(
+                            "trái" if action == "left" else "phải")
                     self.last_route_progress.append(step)
                 elif action == "advance":
                     if not self.advance_to_end():

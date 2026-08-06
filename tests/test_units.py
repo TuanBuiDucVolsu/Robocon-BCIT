@@ -3752,6 +3752,29 @@ class TestQuetLaiNgaySauKhiXoay(unittest.TestCase):
         m.last_route_progress = []
         return m
 
+
+    def test_giua_quay_dau_180_thi_KHONG_quet(self):
+        """⚠️ Cú ĐẦU của quay đầu 180° quay mặt vào hướng KHÔNG có vạch.
+
+        Route rút khỏi hàng R4 là "LÙI 1 → xoay trái → xoay trái → ...". Sau cú thứ
+        nhất robot nhìn lên phía bắc R4 — hàng trên cùng, không có vạch nào. Quét ở
+        đó chắc chắn thất bại, mà _recover_line() lại xoay robot qua lại ±0.5s ba
+        lần, THÊM sai lệch ngay trước cú xoay thứ hai.
+
+        Đo trên robot 06/08, hai lượt liên tiếp đều:
+            Xoay trái xong nhưng KHÔNG thấy vạch nào → KHÔNG tìm lại được vạch
+            → xoay tiếp → chạy 45.9cm trên nền trắng, không vạch nào dưới cảm biến.
+        """
+        m = self._motion(thay_line=False)
+        # Chặn forward: bài này chỉ nói về hai cú XOAY, không về chặng đi sau đó.
+        m.navigate_intersections = MagicMock(return_value=True)
+        m.execute_route([("left",), ("left",), ("forward", 1)])
+        # Cú THỨ HAI vẫn quét (đó là cú cuối, hướng đó CÓ vạch) — nên đúng 1 lần.
+        # Trước bản vá là 2 lần: lần thừa nằm GIỮA quay đầu, xoay robot ±0.5s ba
+        # lượt rồi thất bại, và cú xoay thứ hai khởi hành từ tư thế đã lệch thêm.
+        self.assertEqual(m._recover_line.call_count, 1,
+                         "chỉ được quét sau cú xoay CUỐI của quay đầu 180°")
+
     def test_mat_vach_thi_QUET_NGAY(self):
         m = self._motion(thay_line=False)
         with self.assertLogs("control.motion", level="WARNING"):
