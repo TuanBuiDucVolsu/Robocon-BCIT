@@ -136,7 +136,7 @@ PWM_COMPENSATION_LEFT_REV = 0.952  # Bù bánh TRÁI khi lùi
 # ============================================================
 LIFT_TIME_FLOOR = 0.0
 LIFT_TIME_SHELF_1 = 0.55
-LIFT_TIME_SHELF_2 = 3.65  # ĐO trên robot 04/08 (PIN ĐẦY — pin yếu cho 4.20); đội cộng thêm 0.1 rồi 0.15
+LIFT_TIME_SHELF_2 = 3.40  # ĐO trên robot 04/08 (PIN ĐẦY — pin yếu cho 4.20); đội chỉnh 3.65 → 3.55 → 3.40
 
 # Không có limit switch — home_to_floor() hạ liên tục bấy nhiêu giây để ép chạm đáy.
 LIFT_HOME_DURATION = 4.3   # min_home_duration() = LIFT_TIME_SHELF_2 + LOWER_EXTRA lớn
@@ -145,7 +145,7 @@ LIFT_HOME_DURATION = 4.3   # min_home_duration() = LIFT_TIME_SHELF_2 + LOWER_EXT
 # + bù. Thời gian mỗi lần chạy = hiệu 2 mốc (Lift._level_time) → không cộng dồn khi đi
 # 0→1→2, và càng lẻ dùng chung hệ số với khi chạy cả 2 càng.
 LIFT_LEFT_EXTRA = -0.150         # Càng TRÁI khi nâng
-LIFT_RIGHT_EXTRA = 0.100         # Càng PHẢI khi nâng
+LIFT_RIGHT_EXTRA = 0.000         # Càng PHẢI khi nâng
 
 # Bù RIÊNG THEO TỪNG TẦNG khi nâng — GHI ĐÈ hai hằng số trên cho tầng có mặt ở đây.
 # Vì sao cần: LIFT_*_EXTRA áp cho MỌI tầng, nhưng độ lệch 2 càng KHÔNG tỉ lệ với độ
