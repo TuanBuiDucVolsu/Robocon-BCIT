@@ -822,6 +822,8 @@ class Motion:
 
         Chỉ hành động khi KHÔNG thấy gì — thấy vạch thì trả về ngay, không tốn giây nào.
         """
+        if not getattr(config, "QUET_LAI_SAU_XOAY", True):
+            return True
         try:
             values = self.read_line_sensor()
         except Exception:

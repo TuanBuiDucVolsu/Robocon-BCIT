@@ -567,6 +567,12 @@ ESCAPE_MIN_TIME = 0.15       # Giây tối thiểu vẫn chạy, kể cả khi c
 # gần C0R0 mà chưa tới; 8cm là bước qua hẳn nó, bước đếm giao lộ chẳng còn gì để
 # gặp nên chạy thẳng tới kệ (thước đo: bánh dừng cách C0R0 25cm).
 # 3cm đủ ra khỏi vạch rộng 2cm, và 3cm thì không bao giờ nhảy qua được một giao lộ.
+# CÔNG TẮC TẮT NHANH cho hai thay đổi hành vi thêm ngày 06/08. Nếu robot chạy tệ
+# hơn hôm trước, gạt về False rồi chạy lại — không cần chờ ai đồng bộ:
+#   QUET_LAI_SAU_XOAY = False  → bỏ bước quét tìm vạch ngay sau mỗi cú xoay
+# (RECENTER_BAM_LINE đã TẮT sẵn — nó là thay đổi thứ hai và đã bị chứng minh có hại.)
+QUET_LAI_SAU_XOAY = True
+
 ESCAPE_MIN_CM = 3.0
 # ⚠️ 8.0 NHỎ HƠN QUÃNG TỐI THIỂU CHÍNH THUẬT TOÁN CẦN — mọi cú thoát đều chạm trần.
 # Số học: sàn ESCAPE_MIN_CM 3.0cm + xác nhận sạch ESCAPE_CLEAR_TIME 0.25s. Ở ~20cm/s
