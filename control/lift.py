@@ -406,7 +406,7 @@ class Lift:
     # API — thả riêng từng bên
     # ----------------------------------------------------------
 
-    def dropoff_left(self) -> bool:
+    def dropoff_left(self, xac_nhan: bool = True) -> bool:
         """Hạ càng TRÁI (thả pallet trái), giữ càng phải."""
         logger.info("Đặt hàng — chỉ càng TRÁI")
         # + phần DÔI RA ngoài thang tầng (nâng chuẩn bị luồn, nhấc bổng). Thiếu nó
@@ -417,9 +417,17 @@ class Lift:
         self._lower_left(duration)
         self._xoa_du_cao("left")   # bên này đã chạm sàn; bên kia GIỮ NGUYÊN
         time.sleep(0.2)
+        # ⚠️ xac_nhan=False: XÁC NHẬN SAU KHI LÙI RA, không phải ngay tại đây.
+        # Vừa hạ xong thì CÀNG VẪN NẰM DƯỚI KIỆN — IR đương nhiên còn thấy pallet
+        # và trả False, nên kiện KHÔNG được cộng điểm dù đã đặt đúng chỗ. Đo trên
+        # robot 07/08: "Đặt hàng — chỉ càng TRÁI" → "Cảm biến trái vẫn thấy pallet"
+        # → drop_side ❌, trong khi mắt thường thấy kiện đã nằm trên sàn.
+        # control.handling.drop_side gọi với xac_nhan=False rồi tự xác nhận sau lùi.
+        if not xac_nhan:
+            return True
         return self._verify_released("left")
 
-    def dropoff_right(self) -> bool:
+    def dropoff_right(self, xac_nhan: bool = True) -> bool:
         """Hạ càng PHẢI (thả pallet phải), giữ càng trái."""
         logger.info("Đặt hàng — chỉ càng PHẢI")
         # + phần DÔI RA ngoài thang tầng (nâng chuẩn bị luồn, nhấc bổng). Thiếu nó
@@ -430,6 +438,14 @@ class Lift:
         self._lower_right(duration)
         self._xoa_du_cao("right")   # bên này đã chạm sàn; bên kia GIỮ NGUYÊN
         time.sleep(0.2)
+        # ⚠️ xac_nhan=False: XÁC NHẬN SAU KHI LÙI RA, không phải ngay tại đây.
+        # Vừa hạ xong thì CÀNG VẪN NẰM DƯỚI KIỆN — IR đương nhiên còn thấy pallet
+        # và trả False, nên kiện KHÔNG được cộng điểm dù đã đặt đúng chỗ. Đo trên
+        # robot 07/08: "Đặt hàng — chỉ càng TRÁI" → "Cảm biến trái vẫn thấy pallet"
+        # → drop_side ❌, trong khi mắt thường thấy kiện đã nằm trên sàn.
+        # control.handling.drop_side gọi với xac_nhan=False rồi tự xác nhận sau lùi.
+        if not xac_nhan:
+            return True
         return self._verify_released("right")
 
     def raise_after_drop(self, side: str):

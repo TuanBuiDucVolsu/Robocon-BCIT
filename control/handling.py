@@ -91,12 +91,24 @@ def drop_side(lift, side: str, last: bool, lui=None) -> bool:
     Giá trị trả về CHỈ dùng để quyết định có cộng điểm hay không
     (`packages_delivered`), không dùng để quyết định có nâng càng hay không.
     """
-    dropped = lift.dropoff_left() if side == "left" else lift.dropoff_right()
+    # ⚠️ HẠ CÀNG TRƯỚC, XÁC NHẬN SAU KHI LÙI. Xác nhận ngay lúc vừa hạ là sai:
+    # càng vẫn nằm DƯỚI kiện nên IR còn thấy pallet và trả False — kiện không được
+    # cộng điểm dù đã đặt đúng chỗ. Đo trên robot 07/08: "Đặt hàng — chỉ càng TRÁI"
+    # → "Cảm biến trái vẫn thấy pallet" → ❌, mà mắt thường thấy kiện đã nằm sàn.
+    if side == "left":
+        lift.dropoff_left(xac_nhan=False)
+    else:
+        lift.dropoff_right(xac_nhan=False)
     if lui is not None:
         lui()
     else:
         logger.warning("Thả càng %s: KHÔNG có bước lùi trước khi nâng càng — robot "
                        "sẽ nâng ngay trên kiện vừa đặt và xúc nó lên lại.", side)
+    # Giờ càng đã rút khỏi kiện — IR đọc lúc này mới có nghĩa.
+    dropped = lift._verify_released(side)
+    if not dropped:
+        logger.warning("Thả càng %s: sau khi LÙI RA mà IR VẪN thấy pallet — kiện "
+                       "có thể còn mắc trên càng, hoặc cảm biến lỗi.", side)
     if last:
         lift.stow_forks(side)
     else:
