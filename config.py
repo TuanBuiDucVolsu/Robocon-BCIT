@@ -1071,7 +1071,17 @@ FACTORY_STACK_BACKOFF_CM = 9.0
 # Rồi tuyến tới nhà máy hỏng ngay bước đầu và robot thả kiện tại chỗ.
 # 3.0 vẫn đủ chặn mảng đen chân kệ (nằm NGAY đầu chặng lùi, <1cm), mà không chạm
 # tới giao lộ ở 4.1cm.
-BACK_MIN_TRAVEL_CM = 3.0
+# ⚠️ SỐ NÀY GẮN VỚI ADVANCE_SHELF_STOP_CM — đổi mốc dừng thì PHẢI tính lại.
+# Hình học: robot dừng cách giao lộ ADVANCE_SHELF_STOP_CM; retreat_from_shelf lùi
+# ra "quãng đã luồn vào × 1.15" (đo trên robot 06/08: 608 và 670 xung = 16.9 và
+# 18.6cm). Khi CHẶNG LÙI bắt đầu, giao lộ còn cách:
+#       mốc 17.0 → 17.0 − 18.6 = −1.6cm   (giao lộ đã ở SAU lưng → cổng phải rất nhỏ)
+#       mốc 32.0 → 32.0 − 18.6 = 13.4cm
+# 3.0 được đặt ngày 05/08 cho mốc 17.0. Mốc nay đã lên 32.0 mà cổng vẫn 3.0 — QUÁ
+# RỘNG: mảng đen chân kệ (~1-5cm đầu chặng lùi) lọt qua và bị đếm thành giao lộ,
+# rồi cả tuyến lệch một hàng.
+# 8.0 nằm giữa: bác được mảng đen chân kệ, vẫn dưới 13.4cm nên không bác giao lộ thật.
+BACK_MIN_TRAVEL_CM = 8.0
 
 # Cổng quãng đường cho chặng LÙI KHỎI KHU NHÀ MÁY — KHÁC chỗ lùi khỏi kệ.
 # Mảng đen ngay đầu chặng lùi ở nhà máy VƯỢT ĐƯỢC bộ lọc giao lộ. Đo trên robot
