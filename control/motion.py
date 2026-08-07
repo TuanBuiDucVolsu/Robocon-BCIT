@@ -730,7 +730,17 @@ class Motion:
                 # Cả hai chiều đều cần tiến thêm ĐÚNG 12cm, nên dùng chung hằng số.
                 if (action in ("left", "right") and i > 0
                         and route[i - 1][0] == "forward"):
-                    if self.tien_bu_cm(config.RECENTER_CM,
+                    # Giao lộ C1R0 có Kệ 4 (NV2) THÒ RA phía nam — đúng hướng robot
+                    # chĩa mặt khi tới. Tiến bù đủ 12cm là húc vào nó. Caller đặt cờ
+                    # `gan_ke4` khi tuyến này xoay ở đó. Xem config.RECENTER_CM_GAN_KE4.
+                    _bu = (config.RECENTER_CM_GAN_KE4
+                           if getattr(self, "gan_ke4", False)
+                           else config.RECENTER_CM)
+                    if _bu != config.RECENTER_CM:
+                        logger.info("Tiến bù RÚT NGẮN %.1fcm (thường %.1f) — giao lộ "
+                                    "này có Kệ 4 thò ra phía trước",
+                                    _bu, config.RECENTER_CM)
+                    if self.tien_bu_cm(_bu,
                                        config.REVERSE_RECENTER_SPEED, "trước khi xoay"):
                         pass
                     elif config.TURN_RECENTER_TIME > 0:

@@ -301,6 +301,10 @@ class Robot:
         noi_dung = self.pose[0] if self.pose else ""
         self.motion.lui_khoi_nha_may = bool(
             noi_dung and noi_dung.startswith("F_"))
+        # Kệ 4 (NV2) và Foxconn dùng CHUNG giao lộ C1R0, và Kệ 4 thò ra phía nam —
+        # đúng hướng robot chĩa mặt khi tới đó. Rút ngắn quãng tiến bù trước khi
+        # xoay cho tuyến nào kết thúc ở đó. Xem config.RECENTER_CM_GAN_KE4.
+        self.motion.gan_ke4 = goal in ("F_foxconn", "LOOSE")
 
         logger.info("Đi %s → %s: %s",
                     navigation.describe(self.pose), goal, navigation.route_to_text(route))

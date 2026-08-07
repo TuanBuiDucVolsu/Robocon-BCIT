@@ -1005,6 +1005,17 @@ REVERSE_RECENTER_TIME = 1.3
 # Chưa calibrate (= 0) thì tự động rơi về cách cũ theo thời gian.
 ENCODER_PULSES_PER_CM = 35.940  # ĐÃ CHỐT trên robot 03/08 — 3 lần nhất quán
                                 # (tools/calibrate_encoder_cm.py). 0 = chưa calibrate
+# Quãng tiến bù RIÊNG khi cú xoay diễn ra ở giao lộ C1R0 — nơi Kệ 4 (kho hàng rời
+# NV2) THÒ RA PHÍA NAM, đúng hướng robot đang chĩa mặt khi tới đó.
+# Đội báo 07/08: robot vướng Kệ 4 khi xoay trái để thả ở Foxconn. F_foxconn và
+# LOOSE (Kệ 4) dùng CHUNG node C1R0, nên bước tiến bù 12cm đẩy robot thẳng vào Kệ 4
+# trước khi xoay.
+# 8.0 → trục bánh dừng sớm 4cm, tức mua được 4cm khoảng hở. Đổi lại, xoay xong thanh
+# cảm biến nằm lệch 4cm khỏi vạch — trong tầm quét của _recover_line (±6.4cm, đã
+# sửa đối xứng ngày 06/08), nên bước quét sau xoay tìm lại được.
+# Đặt = RECENTER_CM để tắt cơ chế riêng này.
+RECENTER_CM_GAN_KE4 = 8.0
+
 RECENTER_CM = 12.0            # cm — ĐO BẰNG THƯỚC trên robot, không phải số đoán
 RECENTER_MAX_TIME = 5.0       # Giây chặn trên: encoder hỏng thì không chạy vô hạn
 
