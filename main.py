@@ -1022,7 +1022,24 @@ class Robot:
         else:
             logger.info("Quay về kho từ %s → kệ %d...",
                         navigation.describe(self.pose), target_shelf)
-            self._goto(goal, f"RETURN → kệ {target_shelf}")
+            if not self._goto(goal, f"RETURN → kệ {target_shelf}"):
+                # ⛔ LẠC LÀ DỪNG, ĐỪNG ĐI TIẾP. Chặng quay về hỏng nghĩa là robot
+                # KHÔNG CÒN BIẾT MÌNH Ở ĐÂU. Đi tiếp với niềm tin vị trí sai thì mọi
+                # lượt sau đều sai, robot có thể lang thang ra khỏi sa bàn (bị reset
+                # bắt buộc) hoặc thả hàng giữa sân — mất nhiều hơn hẳn so với đứng im.
+                # Thể lệ cho 5 lần reset, mỗi lần −10đ, và reset GIỮ NGUYÊN tiến độ:
+                # đội đặt tay robot về ô xuất phát, bấm nút, robot chạy tiếp từ kệ
+                # kế. Đổi một lượt lạc lấy 10 điểm là lãi.
+                self.motion.stop()
+                logger.error("=" * 60)
+                logger.error("  QUAY VỀ THẤT BẠI — ROBOT KHÔNG CÒN BIẾT MÌNH Ở ĐÂU")
+                logger.error("  ĐÃ DỪNG. Đội hãy ĐẶT TAY robot về ô xuất phát rồi")
+                logger.error("  BẤM NÚT — robot chạy tiếp từ kệ %d, giữ nguyên %d",
+                              self.current_shelf + 1, self.packages_delivered)
+                logger.error("  kiện đã giao. Reset −10đ, rẻ hơn nhiều so với để nó")
+                logger.error("  lang thang rồi thả hàng sai chỗ hoặc rời sa bàn.")
+                logger.error("=" * 60)
+                self._reset_requested = True
 
         self._advance_position()
         logger.info("Tiếp theo: kệ %d, tầng %d",
