@@ -1100,7 +1100,8 @@ class Motion:
             # Điều kiện KHÔNG phải "tin siêu âm" mà là "siêu âm có đang sống
             # không": số đo phải đã GIẢM thật sự. Số kẹt (12.2cm bất kể robot ở
             # đâu — ca đã gặp) không bao giờ thoả điều kiện này.
-            if dung_bang_quang and len(vet_adv) >= 4:
+            if (dung_bang_quang and config.ADVANCE_SONAR_PANIC_CM > 0
+                    and len(vet_adv) >= 4):
                 giam = vet_adv[-4][1] - dist
                 if giam >= config.ADVANCE_SONAR_LIVE_DROP_CM \
                         and 0 < dist <= config.ADVANCE_SONAR_PANIC_CM:

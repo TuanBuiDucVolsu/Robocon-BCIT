@@ -775,7 +775,21 @@ ADVANCE_INTERSECTION_DAM = 5
 # ⚠️ ĐÂY LÀ MÂU THUẪN THẬT, không phải chuyện chỉnh số: camera cần GẦN để nhận
 # kiện, càng cần XA để khỏi chạm kệ. Chỉnh khoảng cách không giải được — phải sửa
 # ROI_Y_CENTER (camera) hoặc chiều cao/độ nhô của càng (cơ khí).
-ADVANCE_SHELF_STOP_CM = 29.0
+# ⚠️ TÍNH LẠI TỪ VỆT SIÊU ÂM 07/08 — kết luận trước SAI.
+# Lúc advance bắt đầu, siêu âm ≈ 5.9 + 29.1 = 35.0cm, KHỚP với C0R0 → chân kệ
+# 35.4cm. Tức robot đứng ĐÚNG C0R0, đi đúng 29.1cm, dừng cách kệ 6.4cm — đúng y
+# thiết kế. Không có sai lệch vị trí nào cả.
+# Vấn đề là 6.4cm KHÔNG ĐỦ: càng nhô ra trước thanh cảm biến hơn thế, VÀ lúc tiến
+# vào càng đang Ở SÀN (bước nâng lên tầng chạy SAU advance) nên nó húc vào gầm kệ
+# chứ không luồn vào khe pallet.
+# Hai số đã chứng minh:
+#     mốc 29.0 → hở  6.4cm → ĐÂM, càng luồn gầm kệ (07/08)
+#     mốc 24.0 → hở 11.4cm → không đâm (chỉ báo "camera nhận chưa chuẩn")
+# 23.0 → hở 12.4cm, dưới mức đã chứng minh an toàn.
+# ⚠️ ĐÂY LÀ VÁ TRIỆU CHỨNG. Cách chữa gốc là NÂNG CÀNG LÊN TẦNG TRƯỚC KHI TIẾN
+# VÀO — khi đó càng đi vào khe pallet chứ không vào gầm kệ, và robot mới tiến sát
+# được để camera nhìn rõ. Xem ghi chú ở main._handle_pickup_pair.
+ADVANCE_SHELF_STOP_CM = 23.0
 
 # ⛔ LƯỚI AN TOÀN CUỐI khi vào kệ: dừng nếu siêu âm ĐANG ĐỌC ĐÚNG và báo quá gần.
 # Chốt quãng đường KHÔNG biết được nó xuất phát sai chỗ. Đo 07/08: advance bắt đầu
@@ -785,7 +799,10 @@ ADVANCE_SHELF_STOP_CM = 29.0
 # đâu, kể cả đứng yên). Nên điều kiện ở đây KHÔNG phải "tin siêu âm" mà là "siêu âm
 # CÓ ĐANG SỐNG không": chỉ dừng khi số đo đã GIẢM ít nhất ADVANCE_SONAR_LIVE_DROP_CM
 # trong vệt gần đây — số kẹt thì không bao giờ thoả.
-ADVANCE_SONAR_PANIC_CM = 10.0     # thấy gần hơn mức này (và siêu âm đang sống) → dừng
+# ⛔ TẮT (07/08) — đội chốt: "siêu âm không dùng làm đâu". Nó đã đọc sai cả hai
+# chiều ở kệ (thước 12cm báo 35.7; thật ~35cm báo 12.2) và có lúc kẹt ở một số cố
+# định bất kể robot ở đâu. Đặt > 0 để bật lại nếu sau này thay cảm biến.
+ADVANCE_SONAR_PANIC_CM = 0.0      # 0 = TẮT lưới an toàn siêu âm
 ADVANCE_SONAR_LIVE_DROP_CM = 4.0  # phải giảm ít nhất bấy nhiêu mới coi là đang sống
 
 # Bao lâu KHÔNG có xung encoder thì coi như encoder CHẾT và dừng khẩn.

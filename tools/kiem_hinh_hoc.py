@@ -36,13 +36,24 @@ GIAO_LO_TOI_KE_CM = 35.4     # docs/SA_BAN.md 3b — đo trên bản in, giống
 KHOANG_HAI_GIAO_LO_CM = 40.0  # hai hàng giao lộ
 BE_RONG_VACH_CM = 2.0        # vạch line 20mm
 MANG_DEN_CHAN_KE_CM = 5.0    # mảng đen đầu chặng lùi, đo 04/08 (tín hiệu giả ở 0.9-4.6cm)
-LUI_RA_KHOI_KE_CM = 18.6     # đo 06/08: 670 xung = quãng luồn vào × 1.15
+# ⚠️ CÔNG THỨC CŨ SAI: nó lấy "mốc dừng − 18.6" làm khoảng cách tới giao lộ khi
+# chặng LÙI bắt đầu, tức QUÊN MẤT bước LUỒN CÀNG nằm giữa. Robot không lùi từ mốc
+# dừng mà từ (mốc dừng + quãng đã luồn vào), rồi lùi ra đúng quãng đó × 1.15. Nên
+# phần thực sự bị mất chỉ là 0.15 × quãng luồn:
+#     giao lộ cách = mốc dừng + luồn − 1.15×luồn = mốc dừng − 0.15×luồn
+# Đo 06/08: luồn vào 525 và 578 xung = 14.6 và 16.1cm.
+LUON_CANG_CM = 16.1          # đo 06/08: 578 xung
+DOI_LUI_RA = 1.15            # retreat_from_shelf lùi quãng đã luồn × 1.15
 # CÀNG NHÔ RA TRƯỚC THANH CẢM BIẾN — biết bằng hai lần chạy thật, không đo thước:
-#     mốc 32.0 → thanh cảm biến cách chân kệ 3.4cm → CÀNG LUỒN VÀO GẦM KỆ (07/08)
-#     mốc 29.0 → cách 6.4cm                        → không đâm
-# Nên khoảng hở tối thiểu đã CHỨNG MINH an toàn là 6.4cm. Muốn tiến gần hơn thì
-# phải ĐO độ nhô của càng bằng thước rồi hạ số này, đừng thử dần trên robot.
-KHOANG_HO_TOI_THIEU_CM = 6.4
+#     mốc 32.0 → hở  3.4cm → CÀNG LUỒN VÀO GẦM KỆ (07/08)
+#     mốc 29.0 → hở  6.4cm → VẪN ĐÂM (07/08, lần hai)
+#     mốc 24.0 → hở 11.4cm → không đâm
+# Nên độ nhô của càng nằm giữa 6.4 và 11.4cm. Lấy 12.4 làm khoảng hở tối thiểu —
+# dưới mức đã chứng minh an toàn.
+# ⚠️ Con số này chỉ cần thiết vì lúc tiến vào CÀNG ĐANG Ở SÀN (bước nâng lên tầng
+# chạy SAU advance). Nâng càng TRƯỚC khi tiến thì càng đi vào khe pallet chứ không
+# vào gầm kệ, và mốc dừng có thể tiến sát hơn nhiều.
+KHOANG_HO_TOI_THIEU_CM = 12.4
 TOC_DO_CM_S = 20.0           # đo 06/08: escape 8.0cm trong ~0.40s
 
 
@@ -79,12 +90,12 @@ def cac_rang_buoc():
         f"cổng {c.FORWARD_MIN_TRAVEL_CM} phải > bề rộng vạch {BE_RONG_VACH_CM}"))
 
     # 4. Cổng LÙI ở kệ — gắn chặt với mốc dừng
-    giao_lo_o = c.ADVANCE_SHELF_STOP_CM - LUI_RA_KHOI_KE_CM
+    giao_lo_o = c.ADVANCE_SHELF_STOP_CM - (DOI_LUI_RA - 1.0) * LUON_CANG_CM
     r.append(_kiem(
         "BACK_MIN_TRAVEL_CM không bác giao lộ thật (chặng lùi khỏi KỆ)",
         c.BACK_MIN_TRAVEL_CM < giao_lo_o,
         f"cổng {c.BACK_MIN_TRAVEL_CM} phải < {giao_lo_o:.1f} "
-        f"(= mốc dừng {c.ADVANCE_SHELF_STOP_CM} − lùi ra {LUI_RA_KHOI_KE_CM})",
+        f"(= mốc dừng {c.ADVANCE_SHELF_STOP_CM} − 0.15 × luồn càng {LUON_CANG_CM})",
         "⚠️ ĐỔI ADVANCE_SHELF_STOP_CM LÀ PHẢI TÍNH LẠI CỔNG NÀY."))
 
     r.append(_kiem(
@@ -143,7 +154,7 @@ def main() -> int:
     print("  Số nền (ĐO trên robot/bản in, không phải giả định):")
     print(f"    giao lộ → chân kệ      {GIAO_LO_TOI_KE_CM}cm")
     print(f"    hai hàng giao lộ       {KHOANG_HAI_GIAO_LO_CM}cm")
-    print(f"    lùi ra khỏi kệ         {LUI_RA_KHOI_KE_CM}cm")
+    print(f"    luồn càng vào pallet   {LUON_CANG_CM}cm (lùi ra = ×{DOI_LUI_RA})")
     print(f"    tốc độ bám line        {TOC_DO_CM_S}cm/s")
     print()
 
