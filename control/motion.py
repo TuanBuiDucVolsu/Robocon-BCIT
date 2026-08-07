@@ -1000,10 +1000,21 @@ class Motion:
         while time.time() - start < timeout:
             if self._aborted():
                 return False
-            dist = self.get_distance()
-            if (not vet_adv) or abs(dist - vet_adv[-1][1]) > 0.05:
-                vet_adv.append((time.time() - start, dist))
-                doi_luc = time.time()
+            # ⛔ ĐÃ BỎ QUA SIÊU ÂM THÌ ĐỪNG ĐỌC NÓ. HC-SR04 bấm giờ tiếng vọng bằng
+            # PHẦN MỀM: không có vọng là lời gọi này CHẶN CẢ VÒNG LẶP, và robot chạy
+            # tiếp trong lúc bị chặn.
+            # Đo trên robot 07/08, hai lần thả liên tiếp cùng mốc 12.0:
+            #     kiện 1: ĐÃ ĐI 12.1cm  ✓
+            #     kiện 2: ĐÃ ĐI 24.7cm  ✗ vọt thêm 12.7cm
+            # 12.7cm ở ~16cm/s ≈ 0.8 giây — đúng bằng một lần đọc siêu âm bị treo.
+            # Chốt quãng đường không cứu được, vì nó chỉ được kiểm GIỮA hai lần đọc.
+            if bo_sieu_am:
+                dist = -1.0
+            else:
+                dist = self.get_distance()
+                if (not vet_adv) or abs(dist - vet_adv[-1][1]) > 0.05:
+                    vet_adv.append((time.time() - start, dist))
+                    doi_luc = time.time()
 
             # ⚠️ KHÔNG DI CHUYỂN TRÊN SỐ ĐO CŨ — y như approach_shelf.
             # Đo trên robot 03/08: advance dừng ở 4.3cm thay vì 20cm, rồi
