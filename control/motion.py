@@ -1092,6 +1092,30 @@ class Motion:
             if config.ENCODER_PULSES_PER_CM > 0:
                 quang_adv = xung_adv / config.ENCODER_PULSES_PER_CM
 
+            # ⛔ LƯỚI AN TOÀN CUỐI — siêu âm ĐANG SỐNG và báo quá gần thì DỪNG,
+            # kể cả khi chốt quãng đường chưa tới mốc.
+            # Chốt quãng đường không biết được nó XUẤT PHÁT SAI CHỖ. Đo 07/08:
+            # advance khởi hành khi siêu âm đã 29.5cm (đáng lẽ 35.4 nếu đứng đúng
+            # C0R0) — thiếu ~6cm, cộng vào cuối là ĐÂM KỆ, càng luồn vào gầm.
+            # Điều kiện KHÔNG phải "tin siêu âm" mà là "siêu âm có đang sống
+            # không": số đo phải đã GIẢM thật sự. Số kẹt (12.2cm bất kể robot ở
+            # đâu — ca đã gặp) không bao giờ thoả điều kiện này.
+            if dung_bang_quang and len(vet_adv) >= 4:
+                giam = vet_adv[-4][1] - dist
+                if giam >= config.ADVANCE_SONAR_LIVE_DROP_CM \
+                        and 0 < dist <= config.ADVANCE_SONAR_PANIC_CM:
+                    self.stop_gently(base_speed)
+                    logger.warning(
+                        "Advance: DỪNG KHẨN — siêu âm còn %.1fcm (mốc %.1f) và nó "
+                        "ĐANG SỐNG (giảm %.1fcm trong vệt gần đây, ≥%.1f). Mới đi "
+                        "%.1f/%.1fcm nhưng chốt quãng đường không biết được nó xuất "
+                        "phát sai chỗ. Vệt: %s",
+                        dist, config.ADVANCE_SONAR_PANIC_CM, giam,
+                        config.ADVANCE_SONAR_LIVE_DROP_CM,
+                        quang_adv, config.ADVANCE_SHELF_STOP_CM,
+                        " ".join(f"{t:.2f}s:{d:.1f}" for t, d in vet_adv[-8:]))
+                    return True
+
             # NHỊP TIM — in quãng đường đang đếm được, đều đặn.
             # 04/08: encoder ĐO ĐƯỢC (365/368 xung trong 1s, check_encoder_alive),
             # mà advance vẫn không bao giờ chạm mốc 15cm rồi đâm kệ. Không có số

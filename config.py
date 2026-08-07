@@ -777,6 +777,17 @@ ADVANCE_INTERSECTION_DAM = 5
 # ROI_Y_CENTER (camera) hoặc chiều cao/độ nhô của càng (cơ khí).
 ADVANCE_SHELF_STOP_CM = 29.0
 
+# ⛔ LƯỚI AN TOÀN CUỐI khi vào kệ: dừng nếu siêu âm ĐANG ĐỌC ĐÚNG và báo quá gần.
+# Chốt quãng đường KHÔNG biết được nó xuất phát sai chỗ. Đo 07/08: advance bắt đầu
+# khi siêu âm đã 29.5cm (đáng lẽ 35.4 nếu đứng đúng C0R0) — thiếu ~6cm, cộng vào
+# cuối là ĐÂM KỆ, càng luồn vào gầm. Vệt siêu âm lượt đó giảm ĐỀU 16.6 → 5.9cm.
+# Vì sao trước đây bỏ siêu âm: nó từng kẹt ở MỘT SỐ CỐ ĐỊNH (12.2cm bất kể robot ở
+# đâu, kể cả đứng yên). Nên điều kiện ở đây KHÔNG phải "tin siêu âm" mà là "siêu âm
+# CÓ ĐANG SỐNG không": chỉ dừng khi số đo đã GIẢM ít nhất ADVANCE_SONAR_LIVE_DROP_CM
+# trong vệt gần đây — số kẹt thì không bao giờ thoả.
+ADVANCE_SONAR_PANIC_CM = 10.0     # thấy gần hơn mức này (và siêu âm đang sống) → dừng
+ADVANCE_SONAR_LIVE_DROP_CM = 4.0  # phải giảm ít nhất bấy nhiêu mới coi là đang sống
+
 # Bao lâu KHÔNG có xung encoder thì coi như encoder CHẾT và dừng khẩn.
 # 04/08, sau khi giao quyền dừng cho quãng đường: log in đúng dòng "dừng theo QUÃNG
 # ĐƯỜNG 15.0cm — bỏ qua siêu âm" rồi robot chạy thẳng vào kệ, KHÔNG hề in dòng "ĐÃ
