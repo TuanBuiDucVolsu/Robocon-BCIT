@@ -696,6 +696,26 @@ số đó chỉ tồn tại trên phantom, không ở đâu khác.
 
 ## ⚠️ Đừng phá thứ đã chạy được
 
+> ### Vì sao lỗi cứ lặp đi lặp lại — và cách chặn
+>
+> **Các hằng số hình học ràng buộc lẫn nhau, nhưng không chỗ nào ghi ra ràng buộc
+> đó.** Chỉnh một cái là âm thầm phá một cái khác, và triệu chứng nổi lên ở **chặng
+> hoàn toàn khác** — nên người sửa đi tìm nhầm chỗ, vá nhầm chỗ, rồi lỗi quay lại.
+> Đã xảy ra hai lần chỉ trong hai ngày:
+>
+> | Đổi gì | Phá cái gì | Triệu chứng nổi ở đâu |
+> |---|---|---|
+> | `ADVANCE_SHELF_STOP_CM` 17 → 32 | `BACK_MIN_TRAVEL_CM` (đặt cho mốc 17) thành quá rộng | mảng đen chân kệ bị đếm thành giao lộ → cả tuyến lệch MỘT HÀNG → thả hàng ở vòng tròn logo |
+> | `ESCAPE_MAX_CM` đặt 8.0 | nhỏ hơn `ESCAPE_MIN_CM` + khoảng xác nhận (= 8.0) | MỌI cú thoát giao lộ chạm trần và trả về thất bại, suốt 2 ngày |
+>
+> Cả hai là **mâu thuẫn SỐ HỌC**, không phải lỗi logic — không bài test mô phỏng nào
+> bắt được. **Chặn bằng:**
+>
+> ```bash
+> python3 -m tools.kiem_hinh_hoc     # < 1 giây, chạy TRƯỚC và SAU mỗi lần sửa hằng số
+> ```
+
+
 Sửa một hằng số rất dễ vô hiệu hoá **âm thầm** một bài test đã ĐẠT trên robot, vì
 không chỗ nào ghi "bài X dựa vào hằng số nào". Đã xảy ra 3 lần trong một buổi:
 
