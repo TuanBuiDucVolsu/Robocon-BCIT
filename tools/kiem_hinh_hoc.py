@@ -123,6 +123,16 @@ def cac_rang_buoc():
         "Càng NHÔ RA TRƯỚC thanh cảm biến nên nó chạm kệ trước. Mốc 32.0 (hở 3.4cm) "
         "đã làm càng luồn vào GẦM KỆ ngày 07/08; 29.0 (hở 6.4cm) thì không."))
 
+    # 5b. Lùi sau khi thả KHÔNG được vượt qua giao lộ
+    con = c.ADVANCE_FACTORY_STOP_CM - c.RETREAT_AFTER_DROP_CM
+    r.append(_kiem(
+        "RETREAT_AFTER_DROP_CM không lùi QUA giao lộ",
+        c.RETREAT_AFTER_DROP_CM < c.ADVANCE_FACTORY_STOP_CM,
+        f"lùi {c.RETREAT_AFTER_DROP_CM} phải < mốc nhà máy "
+        f"{c.ADVANCE_FACTORY_STOP_CM} (còn lại {con:+.1f}cm trước giao lộ)",
+        "Lùi quá là robot nằm SAU giao lộ, rồi chặng lùi kế đó đi tìm một giao lộ ở "
+        "PHÍA TRƯỚC nó — không bao giờ gặp, robot chạy tiếp rồi lạc."))
+
     # 6. Hạ càng về sàn phải phủ được ca xấu nhất
     can_ha = c.LIFT_TIME_SHELF_2 + max(c.LIFT_LEFT_LOWER_EXTRA,
                                        c.LIFT_RIGHT_LOWER_EXTRA)

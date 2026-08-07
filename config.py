@@ -1054,7 +1054,13 @@ RETREAT_BACKOUT_MARGIN = 1.15
 # lệch", rồi lùi về là sai đường và mất bám line.
 # Ở đây chỉ cần lùi đủ để càng KHÔNG QUỆT vào kiện vừa đặt khi nâng lên — kiện sâu
 # 9cm, nên 10cm là vừa, và vẫn còn cách giao lộ một đoạn để lệnh LÙI làm việc.
-RETREAT_AFTER_DROP_CM = 10.0
+# ⚠️ PHẢI NHỎ HƠN ADVANCE_FACTORY_STOP_CM. Robot dừng cách giao lộ đúng bấy nhiêu
+# cm; lùi ra nhiều hơn là ĐÃ LÙI QUA GIAO LỘ, rồi chặng lùi kế đó đi tìm một giao
+# lộ nằm ở PHÍA TRƯỚC nó — không bao giờ gặp, robot chạy tiếp rồi lạc.
+# Đo 07/08: mốc nhà máy 8.0 mà lùi 10.0 → robot ở −2.0cm so với giao lộ. Đội báo
+# đúng triệu chứng: "sau khi thả hàng xong đang lùi qua giao lộ dẫn đến đi lung tung".
+# 4.0 đủ để càng rút khỏi kiện vừa đặt mà vẫn còn 4cm trước giao lộ.
+RETREAT_AFTER_DROP_CM = 4.0
 
 # --- XẾP CHỒNG KIỆN Ở NHÀ MÁY -------------------------------------------------
 # 12 kiện chia 4 nhà máy = MỖI NHÀ MÁY 3 KIỆN. Kiện thứ 2 và thứ 3 phải tránh
