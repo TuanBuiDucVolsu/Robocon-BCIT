@@ -2454,8 +2454,19 @@ class Motion:
             #            START → SHELF0 mở đầu bằng forward và exit_start_zone bỏ
             #            robot lại RẤT GẦN C0R0; bật cổng ở đó là bác giao lộ thật
             #            và LAO VÀO KỆ.
+            # ⛔ CỔNG QUÃNG ĐƯỜNG PHẢI BẬT Ở MỌI CHẶNG, TRỪ ĐÚNG MỘT CA.
+            # Bản cũ: (roi_diem_cuoi or i > 0) — tức chặng i = 0 của MỌI route KHÔNG
+            # rời điểm cuối đều KHÔNG có chặn nào. Mà chặng đó chạy NGAY SAU MỘT CÚ
+            # XOAY: robot đang đứng trên chính giao lộ vừa xoay, mảng đen của nó nằm
+            # dưới cảm biến, và nó được ĐẾM LUÔN. Đếm thừa một cái là toàn bộ route
+            # lệch MỘT HÀNG — robot xoay sớm một hàng và thả hàng ở vòng tròn logo
+            # (R2). Đội báo đúng hai triệu chứng đó, lặp lại nhiều ngày.
+            # Ngoại lệ chỉ đúng cho MỘT ca: route rời Ô XUẤT PHÁT, nơi C0R0 nằm rất
+            # gần nên cổng 10cm sẽ bác giao lộ THẬT (xem bo_escape_dau). Ca đó đã có
+            # cờ riêng do exit_start_zone dựng, không cần suy từ i.
+            ap_cong = roi_diem_cuoi or i > 0 or not bo_escape_dau
             if not self.follow_line_until_intersection(
-                    base_speed, roi_diem_cuoi=(roi_diem_cuoi or i > 0)):
+                    base_speed, roi_diem_cuoi=ap_cong):
                 logger.error("Không tìm thấy giao lộ %d/%d!", i + 1, count)
                 self.stop()
                 return False
