@@ -37,6 +37,12 @@ KHOANG_HAI_GIAO_LO_CM = 40.0  # hai hàng giao lộ
 BE_RONG_VACH_CM = 2.0        # vạch line 20mm
 MANG_DEN_CHAN_KE_CM = 5.0    # mảng đen đầu chặng lùi, đo 04/08 (tín hiệu giả ở 0.9-4.6cm)
 LUI_RA_KHOI_KE_CM = 18.6     # đo 06/08: 670 xung = quãng luồn vào × 1.15
+# CÀNG NHÔ RA TRƯỚC THANH CẢM BIẾN — biết bằng hai lần chạy thật, không đo thước:
+#     mốc 32.0 → thanh cảm biến cách chân kệ 3.4cm → CÀNG LUỒN VÀO GẦM KỆ (07/08)
+#     mốc 29.0 → cách 6.4cm                        → không đâm
+# Nên khoảng hở tối thiểu đã CHỨNG MINH an toàn là 6.4cm. Muốn tiến gần hơn thì
+# phải ĐO độ nhô của càng bằng thước rồi hạ số này, đừng thử dần trên robot.
+KHOANG_HO_TOI_THIEU_CM = 6.4
 TOC_DO_CM_S = 20.0           # đo 06/08: escape 8.0cm trong ~0.40s
 
 
@@ -95,10 +101,14 @@ def cac_rang_buoc():
         f"(độ lệch thanh cảm biến → trục bánh)",
         "12cm đầu chỉ để kéo trục bánh lên tới giao lộ, chưa đi được cm nào."))
 
+    tran_an_toan = GIAO_LO_TOI_KE_CM - KHOANG_HO_TOI_THIEU_CM
     r.append(_kiem(
-        "ADVANCE_SHELF_STOP_CM chưa đâm vào kệ",
-        c.ADVANCE_SHELF_STOP_CM < GIAO_LO_TOI_KE_CM,
-        f"mốc {c.ADVANCE_SHELF_STOP_CM} phải < {GIAO_LO_TOI_KE_CM} (giao lộ → chân kệ)"))
+        "ADVANCE_SHELF_STOP_CM chừa đủ chỗ cho ĐỘ NHÔ CỦA CÀNG",
+        c.ADVANCE_SHELF_STOP_CM <= tran_an_toan,
+        f"mốc {c.ADVANCE_SHELF_STOP_CM} phải ≤ {tran_an_toan:.1f} "
+        f"(= {GIAO_LO_TOI_KE_CM} − khoảng hở {KHOANG_HO_TOI_THIEU_CM})",
+        "Càng NHÔ RA TRƯỚC thanh cảm biến nên nó chạm kệ trước. Mốc 32.0 (hở 3.4cm) "
+        "đã làm càng luồn vào GẦM KỆ ngày 07/08; 29.0 (hở 6.4cm) thì không."))
 
     # 6. Hạ càng về sàn phải phủ được ca xấu nhất
     can_ha = c.LIFT_TIME_SHELF_2 + max(c.LIFT_LEFT_LOWER_EXTRA,

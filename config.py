@@ -767,7 +767,15 @@ ADVANCE_INTERSECTION_DAM = 5
 # 06/08: ở 29.0 camera quét kiện chưa tốt (trái samsung 10.6% — dưới ngưỡng 0.12,
 # phải amkor 38.6%). Nâng lên 32.0 → thanh cảm biến cách chân kệ 3.4cm.
 # ⚠️ 35.4 LÀ CHÂN KỆ. Đừng vượt 33.0 nếu chưa đo bằng thước.
-ADVANCE_SHELF_STOP_CM = 32.0
+# ⚠️ 32.0 LÀM ROBOT ĐÂM KỆ — càng luồn vào GẦM kệ (đội báo 07/08).
+# Giao lộ → chân kệ = 35.4cm, nên 32.0 chỉ chừa 3.4cm cho thanh cảm biến; càng nhô
+# ra trước thanh cảm biến nên nó chạm trước.
+# 29.0 là giá trị cuối cùng chạy mà KHÔNG đâm (đội chỉ báo "camera nhận chưa chuẩn",
+# không báo đâm). Về lại đó.
+# ⚠️ ĐÂY LÀ MÂU THUẪN THẬT, không phải chuyện chỉnh số: camera cần GẦN để nhận
+# kiện, càng cần XA để khỏi chạm kệ. Chỉnh khoảng cách không giải được — phải sửa
+# ROI_Y_CENTER (camera) hoặc chiều cao/độ nhô của càng (cơ khí).
+ADVANCE_SHELF_STOP_CM = 29.0
 
 # Bao lâu KHÔNG có xung encoder thì coi như encoder CHẾT và dừng khẩn.
 # 04/08, sau khi giao quyền dừng cho quãng đường: log in đúng dòng "dừng theo QUÃNG
