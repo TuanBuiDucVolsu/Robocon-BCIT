@@ -2310,14 +2310,17 @@ class Motion:
             if at_intersection and di_cm is not None \
                     and bat_dau_tin_hieu is not None \
                     and di_cm >= config.FORWARD_MIN_TRAVEL_CM \
+                    and di_cm < config.FORWARD_TIN_HIEU_MOI_MAX_CM \
                     and bat_dau_tin_hieu < config.FORWARD_MIN_TRAVEL_CM:
                 logger.info(
                     "Bỏ qua tín hiệu giao lộ ở %.2fs — đã đi %.1fcm (đủ cổng %.1f) "
                     "NHƯNG tín hiệu này bắt đầu từ %.1fcm, tức CÓ SẴN từ trước khi "
                     "cổng mở. Giao lộ thật phải XUẤT HIỆN MỚI trên nền sạch; đây là "
-                    "mảng in đang nằm dưới cảm biến. ADC %s",
+                    "mảng in đang nằm dưới cảm biến. (Quá %.1fcm mà vẫn chưa sạch "
+                    "thì thôi, sẽ chấp nhận.) ADC %s",
                     time.time() - start, di_cm, config.FORWARD_MIN_TRAVEL_CM,
-                    bat_dau_tin_hieu, self._adc_de_ghi())
+                    bat_dau_tin_hieu, config.FORWARD_TIN_HIEU_MOI_MAX_CM,
+                    self._adc_de_ghi())
                 self.forward(base_speed)
                 time.sleep(0.01)
                 continue

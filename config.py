@@ -1160,6 +1160,19 @@ BACK_MIN_TRAVEL_FACTORY_CM = 5.0
 # thật thì cả 6 mắt đọc 0 nên "phải có mắt sáng" cũng sai nốt.
 # Quãng đường thì tách được: các hàng R0..R4 cách nhau ~40cm trên sa bàn, còn tấm
 # in nằm ngay dưới chân robot lúc khởi hành. 10cm an toàn cho cả hai phía.
+# Trần cho luật "tín hiệu phải XUẤT HIỆN MỚI". Quá quãng này mà cảm biến VẪN chưa
+# sạch lần nào thì thôi, chấp nhận tín hiệu đang có.
+# ⚠️ KHÔNG CÓ TRẦN LÀ BẾ TẮC CỨNG. Đo trên robot 07/08, chặng quay về từ Foxconn:
+# escape chạm trần 14cm mà chưa ra khỏi mảng đen, nên chặng đếm bắt đầu khi cảm
+# biến ĐÃ ở trên vùng đen → "tín hiệu bắt đầu từ 0.0cm". Cảm biến không bao giờ
+# sạch (ADC [0,0,0,0,0,0] suốt) nên giá trị đó không bao giờ được đặt lại: robot
+# bác mọi tín hiệu ở 10, 20, 30, 35.8cm... và đi mãi.
+# Cùng loại lỗi với "phải thấy vạch thường trước" ở chặng lùi — điều kiện đúng
+# nhưng KHÔNG CÓ LỐI THOÁT.
+# 25.0: quá 2.5 lần cổng mà vẫn chưa sạch thì mảng đen này lớn bất thường, và bác
+# tiếp chỉ làm robot chạy khỏi sa bàn.
+FORWARD_TIN_HIEU_MOI_MAX_CM = 25.0
+
 FORWARD_MIN_TRAVEL_CM = 10.0
 # Giây tiến bù TRƯỚC KHI XOAY, khi vừa TIẾN tới giao lộ (chặng "forward" ngay trước
 # lệnh xoay). TÁCH RIÊNG khỏi REVERSE_RECENTER_TIME để chỉnh/tắt được độc lập —
