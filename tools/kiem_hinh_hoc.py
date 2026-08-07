@@ -133,6 +133,17 @@ def cac_rang_buoc():
         "Lùi quá là robot nằm SAU giao lộ, rồi chặng lùi kế đó đi tìm một giao lộ ở "
         "PHÍA TRƯỚC nó — không bao giờ gặp, robot chạy tiếp rồi lạc."))
 
+    # 5c. Cổng lùi ở NHÀ MÁY — gắn với cả mốc dừng LẪN quãng lùi sau khi thả
+    gl_nm = c.ADVANCE_FACTORY_STOP_CM - c.RETREAT_AFTER_DROP_CM
+    r.append(_kiem(
+        "BACK_MIN_TRAVEL_FACTORY_CM không bác giao lộ thật (chặng lùi khỏi NHÀ MÁY)",
+        c.BACK_MIN_TRAVEL_FACTORY_CM < gl_nm,
+        f"cổng {c.BACK_MIN_TRAVEL_FACTORY_CM} phải < {gl_nm:.1f} "
+        f"(= mốc nhà máy {c.ADVANCE_FACTORY_STOP_CM} − lùi sau thả "
+        f"{c.RETREAT_AFTER_DROP_CM})",
+        "Cổng lớn hơn là bác luôn giao lộ thật, robot lùi qua nó rồi lạc. Đổi MỘT "
+        "trong ba hằng số này là phải tính lại cả ba."))
+
     # 6. Hạ càng về sàn phải phủ được ca xấu nhất
     can_ha = c.LIFT_TIME_SHELF_2 + max(c.LIFT_LEFT_LOWER_EXTRA,
                                        c.LIFT_RIGHT_LOWER_EXTRA)

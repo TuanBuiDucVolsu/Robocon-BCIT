@@ -1145,7 +1145,15 @@ BACK_MIN_TRAVEL_CM = 8.0
 # chặng quay về sai. Đúng triệu chứng đội báo: "quay trở lại sau khi thả hàng đang
 # đi sai hết".
 # 5.0 là giá trị đã chạy đúng trước 04/08 — giữ nguyên cho chặng nhà máy.
-BACK_MIN_TRAVEL_FACTORY_CM = 5.0
+# ⚠️ PHẢI NHỎ HƠN (ADVANCE_FACTORY_STOP_CM − RETREAT_AFTER_DROP_CM).
+# Đo 07/08: dừng cách giao lộ 8.0, lùi ra sau khi thả 4.0 → khi chặng LÙI bắt đầu,
+# giao lộ chỉ còn cách 4.0cm. Cổng 5.0 BÁC LUÔN GIAO LỘ THẬT, robot lùi qua nó rồi
+# lạc. Đội báo đúng triệu chứng: "thả xong lùi ra bị sai".
+# Lỗi sinh ra khi tôi hạ RETREAT_AFTER_DROP_CM 10.0 → 4.0 mà không rà lại cổng này —
+# lần thứ BA trong hai ngày hai hằng số hình học lệch pha nhau.
+# 2.5 nằm giữa: bác được mảng đen ngay đầu chặng lùi (tín hiệu giả đo được ở 0.9cm)
+# mà vẫn dưới 4.0cm nên nhận được giao lộ thật.
+BACK_MIN_TRAVEL_FACTORY_CM = 2.5
 
 # Quãng TIẾN tối thiểu trước khi tin một tín hiệu giao lộ (đo bằng encoder).
 # Cùng lý do như BACK_MIN_TRAVEL_CM, nhưng cho chiều TIẾN — và ca gây lỗi ở đây là
