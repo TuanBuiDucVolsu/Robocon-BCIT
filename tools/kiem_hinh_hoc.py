@@ -46,14 +46,16 @@ LUON_CANG_CM = 16.1          # đo 06/08: 578 xung
 DOI_LUI_RA = 1.15            # retreat_from_shelf lùi quãng đã luồn × 1.15
 # CÀNG NHÔ RA TRƯỚC THANH CẢM BIẾN — biết bằng hai lần chạy thật, không đo thước:
 #     mốc 32.0 → hở  3.4cm → CÀNG LUỒN VÀO GẦM KỆ (07/08)
-#     mốc 29.0 → hở  6.4cm → VẪN ĐÂM (07/08, lần hai)
-#     mốc 24.0 → hở 11.4cm → không đâm
-# Nên độ nhô của càng nằm giữa 6.4 và 11.4cm. Lấy 12.4 làm khoảng hở tối thiểu —
-# dưới mức đã chứng minh an toàn.
+#     mốc 29.0 → hở  6.4cm → VẪN ĐÂM
+#     mốc 23.0 → hở 12.4cm → VẪN ĐÂM (siêu âm lúc dừng báo 12.2cm)
+# Tức càng nhô ra trước thanh cảm biến HƠN 12.2cm. Con số này suy từ bằng chứng
+# gián tiếp và đã sai ba lần liên tiếp — CẦN ĐO BẰNG THƯỚC: từ thanh cảm biến tới
+# MŨI CÀNG. Có số thật thì đặt = số đó + 3cm và bỏ hẳn kiểu thử dần.
+# 17.4 là mức tạm, chưa được chứng minh.
 # ⚠️ Con số này chỉ cần thiết vì lúc tiến vào CÀNG ĐANG Ở SÀN (bước nâng lên tầng
 # chạy SAU advance). Nâng càng TRƯỚC khi tiến thì càng đi vào khe pallet chứ không
 # vào gầm kệ, và mốc dừng có thể tiến sát hơn nhiều.
-KHOANG_HO_TOI_THIEU_CM = 12.4
+KHOANG_HO_TOI_THIEU_CM = 17.4
 TOC_DO_CM_S = 20.0           # đo 06/08: escape 8.0cm trong ~0.40s
 
 

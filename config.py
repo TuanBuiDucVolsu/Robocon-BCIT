@@ -789,7 +789,7 @@ ADVANCE_INTERSECTION_DAM = 5
 # ⚠️ ĐÂY LÀ VÁ TRIỆU CHỨNG. Cách chữa gốc là NÂNG CÀNG LÊN TẦNG TRƯỚC KHI TIẾN
 # VÀO — khi đó càng đi vào khe pallet chứ không vào gầm kệ, và robot mới tiến sát
 # được để camera nhìn rõ. Xem ghi chú ở main._handle_pickup_pair.
-ADVANCE_SHELF_STOP_CM = 23.0
+ADVANCE_SHELF_STOP_CM = 18.0
 
 # ⛔ LƯỚI AN TOÀN CUỐI khi vào kệ: dừng nếu siêu âm ĐANG ĐỌC ĐÚNG và báo quá gần.
 # Chốt quãng đường KHÔNG biết được nó xuất phát sai chỗ. Đo 07/08: advance bắt đầu
