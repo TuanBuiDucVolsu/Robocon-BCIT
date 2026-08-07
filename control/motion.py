@@ -2031,6 +2031,34 @@ class Motion:
         moc_lui = (config.BACK_MIN_TRAVEL_FACTORY_CM
                    if getattr(self, "lui_khoi_nha_may", False)
                    else config.BACK_MIN_TRAVEL_CM)
+
+        # ⛔ CHƯA CÓ VẠCH THÌ TÌM TRƯỚC, ĐỪNG LÙI MÙ.
+        # Đo trên robot 07/08, chặng quay về từ Hana sau khi thả:
+        #     Lùi: đã lùi 5.1cm ... coi như đã rời hẳn điểm cuối
+        #     ERROR Lùi: mất line quá 1.2s — dừng an toàn
+        #     Navigation thất bại — RETURN → kệ 0. Chạy được 0/10 bước
+        # Robot dừng thả ở chỗ thanh cảm biến đã ra ngoài vạch (điểm dừng ở khu nhà
+        # máy do MẢNG IN quyết định, mà mảng in có thể nằm quá cuối vạch). Lùi từ đó
+        # là lùi mù: không có gì để bám, và chặng gãy ngay ở bước ĐẦU TIÊN của cả
+        # tuyến quay về — mất luôn 3 lượt bốc còn lại.
+        # Quét tìm tại chỗ trước khi lùi thì rẻ hơn nhiều so với hỏng cả tuyến.
+        try:
+            if sum(self.read_line_sensor()) == 0:
+                logger.warning(
+                    "Lùi: chưa có vạch nào dưới cảm biến — QUÉT TÌM tại chỗ trước "
+                    "khi lùi. Lùi mù từ điểm cuối là gãy ngay bước đầu của cả tuyến "
+                    "quay về.")
+                if self._recover_line():
+                    logger.info("Lùi: đã tìm được vạch, bắt đầu lùi")
+                else:
+                    logger.error(
+                        "Lùi: KHÔNG tìm được vạch nào quanh chỗ đứng — điểm dừng ở "
+                        "khu nhà máy đang nằm QUÁ CUỐI VẠCH. Hạ "
+                        "ADVANCE_FACTORY_STOP_CM (hoặc đặt riêng cho khu này trong "
+                        "ADVANCE_FACTORY_STOP_CM_RIENG) để robot dừng khi còn trên "
+                        "vạch.")
+        except Exception:
+            pass
         if getattr(self, "lui_khoi_nha_may", False):
             logger.info("Lùi khỏi NHÀ MÁY — cổng quãng đường %.1fcm (kệ dùng %.1f)",
                         moc_lui, config.BACK_MIN_TRAVEL_CM)
