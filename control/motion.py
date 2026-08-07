@@ -2095,15 +2095,32 @@ class Motion:
                 # Bằng chứng "đã thấy vạch thường" không phụ thuộc tốc độ.
                 if 0 < sum(values) < config.INTERSECTION_THRESHOLD:
                     da_thay_vach = True
+                lui_cm = (lui_xung_gl / config.ENCODER_PULSES_PER_CM
+                          if do_duoc_quang else None)
+                # ⛔ LỐI THOÁT BẰNG QUÃNG ĐƯỜNG. Điều kiện "phải thấy vạch thường
+                # trước" không có lối thoát: nếu robot KHÔNG BAO GIỜ gặp vạch thường
+                # thì nó chặn VĨNH VIỄN và robot lùi mãi.
+                # Đo trên robot 07/08, chặng lùi khỏi khu nhà máy: cảm biến giữ
+                # nguyên [0,0,1,1,1,1] (ADC [906, 828, 0, 0, 0, 0]) — 4 mắt đen, tức
+                # KHÔNG phải "vạch thường" theo định nghĩa < INTERSECTION_THRESHOLD.
+                # Mọi tín hiệu bị bác với cùng một lý do, liên tục, không dứt.
+                # Đi đủ cổng quãng đường thì robot đã RỜI HẲN điểm cuối — lo lắng
+                # "còn ngồi trên mảng đen của điểm cuối" hết hiệu lực.
+                if (not da_thay_vach) and lui_cm is not None and lui_cm >= moc_lui:
+                    da_thay_vach = True
+                    logger.info(
+                        "Lùi: đã lùi %.1fcm (≥ cổng %.1f) mà chưa gặp vạch thường "
+                        "lần nào — coi như đã rời hẳn điểm cuối, cho phép nhận giao "
+                        "lộ. Cảm biến %s", lui_cm, moc_lui, values)
                 if at_intersection and not da_thay_vach:
                     logger.info("Lùi: bỏ qua tín hiệu giao lộ ở %.2fs — CHƯA thấy vạch "
-                                "line thường lần nào, robot có thể còn trên mảng đen "
-                                "của điểm cuối. Cảm biến %s", time.time() - start, values)
+                                "line thường lần nào (mới lùi %s), robot có thể còn "
+                                "trên mảng đen của điểm cuối. Cảm biến %s",
+                                time.time() - start,
+                                "?" if lui_cm is None else f"{lui_cm:.1f}cm", values)
                     at_intersection = False
                     # Cùng lý do như hai nhánh dưới: follow_line() vừa phanh.
                     self.backward(base_speed)
-                lui_cm = (lui_xung_gl / config.ENCODER_PULSES_PER_CM
-                          if do_duoc_quang else None)
                 # ĐẾM MẮT ĐEN ĐẬM (ngưỡng tuyệt đối), KHÔNG đòi liền nhau.
                 # Ba chữ ký thu được trên robot 03/08, cùng chặng lùi này:
                 #   vạch thường  ADC [228, 481,   0,   0,   0, 925]  → 3 đen đậm
