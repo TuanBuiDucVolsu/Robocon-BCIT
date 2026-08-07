@@ -2280,18 +2280,38 @@ class Motion:
         return False
 
     def _recover_line(self) -> bool:
-        for direction in ["left", "right", "left"]:
+        """Quét tìm lại vạch bằng cách xoay tại chỗ, biên độ TĂNG DẦN hai bên.
+
+        ⚠️ BẢN CŨ CHỈ TÌM ĐƯỢC VẠCH BÊN TRÁI. Nó quét ["left","right","left"] với
+        CÙNG 0.5s mỗi lượt:
+            lượt 1  trái 0.5s  →  đang ở −32°
+            lượt 2  phải 0.5s  →  chỉ vừa đủ QUAY VỀ 0°, chưa hề sang phải
+            lượt 3  trái 0.5s  →  lại về −32°
+        Tức nó không bao giờ nhìn sang PHẢI của hướng ban đầu. Log trên robot
+        06/08 xác nhận: MỌI lần thành công đều ghi "(quét left)", không lần nào
+        "right".
+
+        Đó là lý do chặng quay về ở hàng R4 hỏng 100%: quay đầu 180° là hai cú xoay
+        liên tiếp, độ trượt ngang cộng dồn vượt nửa bề rộng thanh cảm biến (2.35cm);
+        lệch sang trái thì quét cứu được, lệch sang phải thì chịu.
+
+        Biên độ mới (0.5 → 1.0 → 1.5s) phủ cả hai bên: sau lượt 2 robot ở +32°,
+        sau lượt 3 ở −32°. Thanh cảm biến cách trục 12cm nên quét ngang tới ~6cm
+        mỗi bên — thừa cho độ lệch của hai cú xoay.
+        """
+        for direction, giay in (("left", 0.5), ("right", 1.0), ("left", 1.5)):
             if direction == "left":
                 self.turn_left(config.SPEED_SLOW)
             else:
                 self.turn_right(config.SPEED_SLOW)
 
             start = time.time()
-            while time.time() - start < 0.5:
+            while time.time() - start < giay:
                 values = self.read_line_sensor()
                 if sum(values) > 0:
                     self.stop()
-                    logger.info("Tìm lại line thành công (quét %s)", direction)
+                    logger.info("Tìm lại line thành công (quét %s %.1fs)",
+                                direction, time.time() - start)
                     return True
                 time.sleep(0.01)
 
