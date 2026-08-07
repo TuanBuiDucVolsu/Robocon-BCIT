@@ -2189,6 +2189,9 @@ class Motion:
         do_duoc = do_duoc and roi_diem_cuoi
         self._doc_xung()
         nhip_luc = time.time()   # lần cuối in nhịp tim (xem trong vòng lặp)
+        # Quãng mà tín hiệu giao lộ HIỆN TẠI bắt đầu (None = đang trên nền sạch).
+        # Dùng để bác tín hiệu ĐÃ CÓ SẴN từ trước khi cổng mở — xem trong vòng lặp.
+        bat_dau_tin_hieu = None
         di_xung = 0
 
         while time.time() - start < timeout:
@@ -2208,6 +2211,37 @@ class Motion:
                             "?" if di_cm is None else f"{di_cm:.1f}cm",
                             self._adc_de_ghi())
             at_intersection, values = self.follow_line(base_speed)
+
+            # ⛔ TÍN HIỆU PHẢI XUẤT HIỆN MỚI, không được là cái đã có sẵn từ trước
+            # khi cổng mở. Đo trên robot 07/08:
+            #     8.5cm ADC [0,0,0,0,0,763]  → bác (mới đi 8.5, cần 10.0)
+            #     8.8 → 9.1 → 9.3 → 9.6 → 9.8cm, ADC [0,0,0,0,0,0] → bác, bác, bác...
+            #    10.0cm ADC [0,0,0,0,0,0]    → NHẬN
+            # Cùng MỘT mảng đen liên tục, bị bác 6 lần rồi được nhận đúng khoảnh
+            # khắc cổng hết hạn. Cổng quãng đường không PHÂN BIỆT gì — nó chỉ HOÃN,
+            # và quyết định cuối cùng do đồng hồ chứ không do bằng chứng.
+            # Giao lộ THẬT thì tín hiệu phải MỚI XUẤT HIỆN: robot đi trên nền trắng
+            # rồi gặp vạch. Mảng in thì tín hiệu đã nằm sẵn dưới cảm biến từ đầu.
+            if not at_intersection:
+                bat_dau_tin_hieu = None          # rời khỏi vùng đen, chờ tín hiệu MỚI
+            elif bat_dau_tin_hieu is None:
+                bat_dau_tin_hieu = di_cm         # mốc tín hiệu này BẮT ĐẦU
+
+            if at_intersection and di_cm is not None \
+                    and bat_dau_tin_hieu is not None \
+                    and di_cm >= config.FORWARD_MIN_TRAVEL_CM \
+                    and bat_dau_tin_hieu < config.FORWARD_MIN_TRAVEL_CM:
+                logger.info(
+                    "Bỏ qua tín hiệu giao lộ ở %.2fs — đã đi %.1fcm (đủ cổng %.1f) "
+                    "NHƯNG tín hiệu này bắt đầu từ %.1fcm, tức CÓ SẴN từ trước khi "
+                    "cổng mở. Giao lộ thật phải XUẤT HIỆN MỚI trên nền sạch; đây là "
+                    "mảng in đang nằm dưới cảm biến. ADC %s",
+                    time.time() - start, di_cm, config.FORWARD_MIN_TRAVEL_CM,
+                    bat_dau_tin_hieu, self._adc_de_ghi())
+                self.forward(base_speed)
+                time.sleep(0.01)
+                continue
+
             if at_intersection and di_cm is not None \
                     and di_cm < config.FORWARD_MIN_TRAVEL_CM:
                 logger.info(
