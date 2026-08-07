@@ -848,7 +848,16 @@ ADVANCE_ENCODER_DEAD_PULSES = 20
 # Hạ về 8.0. CÁCH KIỂM: chạy smoke option 9, đọc dòng "Cảm biến line ngay dưới
 # robot" ở tư thế sau khi thả — phải có ÍT NHẤT 2 mắt gần 0. Còn toàn số >400 thì
 # hạ tiếp 2cm một lần.
-ADVANCE_FACTORY_STOP_CM = 8.0
+# 07/08: ở 8.0 đội báo THẢ GẦN QUÁ — kiện rơi sát mép ô. Nâng lên 12.0 để vào sâu
+# hơn 4cm.
+# ⚠️ ĐÁNH ĐỔI CÓ THẬT: ở 12.0 (đo 06/08) robot từng dừng QUÁ CUỐI VẠCH — đặt tay
+# robot vào đúng tư thế đó, cảm biến đọc [937, 938, 753, 865, 772, 480], không mắt
+# nào thấy vạch, nên chặng lùi về không có gì để bám và hỏng ngay bước đầu.
+# Lần này khác ở một điểm: chặng lùi nay QUÉT TÌM VẠCH trước khi lùi (7e42d7a), nên
+# dừng hơi quá cuối vạch vẫn cứu được. Nếu log hiện dòng "Lùi: KHÔNG tìm được vạch
+# nào quanh chỗ đứng" thì hạ lại, hoặc đặt riêng cho khu đó trong
+# ADVANCE_FACTORY_STOP_CM_RIENG.
+ADVANCE_FACTORY_STOP_CM = 12.0
 
 # Mốc RIÊNG cho từng nhà máy, đè lên số chung ở trên. BỐN KHU CÁCH GIAO LỘ NHỮNG
 # KHOẢNG KHÁC NHAU — số đo trên robot 03/08 (ghi trong
